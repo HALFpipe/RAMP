@@ -1,0 +1,150 @@
+name: build
+
+on:
+  push:
+    branches: 
+      - main
+  release:
+    types:
+      - published
+      - edited
+
+jobs:
+  docker_build:
+    runs-on: ubuntu-latest
+  
+    outputs:
+      tag: ${{ steps.build_tag.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Docker meta
+        id: docker_meta
+        uses: crazy-max/ghaction-docker-meta@v1
+        with:
+          images: name/app
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1 
+        with:
+          username: hippocampusgirl
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1 
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up build tag
+        id: build_tag
+        shell: bash
+        env:
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          VERSION=$(echo "${GITHUB_REF}" | cut -d '/' -f 3)
+          if [[ "$VERSION" == "main" ]]; then
+            VERSION=latest
+          fi
+          OWNER=$( \
+            echo "${GITHUB_REPOSITORY}" | \
+            cut -d'/' -f1 | \
+            tr '[:upper:]' '[:lower:]' \
+          )
+          REPO=$( \
+            echo "${GITHUB_REPOSITORY}" | \
+            cut -d'/' -f2 | \
+            sed -r 's/([A-Z])([a-z0-9])/-\L\1\2/g' | \
+            tr '[:upper:]' '[:lower:]' \
+          )
+          echo "::set-output name=repo::${OWNER}/${REPO}"
+          echo "::set-output name=tag::${OWNER}/${REPO}:${VERSION}"
+
+      - name: Docker build and push
+        uses: docker/build-push-action@v2
+        with:
+          push: true
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          cache-from: type=registry,ref=${{ steps.build_tag.outputs.repo }}:latest
+          cache-to: type=inline
+          tags: |
+            ${{ steps.build_tag.outputs.tag }}
+            ghcr.io/${{ steps.build_tag.outputs.tag }}
+          labels: |
+            org.opencontainers.image.title=${{ github.event.repository.name }}
+            org.opencontainers.image.url=${{ github.event.repository.html_url }}
+            org.opencontainers.image.source=${{ github.event.repository.html_url }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+  singularity_build:
+    runs-on: ubuntu-latest
+
+    needs:
+      - docker_build
+
+    strategy:
+      matrix:
+        singularity_version:
+          - "latest"
+          - "v2.6"
+
+    container:
+      image: quay.io/singularity/docker2singularity:${{ matrix.singularity_version }}
+      options: --privileged
+      volumes:
+        - /usr:/host/usr
+        - /opt:/host/opt
+
+    steps:
+      - name: Increase available disk space
+        shell: bash
+        run: |
+          rm -rf /host/{usr/share/dotnet,usr/local/lib/android,opt/ghc}
+          wget -qO /tmp/docker2singularity.patch https://gist.githubusercontent.com/HippocampusGirl/e2c2166cbdc71e11b75380d34448b3f3/raw
+          patch /docker2singularity.sh /tmp/docker2singularity.patch
+
+      - name: Convert to Singularity
+        shell: bash  
+        env:
+          DOCKER_IMAGE_NAME: ${{ needs.docker_build.outputs.tag }}
+        run: |
+          SINGULARITY_IMAGE_NAME=$(echo -n ${DOCKER_IMAGE_NAME} | tr -c '[:alnum:]' '-')
+          mkdir -p -v /output
+          docker-entrypoint.sh /docker2singularity.sh \
+            --name ${SINGULARITY_IMAGE_NAME} \
+            ${DOCKER_IMAGE_NAME}
+                    echo "::set-output name=image::${SINGULARITY_IMAGE_FILE}"
+
+      - name: Upload to DigitalOcean
+        shell: bash  
+        env:
+          DIGITALOCEAN_ACCESS_KEY: ${{ secrets.DIGITALOCEAN_ACCESS_KEY }}
+          DIGITALOCEAN_SECRET_KEY: ${{ secrets.DIGITALOCEAN_SECRET_KEY }}
+          DIGITALOCEAN_REGION: ${{ secrets.DIGITALOCEAN_REGION }}
+          DIGITALOCEAN_SPACE_NAME: ${{ secrets.DIGITALOCEAN_SPACE_NAME }}
+        run: |
+          apk add python3  py3-pip
+          pip3 install --upgrade pip
+          pip3 install s3cmd
+          s3cmd --stop-on-error \
+            --ssl --no-encrypt \
+            --access_key="${DIGITALOCEAN_ACCESS_KEY}" \
+            --secret_key="${DIGITALOCEAN_SECRET_KEY}" \
+            --host="${DIGITALOCEAN_REGION}.digitaloceanspaces.com" \
+            --host-bucket="%(bucket)s.${DIGITALOCEAN_REGION}.digitaloceanspaces.com" \
+            --dump-config \
+            > ${HOME}/.s3cfg
+          SINGULARITY_IMAGE_FILE=$(find "/output" -type f | head -n1)
+          s3cmd put ${SINGULARITY_IMAGE_FILE} s3://${DIGITALOCEAN_SPACE_NAME}/singularity/
+          s3cmd setacl s3://${DIGITALOCEAN_SPACE_NAME}/singularity/$(basename ${SINGULARITY_IMAGE_FILE}) --acl-public
