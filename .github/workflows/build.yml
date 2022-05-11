@@ -63,7 +63,7 @@ jobs:
           REPO=$( \
             echo "${GITHUB_REPOSITORY}" | \
             cut -d'/' -f2 | \
-            sed -r 's/([A-Z])([a-z0-9])/-\L\1\2/g' | \
+            sed -r 's/([A-Za-z0-9])([A-Z])([a-z0-9])/\1-\L\2\3/g' | \
             tr '[:upper:]' '[:lower:]' \
           )
           echo "::set-output name=repo::${OWNER}/${REPO}"
