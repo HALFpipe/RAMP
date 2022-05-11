@@ -55,7 +55,7 @@ RUN conda update --channel "defaults" --yes "conda" && \
     conda config --system --add channels "bioconda" && \
     conda config --system --add channels "conda-forge" && \
     conda config --set channel_priority "strict" && \
-    conda install --yes "boa"
+    conda install --yes "boa" "conda-verify"
 
 COPY r-saige r-saige
 RUN conda mambabuild --no-anaconda-upload r-saige
