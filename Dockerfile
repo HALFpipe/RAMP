@@ -90,5 +90,3 @@ FROM base
 
 COPY --from=raremetal /raremetal/build/raremetal /raremetal/build/raremetalworker /usr/local/bin/
 COPY --from=miniconda /usr/local/miniconda /usr/local/miniconda
-
-LABEL org.opencontainers.image.source="https://github.com/HippocampusGirl/GWASProtocol"
