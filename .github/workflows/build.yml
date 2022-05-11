@@ -70,7 +70,7 @@ jobs:
           echo "::set-output name=tag::${OWNER}/${REPO}:${VERSION}"
 
       - name: Docker build and push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           push: true
           context: .
