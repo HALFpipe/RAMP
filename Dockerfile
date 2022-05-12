@@ -12,6 +12,8 @@ RUN apt-get update && \
     apt-get install --yes --no-install-recommends \
         "ca-certificates" \
         "curl" \
+        "libencode-perl" \
+        "libfindbin-libs-perl" \
         "libz-dev" \
         "libzstd-dev" && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*

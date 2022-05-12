@@ -34,7 +34,6 @@ requirements:
     - ghostscript
     - groff
     - gnuplot
-    - perl
     - tabix
 
 test:
