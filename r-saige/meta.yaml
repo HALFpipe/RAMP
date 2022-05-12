@@ -55,6 +55,8 @@ requirements:
     - boost-cpp
     - savvy
     - r-data.table
+    - r-dplyr
+    - r-dbplyr
     - r-matrix
     - r-optparse
     - r-rcpp
