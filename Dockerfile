@@ -16,8 +16,8 @@ RUN apt-get update && \
         "libzstd-dev" && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Compile RAREMETALWORKER
-# =======================
+# Compile RAREMETAL
+# =================
 FROM base as raremetal
 
 RUN apt-get update && \
@@ -29,8 +29,7 @@ RUN apt-get update && \
         "libcurl4-openssl-dev" \
         "liblzma-dev" \
         "python3-pip" \
-        "r-mathlib" && \
-    apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+        "r-mathlib"
 
 RUN pip install --no-cache-dir "cget"
 
@@ -43,13 +42,15 @@ RUN git clone --depth 1 https://github.com/statgen/raremetal && \
     cmake \
         -DCMAKE_BUILD_TYPE="Release" \
         -DCMAKE_TOOLCHAIN_FILE="../cget/cget/cget.cmake" \
-        -DBUILD_TESTS="1" .. && \
+        -DBUILD_TESTS="1" \
+        .. && \
     make && \
-    make test || true
+    make test || true && \
+    cd ../..
 
-# Compile SAIGE
-# =============
-FROM continuumio/miniconda3 as saige
+# Build Conda packages
+# ====================
+FROM continuumio/miniconda3 as conda-builder
 
 RUN conda update --channel "defaults" --yes "conda" && \
     conda config --system --add channels "bioconda" && \
@@ -60,11 +61,17 @@ RUN conda update --channel "defaults" --yes "conda" && \
 COPY r-saige r-saige
 RUN conda mambabuild --no-anaconda-upload r-saige
 
-# Install Miniconda
-# =================
-FROM base as miniconda
+COPY r-gmmat r-gmmat
+RUN conda mambabuild --no-anaconda-upload r-gmmat
 
-COPY --from=saige /opt/conda/conda-bld conda-bld
+COPY r-epacts r-epacts
+RUN conda mambabuild --no-anaconda-upload r-epacts
+
+# Install Conda
+# =============
+FROM base as conda
+
+COPY --from=conda-builder /opt/conda/conda-bld conda-bld
 RUN curl --silent --show-error --location \
         "https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh" \
         --output "miniconda.sh" &&  \
@@ -76,8 +83,10 @@ RUN curl --silent --show-error --location \
     conda config --set channel_priority "strict" && \
     conda install --yes \
         "python=3.10" && \
-    conda install --yes --channel file:///conda-bld \
-        "r-saige" && \
+    conda install --yes --channel "file:///conda-bld" \
+        "r-saige" \
+        "r-gmmat" \
+        "r-epacts" && \
     sync && \
     conda clean --yes --all --force-pkgs-dirs && \
     sync && \
@@ -89,4 +98,4 @@ RUN curl --silent --show-error --location \
 FROM base
 
 COPY --from=raremetal /raremetal/build/raremetal /raremetal/build/raremetalworker /usr/local/bin/
-COPY --from=miniconda /usr/local/miniconda /usr/local/miniconda
+COPY --from=conda /usr/local/miniconda /usr/local/miniconda

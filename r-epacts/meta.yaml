@@ -1,0 +1,48 @@
+package:
+  name: r-epacts
+  version: 3.4.2
+
+source:
+  git_url: https://github.com/statgen/EPACTS
+  git_rev: develop
+  patches:
+    - patches/0001-use-default-r-library-directory.patch
+    - patches/0002-do-not-install-tabix.patch
+
+build:
+  rpaths:
+    - lib/R/lib/
+    - lib/
+
+requirements:
+  build:
+    - cmake
+    - gxx_linux-64 <11.0   # [linux64]
+    - gcc_linux-64 <11.0   # [linux64]
+    - make
+  host:
+    - r-base >=4.0
+    - ghostscript
+    - groff
+    - gnuplot
+    - htslib
+    - perl
+    - savvy
+    - zlib
+  run:
+    - r-base >=4.0
+    - ghostscript
+    - groff
+    - gnuplot
+    - perl
+    - tabix
+
+test:
+  commands:
+    - $R -e "library(\"epactsR\")"
+    - $R -e "library(\"mmSKAT\")"
+
+about:
+  home: https://github.com/statgen/EPACTS
+  license: GNU GPL
+  license_family: GPL3

@@ -1,0 +1,25 @@
+From c2c58787bb5c0c0ffaaf67fbbb7d7d2a72ba5630 Mon Sep 17 00:00:00 2001
+From: Lea Waller <lea.waller@charite.de>
+Date: Thu, 12 May 2022 22:47:25 +0200
+Subject: Do not install `tabix`
+
+---
+ CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 5c043d8..3ea3b11 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -87,7 +87,7 @@ install(FILES ${EPACTS_PERL_SCRIPTS} ${CMAKE_BINARY_DIR}/epacts-version
+         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+         DESTINATION bin)
+ install(FILES ${EPACTS_DATA_FILES} DESTINATION share/EPACTS)
+-install(TARGETS pEmmax vcfast chaps anno bgzip tabix parse-sample-ids RUNTIME DESTINATION bin)
++install(TARGETS pEmmax vcfast chaps anno parse-sample-ids RUNTIME DESTINATION bin)
+ 
+ set(CPACK_PACKAGE_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
+ set(CPACK_PACKAGE_VERSION_MINOR ${PROJECT_VERSION_MINOR})
+-- 
+2.36.1
+
