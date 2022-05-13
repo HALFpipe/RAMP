@@ -45,9 +45,6 @@ RUN conda install --yes "boa" "conda-verify"
 COPY recipes/raremetal raremetal
 RUN conda mambabuild --no-anaconda-upload "raremetal"
 
-COPY recipes/r-epacts r-epacts
-RUN conda mambabuild --no-anaconda-upload "r-epacts"
-
 COPY recipes/r-gmmat r-gmmat
 RUN conda mambabuild --no-anaconda-upload "r-gmmat"
 
@@ -64,7 +61,6 @@ RUN conda install --yes --use-local \
         "plink2" \
         "python >=3.10" \
         "raremetal" \
-        "r-epacts" \
         "r-gmmat" \
         "r-saige" && \
     sync && \
