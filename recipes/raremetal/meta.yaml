@@ -1,0 +1,25 @@
+package:
+  name: raremetal
+  version: 4.15.1
+
+source:
+  git_url: https://github.com/statgen/raremetal
+  git_depth: 1
+
+requirements:
+  build:
+    - {{ compiler("c") }}
+    - {{ compiler("cxx") }}
+    - {{ compiler("fortran") }}
+  host:
+    - cget
+    - cmake
+    - curl
+    - r-mathlib
+    - xz
+    - zlib
+    - zstd
+  run: []
+
+about:
+  home: https://github.com/statgen/raremetal
