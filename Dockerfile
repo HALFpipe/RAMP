@@ -14,6 +14,10 @@ RUN apt-get update && \
         "libfindbin-libs-perl" && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+# Install conda
+# =============
+FROM base as conda
+
 RUN curl --silent --show-error --location \
         "https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh" \
         --output "miniconda.sh" &&  \
@@ -28,7 +32,7 @@ RUN curl --silent --show-error --location \
 
 # Build packages
 # ==============
-FROM base as builder
+FROM conda as builder
 
 RUN apt-get update && \
     apt-get install --yes --no-install-recommends \
@@ -52,19 +56,25 @@ RUN conda mambabuild --no-anaconda-upload "r-saige"
 
 # Install packages
 # ================
-FROM base
+FROM conda as install
 
 COPY --from=builder /usr/local/miniconda/conda-bld /usr/local/miniconda/conda-bld
-RUN conda install --yes \
-        "bioconductor-snprelate" \
+RUN conda install --yes --use-local \
+        "plink" \
+        "plink2" \
         "python >=3.10" \
         "raremetal" \
         "r-epacts" \
         "r-gmmat" \
         "r-saige" && \
     sync && \
-    conda build purge-all && \
+    rm -rf /usr/local/miniconda/conda-bld && \
     conda clean --yes --all --force-pkgs-dirs && \
     sync && \
     find /usr/local/miniconda/ -follow -type f -name "*.a" -delete && \
     sync
+
+# Final
+# =====
+FROM base
+COPY --from=install /usr/local/miniconda /usr/local/miniconda
