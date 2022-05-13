@@ -62,7 +62,8 @@ RUN conda install --yes --use-local \
         "python >=3.10" \
         "raremetal" \
         "r-gmmat" \
-        "r-saige" && \
+        "r-saige" \
+        "r-skat" && \
     sync && \
     rm -rf /usr/local/miniconda/conda-bld && \
     conda clean --yes --all --force-pkgs-dirs && \
