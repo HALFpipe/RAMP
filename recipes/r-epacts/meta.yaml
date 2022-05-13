@@ -29,12 +29,14 @@ requirements:
     - perl
     - savvy
     - zlib
+    - zstd
   run:
     - r-base >=4.0
     - ghostscript
     - groff
     - gnuplot
     - tabix
+    - zstd
 
 test:
   commands:
