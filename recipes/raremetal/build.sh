@@ -1,19 +1,18 @@
 #!/bin/bash
 
-cget ignore xz zlib zstd
+cget ignore zlib
 
-# monkey patch cpu_count to disable parallel builds
-# to circumvent race conditions
+# avoid race condition by monkey patching cpu_count to disable
+# parallel builds within `cget`
 python - <<EOF
 import multiprocessing
 multiprocessing.cpu_count = lambda: 1
 
 from cget.prefix import CGetPrefix
 
-prefix = CGetPrefix("cget")
+prefix = CGetPrefix("cget", verbose=True)
 for package_build in prefix.from_file("requirements.txt"):
     prefix.install(package_build)
-
 EOF
 
 mkdir build

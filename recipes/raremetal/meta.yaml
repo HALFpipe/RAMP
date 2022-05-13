@@ -15,11 +15,14 @@ requirements:
     - cget
     - cmake
     - curl
-    - r-mathlib
-    - xz
+    - make
     - zlib
-    - zstd
   run: []
+
+test:
+  commands:
+    - test $(raremetal | wc -w) -gt 0
+    - test $(raremetalworker | wc -w) -gt 0
 
 about:
   home: https://github.com/statgen/raremetal
