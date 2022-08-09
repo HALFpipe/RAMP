@@ -65,7 +65,8 @@ RUN conda install --yes --use-local \
         "r-gmmat" \
         "r-saige" \
         "r-skat" \
-        "tabix" && \
+        "tabix" \
+        "bcftools" && \
     sync && \
     rm -rf /usr/local/miniconda/conda-bld && \
     conda clean --yes --all --force-pkgs-dirs && \
