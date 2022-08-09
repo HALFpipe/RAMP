@@ -11,7 +11,8 @@ RUN apt-get update && \
         "ca-certificates" \
         "curl" \
         "libencode-perl" \
-        "libfindbin-libs-perl" && \
+        "libfindbin-libs-perl" \
+        "less" && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Install conda
