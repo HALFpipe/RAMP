@@ -64,7 +64,8 @@ RUN conda install --yes --use-local \
         "raremetal" \
         "r-gmmat" \
         "r-saige" \
-        "r-skat" && \
+        "r-skat" \
+        "tabix" && \
     sync && \
     rm -rf /usr/local/miniconda/conda-bld && \
     conda clean --yes --all --force-pkgs-dirs && \
