@@ -2,11 +2,11 @@
 
 package:
   name: r-saige
-  version: 1.0.9
+  version: 1.1.4
 
 source:
   git_url: https://github.com/saigegit/SAIGE
-  git_rev: v1.0.9
+  git_rev: 9b3870eb73ad6b08759d112c2cec62b67ef99975
   patches:
     - patches/0001-use-shared-libs-in-makevars.patch
 
