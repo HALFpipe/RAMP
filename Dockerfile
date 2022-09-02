@@ -59,6 +59,7 @@ FROM conda as install
 COPY --from=builder /usr/local/miniconda/conda-bld /usr/local/miniconda/conda-bld
 RUN conda install --yes --use-local \
         "akt" \
+        "gcta" \
         "bcftools" \
         "parallel" \
         "plink" \
