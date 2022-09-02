@@ -11,6 +11,7 @@ requirements:
     - {{ compiler("c") }}
     - {{ compiler("cxx") }}
     - {{ compiler("fortran") }}
+    - openmp
   host:
     - cget
     - cmake

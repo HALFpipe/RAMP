@@ -1,6 +1,7 @@
 #!/bin/bash
 
-cget ignore zlib
+cget init --verbose --cflags "-fopenmp" --cxxflags "-fopenmp"
+cget ignore --verbose zlib
 
 # avoid race condition by monkey patching cpu_count to disable
 # parallel builds within `cget`
