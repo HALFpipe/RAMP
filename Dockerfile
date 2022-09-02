@@ -58,6 +58,8 @@ FROM conda as install
 
 COPY --from=builder /usr/local/miniconda/conda-bld /usr/local/miniconda/conda-bld
 RUN conda install --yes --use-local \
+        "akt" \
+        "bcftools" \
         "parallel" \
         "plink" \
         "plink2" \
@@ -67,7 +69,7 @@ RUN conda install --yes --use-local \
         "r-saige" \
         "r-skat" \
         "tabix" \
-        "bcftools" && \
+        "valgrind" && \
     sync && \
     rm -rf /usr/local/miniconda/conda-bld && \
     conda clean --yes --all --force-pkgs-dirs && \
