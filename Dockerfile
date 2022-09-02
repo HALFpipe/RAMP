@@ -24,7 +24,7 @@ RUN curl --silent --show-error --location \
         --output "miniconda.sh" &&  \
     bash miniconda.sh -b -p /usr/local/miniconda && \
     rm miniconda.sh && \
-    conda update --channel "defaults" --yes "conda" && \
+    conda install --channel "defaults" --yes "conda==4.13.0" && \
     conda config --system --add channels "bioconda" && \
     conda config --system --add channels "conda-forge" && \
     conda config --set channel_priority "strict" && \
