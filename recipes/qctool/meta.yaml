@@ -1,0 +1,27 @@
+package:
+  name: qctool
+  version: 2.2.0
+
+source:
+  git_url: https://github.com/gavinband/qctool
+  git_rev: v2.2.0
+
+requirements:
+  build:
+    - {{ compiler("c") }}
+    - {{ compiler("cxx") }}
+    - openmp
+  host:
+    - make
+    - zlib
+  run: []
+
+test:
+  commands:
+    - test $(qctool | wc -w) -gt 0
+
+about:
+  home: https://www.well.ox.ac.uk/~gav/qctool_v2/index.html
+  license: BSL-1.0
+  license_file: LICENSE_1_0.txt
+  summary: QCTOOL is a command-line utility program for manipulation and quality control of gwas datasets and other genome-wide data.
