@@ -60,7 +60,6 @@ COPY --from=builder /usr/local/miniconda/conda-bld /usr/local/miniconda/conda-bl
 RUN conda install --yes --use-local \
         "akt" \
         "bolt-lmm" \
-        "fastlmm" \
         "gcta" \
         "bcftools" \
         "parallel" \
