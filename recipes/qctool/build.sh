@@ -17,3 +17,11 @@ EOF
 ./waf build --verbose --jobs=$(nproc)
 
 ./waf install --verbose
+
+for i in ${PREFIX}/bin; do
+
+    ln -s \
+        $(basename ${i}) \
+        $(echo $i | rev | cut -d_ -f2- | rev)
+
+done
