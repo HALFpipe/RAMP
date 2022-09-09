@@ -2,7 +2,7 @@
 
 cd src
 
-make
+make --jobs=$(nproc)
 
 mkdir -p ${PREFIX}/bin
 install -m775 bolt ${PREFIX}/bin/

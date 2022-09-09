@@ -15,14 +15,12 @@ requirements:
     - {{ compiler("cxx") }}
   host:
     - boost-cpp
-    - libblas
-    - liblapack
+    - mkl-devel
     - nlopt
     - zlib
   run:
     - boost-cpp
-    - libblas
-    - liblapack
+    - mkl
     - nlopt
     - zlib
 
