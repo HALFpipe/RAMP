@@ -70,6 +70,7 @@ RUN conda install --yes --use-local \
         "bcftools" \
         "bolt-lmm" \
         "gcta" \
+        "gemma" \
         "numpy" \
         "pandas" \
         "parallel" \
