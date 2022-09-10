@@ -1,12 +1,12 @@
 diff --git a/src/Makefile b/src/Makefile
-index 1962c0b..b2567c6 100644
+index 1962c0b..ccbcb0d 100644
 --- a/src/Makefile
 +++ b/src/Makefile
-@@ -1,120 +1,18 @@
+@@ -1,120 +1,17 @@
 -### modify these paths to local Boost and NLopt install directories
 -BOOST_INSTALL_DIR = /home/pl88/boost_1_58_0/install
 -NLOPT_INSTALL_DIR = /n/groups/price/poru/HSPH_SVN/src/BOLT-LMM/nlopt-2.4.2
-+CFLAGS += -g
++CFLAGS += -g -Wall
 +CFLAGS += -O3
 
 -INTELROOT = /n/groups/price/poru/external_software/intel_mkl_2019u4
@@ -30,9 +30,8 @@ index 1962c0b..b2567c6 100644
 -
 -CFLAGS += -msse -msse2
  CFLAGS += -DUSE_SSE -DMEASURE_DGEMM -DVERBOSE
- CFLAGS += -Wall
-
-+CFLAGS += -DUSE_MKL
+-CFLAGS += -Wall
+-
 
 -# add Boost include and lib paths
 -ifneq ($(strip ${BOOST_INSTALL_DIR}),)
@@ -42,7 +41,8 @@ index 1962c0b..b2567c6 100644
 -		LPATHS += -Wl,-rpath,${BOOST_INSTALL_DIR}/lib
 -	endif
 -endif
--
++CFLAGS +=-DUSE_MKL
+
 -# add NLopt include and lib paths
 -ifneq ($(strip ${NLOPT_INSTALL_DIR}),)
 -	CPATHS += -I${NLOPT_INSTALL_DIR}/api
@@ -111,9 +111,9 @@ index 1962c0b..b2567c6 100644
 -#       However, since BOLT-LMM makes linear algebra calls in blocks, LP64 (32-bit)
 -#       should be sufficient.
 -endif
-+CFLAGS += -fopenmp
-+LFLAGS += -fopenmp
-+LLAPACK = -lmkl_intel_lp64 -lmkl_core -lmkl_gnu_thread
++CFLAGS +=-fopenmp
++LFLAGS +=-fopenmp
++LLAPACK=-lmkl_intel_lp64 -lmkl_core -lmkl_gnu_thread
 
  # build link line (minus flags)
  LLIBS = -lboost_program_options -lboost_iostreams -lz -lnlopt
@@ -130,12 +130,12 @@ index 1962c0b..b2567c6 100644
 
  T = bolt
  O = Bolt.o BoltParams.o BoltParEstCV.o BoltReml.o CovariateBasis.o DataMatrix.o FileUtils.o Jackknife.o LDscoreCalibration.o MapInterpolater.o MatrixUtils.o MemoryUtils.o NonlinearOptMulti.o NumericUtils.o PhenoBuilder.o RestrictSnpSet.o SnpData.o SnpInfo.o SpectrumTools.o StatsUtils.o StringUtils.o Timer.o memcpy.o
-@@ -123,10 +21,10 @@ OMAIN = BoltMain.o $O
+@@ -123,10 +20,10 @@ OMAIN = BoltMain.o $O
  .PHONY: clean
 
  %.o: %.cpp
 -	${CC} ${CFLAGS} ${CPATHS} -o $@ -c $<
-+	${CXX} ${CPPFLAGS} ${CXXFLAGS} ${CFLAGS} -o $@ -c $<
++	${CXX} ${CPPFLAGS:-DNDEBUG=} ${CXXFLAGS} ${CFLAGS} -o $@ -c $<
 
  $T: ${OMAIN}
 -	${CC} ${LFLAGS} -o $T ${OMAIN} $L
