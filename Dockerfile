@@ -61,6 +61,9 @@ RUN conda mambabuild --no-anaconda-upload "qctool"
 COPY recipes/bolt-lmm bolt-lmm
 RUN conda mambabuild --no-anaconda-upload "bolt-lmm"
 
+COPY recipes/dosage-convertor dosage-convertor
+RUN conda mambabuild --no-anaconda-upload "dosage-convertor"
+
 # Install packages
 # ================
 FROM conda as install
@@ -69,6 +72,7 @@ COPY --from=builder /usr/local/miniconda/conda-bld /usr/local/miniconda/conda-bl
 RUN conda install --yes --use-local \
         "bcftools" \
         "bolt-lmm" \
+        "dosage-convertor" \
         "gcta" \
         "gemma" \
         "numpy" \

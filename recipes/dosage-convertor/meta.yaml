@@ -1,0 +1,27 @@
+package:
+  name: dosage-convertor
+  version: 1.0.4
+
+source:
+  git_url: https://github.com/Santy-8128/DosageConvertor
+  git_depth: 1
+
+requirements:
+  build:
+    - {{ compiler("c") }}
+    - {{ compiler("cxx") }}
+    - {{ compiler("fortran") }}
+  host:
+    - cget
+    - cmake
+    - curl
+    - make
+    - zlib
+  run: []
+
+test:
+  commands:
+    - test $(DosageConvertor | wc -w) -gt 0
+
+about:
+  home: https://genome.sph.umich.edu/wiki/DosageConvertor
