@@ -10,9 +10,12 @@ RUN apt-get update && \
     apt-get install --yes --no-install-recommends \
         "ca-certificates" \
         "curl" \
+        "gdb" \
+        "libc6-dbg" \
         "libencode-perl" \
         "libfindbin-libs-perl" \
-        "less" && \
+        "less" \
+        "valgrind" && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Install conda
@@ -76,8 +79,7 @@ RUN conda install --yes --use-local \
         "r-gmmat" \
         "r-saige" \
         "r-skat" \
-        "tabix" \
-        "valgrind" && \
+        "tabix" && \
     sync && \
     rm -rf /usr/local/miniconda/conda-bld && \
     conda clean --yes --all --force-pkgs-dirs && \
