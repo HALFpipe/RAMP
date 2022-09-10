@@ -4,19 +4,21 @@ package:
 
 source:
   git_url: https://github.com/Santy-8128/DosageConvertor
-  git_depth: 1
+  patches:
+    - patches/0001-version.patch
+    - patches/0002-libstatgen.patch
 
 requirements:
   build:
     - {{ compiler("c") }}
     - {{ compiler("cxx") }}
-    - {{ compiler("fortran") }}
   host:
     - cget
     - cmake
     - curl
     - make
     - zlib
+    - htslib
   run: []
 
 test:

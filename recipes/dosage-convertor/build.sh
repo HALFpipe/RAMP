@@ -1,8 +1,15 @@
 #!/bin/bash
 
+# disable security features that are crashing the build
+export CPPFLAGS=$(
+    echo "$CPPFLAGS" | sed \
+    -e 's/-D_FORTIFY_SOURCE=[^ ]\+//g'
+)
+export CPPFLAGS="${CPPFLAGS} -U_FORTIFY_SOURCE"
 cget init --verbose \
-    --cflags "-fopenmp -g" \
-    --cxxflags "-fopenmp -g"
+    --cflags "-U_FORTIFY_SOURCE" \
+    --cxxflags "-U_FORTIFY_SOURCE"
+
 cget ignore --verbose zlib
 
 # avoid race condition by monkey patching cpu_count to disable
