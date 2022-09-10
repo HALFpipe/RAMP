@@ -1,5 +1,8 @@
 #!/bin/bash
 
+cget init --verbose \
+    --cflags "-fopenmp -g" \
+    --cxxflags "-fopenmp -g"
 cget ignore --verbose zlib
 
 # avoid race condition by monkey patching cpu_count to disable
@@ -21,7 +24,7 @@ pushd build
 cmake \
     -DCMAKE_BUILD_TYPE="Release" \
     -DCMAKE_TOOLCHAIN_FILE="../cget/cget/cget.cmake" \
-    -DBUILD_TESTS="1" \
+    -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON \
     ..
 
 make
