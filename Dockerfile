@@ -70,6 +70,8 @@ RUN conda install --yes --use-local \
         "bcftools" \
         "bolt-lmm" \
         "gcta" \
+        "numpy" \
+        "pandas" \
         "parallel" \
         "plink" \
         "plink2" \
