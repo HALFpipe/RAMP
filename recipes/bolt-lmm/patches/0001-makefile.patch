@@ -1,5 +1,5 @@
 diff --git a/src/Makefile b/src/Makefile
-index 1962c0b..ccbcb0d 100644
+index 1962c0b..1ba1f43 100644
 --- a/src/Makefile
 +++ b/src/Makefile
 @@ -1,120 +1,17 @@
@@ -135,7 +135,7 @@ index 1962c0b..ccbcb0d 100644
 
  %.o: %.cpp
 -	${CC} ${CFLAGS} ${CPATHS} -o $@ -c $<
-+	${CXX} ${CPPFLAGS:-DNDEBUG=} ${CXXFLAGS} ${CFLAGS} -o $@ -c $<
++	${CXX} ${CPPFLAGS} ${CXXFLAGS} ${CFLAGS} -o $@ -c $<
 
  $T: ${OMAIN}
 -	${CC} ${LFLAGS} -o $T ${OMAIN} $L
