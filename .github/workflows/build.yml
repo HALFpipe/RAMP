@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: 
+    branches:
       - main
   release:
     types:
@@ -12,7 +12,7 @@ on:
 jobs:
   docker_build:
     runs-on: ubuntu-latest
-  
+
     outputs:
       tag: ${{ steps.build_tag.outputs.tag }}
 
@@ -26,13 +26,13 @@ jobs:
         uses: docker/setup-buildx-action@v1
 
       - name: Login to DockerHub
-        uses: docker/login-action@v1 
+        uses: docker/login-action@v1
         with:
           username: hippocampusgirl
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1 
+        uses: docker/login-action@v1
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -70,8 +70,8 @@ jobs:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
-          cache-from: type=registry,ref=${{ steps.build_tag.outputs.repo }}:latest
-          cache-to: type=inline
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
             ${{ steps.build_tag.outputs.tag }}
             ghcr.io/${{ steps.build_tag.outputs.tag }}
@@ -109,7 +109,7 @@ jobs:
           patch /docker2singularity.sh /tmp/docker2singularity.patch
 
       - name: Convert to Singularity
-        shell: bash  
+        shell: bash
         env:
           DOCKER_IMAGE_NAME: ${{ needs.docker_build.outputs.tag }}
         run: |
@@ -121,7 +121,7 @@ jobs:
                     echo "::set-output name=image::${SINGULARITY_IMAGE_FILE}"
 
       - name: Upload to DigitalOcean
-        shell: bash  
+        shell: bash
         env:
           DIGITALOCEAN_ACCESS_KEY: ${{ secrets.DIGITALOCEAN_ACCESS_KEY }}
           DIGITALOCEAN_SECRET_KEY: ${{ secrets.DIGITALOCEAN_SECRET_KEY }}
