@@ -55,11 +55,11 @@ RUN conda mambabuild --no-anaconda-upload "r-gmmat"
 COPY recipes/r-saige r-saige
 RUN conda mambabuild --no-anaconda-upload "r-saige"
 
-COPY recipes/bolt-lmm bolt-lmm
-RUN conda mambabuild --no-anaconda-upload "bolt-lmm"
-
 COPY recipes/qctool qctool
 RUN conda mambabuild --no-anaconda-upload "qctool"
+
+COPY recipes/bolt-lmm bolt-lmm
+RUN conda mambabuild --no-anaconda-upload "bolt-lmm"
 
 # Install packages
 # ================
