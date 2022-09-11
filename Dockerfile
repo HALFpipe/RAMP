@@ -87,6 +87,7 @@ RUN conda install --yes --use-local \
         "tabix" && \
     sync && \
     rm -rf /usr/local/miniconda/conda-bld && \
+    conda install --yes "pandas" &&
     conda clean --yes --all --force-pkgs-dirs && \
     sync && \
     find /usr/local/miniconda/ -follow -type f -name "*.a" -delete && \
