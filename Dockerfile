@@ -75,8 +75,6 @@ RUN conda install --yes --use-local \
         "dosage-convertor" \
         "gcta" \
         "gemma" \
-        "numpy" \
-        "pandas" \
         "parallel" \
         "plink" \
         "plink2" \
