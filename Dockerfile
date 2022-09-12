@@ -27,7 +27,6 @@ RUN curl --silent --show-error --location \
         --output "miniconda.sh" &&  \
     bash miniconda.sh -b -p /usr/local/miniconda && \
     rm miniconda.sh && \
-    conda install --channel "defaults" --yes "conda==4.13.0" && \
     conda config --system --add channels "bioconda" && \
     conda config --system --add channels "conda-forge" && \
     conda config --set channel_priority "strict" && \
@@ -46,9 +45,6 @@ RUN apt-get update && \
 
 RUN conda install --yes "boa" "conda-verify"
 
-COPY recipes/raremetal raremetal
-RUN conda mambabuild --no-anaconda-upload "raremetal"
-
 COPY recipes/r-gmmat r-gmmat
 RUN conda mambabuild --no-anaconda-upload "r-gmmat"
 
@@ -63,6 +59,9 @@ RUN conda mambabuild --no-anaconda-upload "bolt-lmm"
 
 COPY recipes/dosage-convertor dosage-convertor
 RUN conda mambabuild --no-anaconda-upload "dosage-convertor"
+
+COPY recipes/raremetal raremetal
+RUN conda mambabuild --no-anaconda-upload "raremetal"
 
 # Install packages
 # ================
