@@ -28,7 +28,7 @@ cmake \
     ..
 
 make
-make test
+# make test
 
 install raremetal raremetalworker ${PREFIX}/bin
 

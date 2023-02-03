@@ -1,0 +1,12 @@
+diff --git a/raremetalworker/src/FastFit.cpp b/raremetalworker/src/FastFit.cpp
+index d6029fc..9eb39c5 100755
+--- a/raremetalworker/src/FastFit.cpp
++++ b/raremetalworker/src/FastFit.cpp
+@@ -54,7 +54,7 @@ void FastFit::OptimizeDelta(double tol, FastTransform &trans)
+             logLikelihood = ll;
+             deltaHat = min;
+         }
+-        //printf("logLikelihood is:%g,deltaHat is:%g\n",logLikelihood,deltaHat);
++        printf("logLikelihood is:%g,deltaHat is:%g\n",logLikelihood,deltaHat);
+     }
+ }

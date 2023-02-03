@@ -5,6 +5,9 @@ package:
 source:
   git_url: https://github.com/statgen/raremetal
   git_depth: 1
+  patches:
+    - patches/0001-print-brent.patch
+    - patches/0002-print-assoc-stats.patch
 
 requirements:
   build:
