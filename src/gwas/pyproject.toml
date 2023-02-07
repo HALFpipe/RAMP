@@ -1,0 +1,33 @@
+[project]
+name = "gwas"
+dynamic = ["version"]
+
+requires-python = ">=3.11"
+
+dependencies = [
+  "numpy",
+  "scipy"
+]
+
+[project.scripts]
+gwas = "gwas.cli:main"
+
+[build-system]
+requires = [
+  "cython>=3.0a11",
+  "numpy",
+  "setuptools>=62",
+  "setuptools_scm[toml]>=6.2",
+  "wheel",
+]
+build-backend = "setuptools.build_meta"
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.isort]
+profile = "black"
+
+[tool.setuptools_scm]
+version_scheme = "no-guess-dev"
+root = "../../"
