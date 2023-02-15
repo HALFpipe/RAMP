@@ -4,7 +4,7 @@ ENV LC_ALL="C.UTF-8" \
     LANG="C.UTF-8" \
     DEBIAN_FRONTEND="noninteractive" \
     DEBCONF_NOWARNINGS="yes" \
-    PATH="/usr/local/miniconda/bin:$PATH"
+    PATH="/usr/local/mambaforge/bin:$PATH"
 
 RUN apt-get update && \
     apt-get install --yes --no-install-recommends \
@@ -23,15 +23,14 @@ RUN apt-get update && \
 FROM base as conda
 
 RUN curl --silent --show-error --location \
-        "https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh" \
-        --output "miniconda.sh" &&  \
-    bash miniconda.sh -b -p /usr/local/miniconda && \
-    rm miniconda.sh && \
-    conda config --system --add channels "bioconda" && \
-    conda config --system --add channels "conda-forge" && \
+        "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh" \
+        --output "conda.sh" &&  \
+    bash conda.sh -b -p /usr/local/mambaforge && \
+    rm conda.sh && \
+    conda config --system --append channels "bioconda" && \
     conda config --set channel_priority "strict" && \
     sync && \
-    conda clean --yes --all --force-pkgs-dirs
+    mamba clean --yes --all --force-pkgs-dirs
 
 # Build packages
 # ==============
@@ -42,42 +41,64 @@ RUN apt-get update && \
         "git" \
         "subversion" \
         "build-essential"  # need system `ar` for raremetal
+RUN mamba install --yes "boa" "conda-verify"
 
-RUN conda install --yes "boa" "conda-verify"
-
+FROM builder as r-gmmat
 COPY recipes/r-gmmat r-gmmat
-RUN conda mambabuild --no-anaconda-upload "r-gmmat"
+RUN conda mambabuild --no-anaconda-upload "r-gmmat" && \
+    conda build purge
 
+FROM builder as r-saige
 COPY recipes/r-saige r-saige
-RUN conda mambabuild --no-anaconda-upload "r-saige"
+RUN conda mambabuild --no-anaconda-upload "r-saige" && \
+    conda build purge
 
+FROM builder as qctool
 COPY recipes/qctool qctool
-RUN conda mambabuild --no-anaconda-upload "qctool"
+RUN conda mambabuild --no-anaconda-upload "qctool" && \
+    conda build purge
 
+FROM builder as bolt-lmm
 COPY recipes/bolt-lmm bolt-lmm
-RUN conda mambabuild --no-anaconda-upload "bolt-lmm"
+RUN conda mambabuild --no-anaconda-upload "bolt-lmm" && \
+    conda build purge
 
+FROM builder as dosage-convertor
 COPY recipes/dosage-convertor dosage-convertor
-RUN conda mambabuild --no-anaconda-upload "dosage-convertor"
+RUN conda mambabuild --no-anaconda-upload "dosage-convertor" && \
+    conda build purge
 
+FROM builder as raremetal
 COPY recipes/raremetal raremetal
-RUN conda mambabuild --no-anaconda-upload "raremetal"
+RUN conda mambabuild --no-anaconda-upload "raremetal" && \
+    conda build purge
+
+FROM builder as merge
+COPY --from=r-gmmat /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
+COPY --from=r-saige /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
+COPY --from=qctool /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
+COPY --from=bolt-lmm /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
+COPY --from=dosage-convertor /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
+COPY --from=raremetal /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
+RUN conda index /usr/local/mambaforge/conda-bld
 
 # Install packages
 # ================
 FROM conda as install
 
-COPY --from=builder /usr/local/miniconda/conda-bld /usr/local/miniconda/conda-bld
-RUN conda install --yes --use-local \
+COPY --from=merge /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
+RUN mamba install --yes --use-local \
         "bcftools" \
         "bolt-lmm" \
+        "bzip2" \
         "dosage-convertor" \
         "gcta" \
         "gemma" \
+        "lrzip" \
         "parallel" \
         "plink" \
         "plink2" \
-        "python >=3.10" \
+        "python>=3.11" \
         "qctool" \
         "raremetal" \
         "r-gmmat" \
@@ -85,14 +106,13 @@ RUN conda install --yes --use-local \
         "r-skat" \
         "tabix" && \
     sync && \
-    rm -rf /usr/local/miniconda/conda-bld && \
-    conda install --yes "pandas" && \
-    conda clean --yes --all --force-pkgs-dirs && \
+    rm -rf /usr/local/mambaforge/conda-bld && \
+    mamba clean --yes --all --force-pkgs-dirs && \
     sync && \
-    find /usr/local/miniconda/ -follow -type f -name "*.a" -delete && \
+    find /usr/local/mambaforge/ -follow -type f -name "*.a" -delete && \
     sync
 
 # Final
 # =====
 FROM base
-COPY --from=install /usr/local/miniconda /usr/local/miniconda
+COPY --from=install /usr/local/mambaforge /usr/local/mambaforge
