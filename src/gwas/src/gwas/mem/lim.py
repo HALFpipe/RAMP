@@ -133,8 +133,7 @@ def cgroup_memory_limit() -> int | None:
         return None
 
     memory_root_path = Path(
-        memory_cgroup.get("root_mount_path", "")
-        + memory_cgroup.get("mount_path", "")
+        memory_cgroup.get("root_mount_path", "") + memory_cgroup.get("mount_path", "")
     )
 
     memory_cgroup_path = Path(
@@ -210,9 +209,7 @@ def ulimit_memory_limit() -> int | None:
 
     memory_limits = set()
     for p in ulimit_lines:
-        m = re.fullmatch(
-            r".*{:s}[^\d]*(?P<limit>\d+)".format(memory_limit_re), p
-        )
+        m = re.fullmatch(r".*{:s}[^\d]*(?P<limit>\d+)".format(memory_limit_re), p)
         if m is None:
             continue
         limit_in_kilobytes = int(m.group("limit"))
@@ -237,9 +234,7 @@ def available_memory_bytes() -> int | None:
 
     meminfo: dict[str, int] = dict()
     for p in meminfo_lines:
-        m = re.fullmatch(
-            r"(?P<id>[^\s:]+):\s*(?P<value>\d+)\s*(?P<unit>[^\s]*)\s*", p
-        )
+        m = re.fullmatch(r"(?P<id>[^\s:]+):\s*(?P<value>\d+)\s*(?P<unit>[^\s]*)\s*", p)
         if m is None:
             continue
 

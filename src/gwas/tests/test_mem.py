@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from gwas.mem import memory_limit
+from gwas.mem.lim import memory_limit
 
 
 def test_memory_limit():

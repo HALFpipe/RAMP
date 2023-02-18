@@ -1,8 +1,24 @@
-from cython cimport boundscheck, wraparound
+#cython: language_level=3
+from cython cimport NULL, boundscheck, cast, wraparound
+from libc.math cimport lround
+
 import numpy as np
+
 cimport numpy as np
 
 np.import_array()
+
+
+def check_strides(
+    np.ndarray[double, ndim=2, mode="fortran"] matrix,
+    size_t n
+):
+    if (
+        matrix.strides[0] != cast(int, sizeof(double))
+        or matrix.strides[1] != cast(int, sizeof(double) * n)
+    ):
+        raise ValueError("Invalid strides")
+
 
 cdef extern from "mkl_trans.h":
     void mkl_dimatcopy(
@@ -25,27 +41,130 @@ def dimatcopy(
 ) -> None:
     cdef char ordering
 
-    rows, columns = a.shape
-
     cdef size_t lda
     cdef size_t ldb
 
     if np.isfortran(a):
-        ordering = "c"  # column slow row fast
+        ordering = b"c"  # column slow row fast
         lda = a.shape[0]
         ldb = a.shape[1]
     else:
-        ordering = "r"  # row slow column fast
+        ordering = b"r"  # row slow column fast
         lda = a.shape[1]
         ldb = a.shape[0]
 
     mkl_dimatcopy(
         ordering,
-        "t",  # transpose
-        rows,
-        columns,
+        b"t",  # transpose
+        a.shape[0],
+        a.shape[1],
         alpha,
         &a[0, 0],
         lda,
         ldb,
     )
+
+
+cdef extern:
+    void c_set_lower_triangle(
+        double *a,
+        double alpha,
+        size_t n,
+        size_t m,
+    )
+    void c_set_upper_triangle(
+        double *a,
+        double alpha,
+        size_t n,
+        size_t m,
+    )
+
+
+def set_tril(
+    np.ndarray[double, ndim=2, mode="fortran"] a,
+    double alpha = 0,
+) -> None:
+    cdef size_t n = a.shape[0]
+    check_strides(a, n)
+
+    cdef size_t m = a.shape[1]
+
+    c_set_lower_triangle(&a[0, 0], alpha, n, m)
+
+
+def set_triu(
+    np.ndarray[double, ndim=2, mode="fortran"] a,
+    double alpha = 0,
+) -> None:
+    cdef size_t n = a.shape[0]
+    check_strides(a, n)
+
+    cdef size_t m = a.shape[1]
+
+    c_set_upper_triangle(&a[0, 0], alpha, n, m)
+
+
+cdef extern from "mkl_lapacke.h":
+    cdef int LAPACK_COL_MAJOR
+    int LAPACKE_dgesvdq(
+        int matrix_layout,
+        char joba,
+        char jobp,
+        char jobr,
+        char jobu,
+        char jobv,
+        int m,
+        int n,
+        double* a,
+        int lda,
+        double* s,
+        double* u,
+        int ldu,
+        double* v,
+        int ldv,
+        int* numrank
+    )
+
+
+def dgesvdq(
+    np.ndarray[double, ndim=2, mode="fortran"] a,
+    np.ndarray[double, ndim=1, mode="fortran"] s,
+    np.ndarray[double, ndim=2, mode="fortran"] v,
+):
+    cdef int m = a.shape[0]
+    check_strides(a, m)
+
+    cdef int n = a.shape[1]
+    check_strides(v, n)
+
+    cdef char joba = b"H"  # do not truncate
+    cdef char jobp = b"P"  # enable row pivoting
+    cdef char jobr = b"N"  # no additional transpose
+    cdef char jobu = b"N"  # no left singular vectors
+    cdef char jobv = b"A"  # all right singular vectors
+
+    cdef int numrank = 0
+
+    info = LAPACKE_dgesvdq(
+        LAPACK_COL_MAJOR,
+        joba,
+        jobp,
+        jobr,
+        jobu,
+        jobv,
+        m,
+        n,
+        &a[0, 0],
+        m,  # lda
+        &s[0],
+        NULL,  # left singular vectors
+        m,  # ldu
+        &v[0, 0],
+        n,  # ldv
+        &numrank,
+    )
+
+    if info != 0:
+        raise ValueError
+
+    return numrank

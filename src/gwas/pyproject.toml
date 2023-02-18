@@ -28,6 +28,9 @@ test = ["pytest"]
 [tool.isort]
 profile = "black"
 
+[tool.pylint.format]
+max-line-length = "88"
+
 [tool.setuptools_scm]
 version_scheme = "no-guess-dev"
 root = "../../"
