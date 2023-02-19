@@ -9,6 +9,7 @@ from numpy import typing as npt
 from .log import logger
 from .mem.arr import SharedArray
 from .mem.wkspace import SharedWorkspace
+from .utils import MinorAlleleFrequencyCutoff
 from .vcf import VCFFile
 
 
@@ -36,7 +37,6 @@ class Triangular(SharedArray):
         sw: SharedWorkspace,
         minor_allele_frequency_cutoff: float = 0.05,
     ) -> Triangular:
-
         array, variant_count = tri_map_reduce(vcf_file, sw)
 
         return cls(
@@ -97,18 +97,11 @@ def tri_map(
         f'"{vcf_file.file_path.name}" into "{name}"'
     )
 
-    def predicate(row):
-        mean = row.mean()
-        minor_allele_frequency = mean / 2
-        return bool(
-            minor_allele_frequency_cutoff
-            <= minor_allele_frequency
-            <= (1 - minor_allele_frequency_cutoff)
-        )
-
     variants = vcf_file.read(
         a.transpose(),
-        predicate=predicate,
+        predicate=MinorAlleleFrequencyCutoff(
+            minor_allele_frequency_cutoff,
+        ),
     )
     variant_count = len(variants)
 
@@ -132,7 +125,7 @@ def tri_map(
     return array, variant_count
 
 
-def tri_reduce(self, *arrays: SharedArray) -> SharedArray:
+def tri_reduce(*arrays: SharedArray) -> SharedArray:
     if len(arrays) == 0:
         raise ValueError
 
@@ -143,7 +136,9 @@ def tri_reduce(self, *arrays: SharedArray) -> SharedArray:
     logger.info(f"Reducing {len(arrays)} chunks")
 
     names = [a.name for a in arrays]
-    array = self.sw.merge(*names)
+
+    sw = arrays[0].sw
+    array = sw.merge(*names)
 
     # triangularize to upper triangle
     array.transpose()

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,9 +18,7 @@ class VariableCollection:
         # intercept
         first_column = self.covariates[:, 0, np.newaxis]
         if not np.allclose(first_column, 1):
-            self.covariates = np.hstack(
-                [np.ones_like(first_column), self.covariates]
-            )
+            self.covariates = np.hstack([np.ones_like(first_column), self.covariates])
 
         # demean
         self.covariates[:, 1:] -= self.covariates[:, 1:].mean()

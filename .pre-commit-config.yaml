@@ -32,4 +32,4 @@ repos:
     rev: v1.1.1
     hooks:
     - id: mypy
-      additional_dependencies: [types-chardet, types-requests, types-tabulate]
+      additional_dependencies: [numpy]

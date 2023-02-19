@@ -21,14 +21,14 @@ class CompressedTextFile(AbstractContextManager):
         self.file_handle: IO[str] | None = None
 
     def __enter__(self) -> IO[str]:
-        if self.file_path.suffix == ".vcf":
+        if self.file_path.suffix in {".vcf", ".txt"}:
             self.file_handle = self.file_path.open(mode="rt")
             return self.file_handle
 
         decompress_command: list[str] = {
-            ".zst": ["zstd", "-c", "-d"],
+            ".zst": ["zstd", "--long=31", "-c", "-d"],
             ".lrz": ["lrzcat", "--quiet"],
-            ".gz": ["zcat"],
+            ".gz": ["bgzip", "-c", "-d"],
             ".xz": ["xzcat"],
         }[self.file_path.suffix]
 
@@ -138,6 +138,7 @@ class VCFFile(CompressedTextFile):
     def read(
         self,
         dosages: npt.NDArray,
+        only_snps: bool = False,
         predicate: Callable[[npt.NDArray], bool] | None = None,
     ) -> list[Variant]:
         if self.file_handle is None:
@@ -161,6 +162,13 @@ class VCFFile(CompressedTextFile):
 
             tokens = line.split(maxsplit=n_mandatory_columns)
 
+            # parse metadata
+            reference_allele = tokens[self.reference_allele_column_index]
+            alternative_allele = tokens[self.alternative_allele_column_index]
+            if only_snps:
+                if len(reference_allele) != 1 or len(alternative_allele) != 1:
+                    continue  # skip line
+
             # parse dosages
             fields = tokens[-1].replace(":", "\t").split()
             dosage_fields = fields[self.dosage_field_index :: self.field_count]
@@ -174,9 +182,6 @@ class VCFFile(CompressedTextFile):
             ):
                 continue  # skip line
 
-            # parse metadata
-            reference_allele = tokens[self.reference_allele_column_index]
-            alternative_allele = tokens[self.alternative_allele_column_index]
             variants.append(
                 Variant(
                     position=int(tokens[self.position_column_index]),

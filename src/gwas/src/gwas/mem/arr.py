@@ -95,8 +95,6 @@ class SharedArray:
     def get_name(cls, sw: SharedWorkspace, **kwargs) -> str:
         prefix = cls.get_prefix(**kwargs)
         allocations = sw.allocations
-        if prefix not in allocations:
-            return prefix
 
         i = 0
         while True:
@@ -184,6 +182,12 @@ class SharedArray:
         """
         dimatcopy(self.to_numpy(shape=shape))
 
+        if shape is not None:
+            # no need to change the array shape, as
+            # we only transposed a submatrix
+            return
+
+        # update array shape
         with self.sw.lock:
             allocations = self.sw.allocations
             a = allocations[self.name]
