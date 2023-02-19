@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 
+from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 
 
@@ -21,10 +22,9 @@ def test_sa(tmp_path):
     b = a.copy()
 
     # io
-    path = tmp_path / "a"
+    path = tmp_path / "a.txt"
     array.to_file(path)
-    array = sw.alloc("c", 1, 1)
-    array.from_file(path)
+    array = SharedArray.from_file(path, sw, name="c")
     c = array.to_numpy()
     assert np.allclose(a, c)
 

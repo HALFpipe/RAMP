@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import pickle
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import pairwise
-from multiprocessing import RLock
+from multiprocessing import get_context
 from multiprocessing.shared_memory import SharedMemory
+from multiprocessing.synchronize import RLock
 from secrets import token_hex
 
 import numpy as np
@@ -24,14 +25,16 @@ class Allocation:
     dtype: str
 
 
+@dataclass
 class SharedWorkspace:
-    def __init__(
-        self,
-        name: str,
-    ) -> None:
-        self.shm = SharedMemory(name=name)
+    name: str
 
-        self.lock = RLock()
+    shm: SharedMemory = field(init=False)
+    lock: RLock = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.shm = SharedMemory(name=self.name)
+        self.lock = RLock(ctx=get_context())
 
     @property
     def size(self) -> int:
