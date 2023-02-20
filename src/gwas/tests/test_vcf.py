@@ -25,7 +25,7 @@ def test_vcf_file(tmp_path, compression):
             [
                 "bash",
                 "-c",
-                f"zstd -c -d {vcf_path_zstd} | "
+                f"zstd -c -d --long=31 {vcf_path_zstd} | "
                 f"{compress_command} > {str(vcf_path)}",
             ]
         )
