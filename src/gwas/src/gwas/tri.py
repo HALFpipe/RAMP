@@ -36,16 +36,13 @@ class Triangular(SharedArray):
         vcf_file: VCFFile,
         sw: SharedWorkspace,
         minor_allele_frequency_cutoff: float = 0.05,
-    ) -> Triangular:
-        array, variant_count = tri_map_reduce(vcf_file, sw)
-
-        return cls(
-            name=array.name,
-            sw=sw,
-            chromosome=vcf_file.chromosome,
-            variant_count=variant_count,
-            minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
+    ) -> Triangular | None:
+        tsqr = TallSkinnyQR(
+            vcf_file,
+            sw,
+            minor_allele_frequency_cutoff,
         )
+        return tsqr.map_reduce()
 
 
 def scale(b: npt.NDArray):
@@ -61,116 +58,139 @@ def scale(b: npt.NDArray):
     b /= standard_deviation[:, np.newaxis]
 
 
-def tri_map(
-    vcf_file: VCFFile,
-    sw: SharedWorkspace,
-    minor_allele_frequency_cutoff: float = 0.05,
-) -> tuple[SharedArray | None, int]:
-    """Triangularize as much of the VCF file as fits into the shared
-    workspace. The result is an m-by-m lower triangular matrix with
-    the given name.
+@dataclass
+class TallSkinnyQR:
+    vcf_file: VCFFile
+    sw: SharedWorkspace
+    minor_allele_frequency_cutoff: float = 0.05
 
-    Parameters
-    ----------
-    vcf_file : VCFFile
-        vcf_file
-    sw : SharedWorkspace
-        sw
-    minor_allele_frequency_cutoff : float
-        minor_allele_frequency_cutoff
+    def map(self) -> Triangular | None:
+        """Triangularize as much of the VCF file as fits into the shared
+        workspace. The result is an m-by-m lower triangular matrix with
+        the given name.
 
-    Returns
-    -------
-    SharedArray | None
+        Parameters
+        ----------
+        vcf_file : VCFFile
+            vcf_file
+        sw : SharedWorkspace
+            sw
+        minor_allele_frequency_cutoff : float
+            minor_allele_frequency_cutoff
 
-    """
-    m = vcf_file.sample_count
+        Returns
+        -------
+        SharedArray | None
 
-    name = Triangular.get_name(sw, chromosome=vcf_file.chromosome)
-    array = sw.alloc(name, m, m)
+        """
+        m = self.vcf_file.sample_count
 
-    # read dosages
-    a = array.to_numpy(include_trailing_free_memory=True)
+        name = Triangular.get_name(self.sw, chromosome=self.vcf_file.chromosome)
+        array = self.sw.alloc(name, m, m)
 
-    logger.info(
-        f"Mapping up to {a.shape[1]} variants from "
-        f'"{vcf_file.file_path.name}" into "{name}"'
-    )
+        # read dosages
+        a = array.to_numpy(include_trailing_free_memory=True)
 
-    variants = vcf_file.read(
-        a.transpose(),
-        predicate=MinorAlleleFrequencyCutoff(
-            minor_allele_frequency_cutoff,
-        ),
-    )
-    variant_count = len(variants)
+        logger.info(
+            f"Mapping up to {a.shape[1]} variants from "
+            f'"{self.vcf_file.file_path.name}" into "{name}"'
+        )
 
-    if variant_count == 0:
-        return None, variant_count
+        variants = self.vcf_file.read(
+            a.transpose(),
+            predicate=MinorAlleleFrequencyCutoff(
+                self.minor_allele_frequency_cutoff,
+            ),
+        )
+        variant_count = len(variants)
 
-    # transpose and reshape
-    array.resize(m, variant_count)
-    array.transpose()
-    b = array.to_numpy()
+        if variant_count == 0:
+            return None
 
-    scale(b)
+        # transpose and reshape
+        array.resize(m, variant_count)
+        array.transpose()
+        b = array.to_numpy()
 
-    # triangularize to upper triangle
-    array.triangularize()
+        scale(b)
 
-    # transpose and reshape to lower triangle
-    array.transpose()
-    array.resize(m, m)
+        # triangularize to upper triangle
+        array.triangularize()
 
-    return array, variant_count
+        # transpose and reshape to lower triangle
+        array.transpose()
+        array.resize(m, m)
 
+        return Triangular(
+            name=name,
+            sw=self.sw,
+            chromosome=self.vcf_file.chromosome,
+            variant_count=m,
+            minor_allele_frequency_cutoff=self.minor_allele_frequency_cutoff,
+        )
 
-def tri_reduce(*arrays: SharedArray) -> SharedArray:
-    if len(arrays) == 0:
-        raise ValueError
+    @staticmethod
+    def reduce(*arrays: Triangular) -> Triangular:
+        if len(arrays) == 0:
+            raise ValueError
 
-    if len(arrays) == 1:
-        (array,) = arrays
-        return array
+        if len(arrays) == 1:
+            (array,) = arrays
+            return array
 
-    logger.info(f"Reducing {len(arrays)} chunks")
+        logger.info(f"Reducing {len(arrays)} chunks")
 
-    names = [a.name for a in arrays]
+        names = [a.name for a in arrays]
 
-    sw = arrays[0].sw
-    array = sw.merge(*names)
+        sw = arrays[0].sw
+        array = sw.merge(*names)
 
-    # triangularize to upper triangle
-    array.transpose()
-    array.triangularize()
+        # triangularize to upper triangle
+        array.transpose()
+        array.triangularize()
 
-    # transpose and reshape
-    array.transpose()
+        # transpose and reshape
+        array.transpose()
 
-    m = array.shape[0]
-    array.resize(m, m)
+        m = array.shape[0]
+        array.resize(m, m)
 
-    return array
+        # get metadata
+        chromosome_set = set(a.chromosome for a in arrays)
+        if len(chromosome_set) == 1:
+            (chromosome,) = chromosome_set
+        else:
+            raise ValueError
 
+        cutoffs = sorted(a.minor_allele_frequency_cutoff for a in arrays)
+        if np.isclose(min(cutoffs), max(cutoffs)):
+            minor_allele_frequency_cutoff = cutoffs[0]
+        else:
+            raise ValueError
 
-def tri_map_reduce(
-    vcf_file: VCFFile,
-    sw: SharedWorkspace,
-):
-    variant_count: int = 0
-    arrays: list[SharedArray] = list()
-    with vcf_file:
-        while True:
-            array: SharedArray | None = None
-            try:
-                array, n = tri_map(vcf_file, sw)
-                variant_count += n
-            except MemoryError:
-                tri_reduce(*arrays)
+        variant_count = sum(a.variant_count for a in arrays)
 
-            if array is None:
-                break
+        return Triangular(
+            name=array.name,
+            sw=sw,
+            chromosome=chromosome,
+            variant_count=variant_count,
+            minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
+        )
 
-            arrays.append(array)
+    def map_reduce(self) -> Triangular | None:
+        arrays: list[Triangular] = list()
+        with self.vcf_file:
+            while True:
+                array: Triangular | None = None
+                try:
+                    array = self.map()
+                except MemoryError:
+                    arrays = [self.reduce(*arrays)]
 
-    return tri_reduce(*arrays), variant_count
+                if array is None:
+                    break
+
+                arrays.append(array)
+
+        return self.reduce(*arrays)

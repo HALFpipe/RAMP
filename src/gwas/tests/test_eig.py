@@ -87,9 +87,9 @@ def test_eig():
     assert np.all(1 == np.count_nonzero(permutation, axis=1))
 
     # check that qr is equal
-    numpy_tri = scipy.linalg.qr(a.transpose(), mode="r")
+    (numpy_tri,) = scipy.linalg.qr(a.transpose(), mode="r")
     tri_array = sw.merge(*(tri.name for tri in get_tri_arrays(sw)))
-    tri = scipy.linalg.qr(tri_array.to_numpy().transpose(), mode="r")
+    (tri,) = scipy.linalg.qr(tri_array.to_numpy().transpose(), mode="r")
     assert np.allclose(
         tri.transpose() @ tri,
         numpy_tri.transpose() @ numpy_tri,

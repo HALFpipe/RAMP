@@ -66,6 +66,7 @@ def test_tri(vcf_file, numpy_tri, log_size):
         sw=sw,
         minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
     )
+    assert isinstance(tri, Triangular)
     a = tri.to_numpy()
 
     # triangularizations are not unique, but their square is
