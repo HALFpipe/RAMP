@@ -95,6 +95,7 @@ RUN mamba install --yes --use-local \
         "gcta" \
         "gemma" \
         "lrzip" \
+        "matplotlib" \
         "parallel" \
         "plink" \
         "plink2" \
