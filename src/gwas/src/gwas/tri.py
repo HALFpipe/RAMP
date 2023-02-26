@@ -83,10 +83,10 @@ class TallSkinnyQR:
         SharedArray | None
 
         """
-        m = self.vcf_file.sample_count
+        sample_count = self.vcf_file.sample_count
 
         name = Triangular.get_name(self.sw, chromosome=self.vcf_file.chromosome)
-        array = self.sw.alloc(name, m, m)
+        array = self.sw.alloc(name, sample_count, sample_count)
 
         # read dosages
         a = array.to_numpy(include_trailing_free_memory=True)
@@ -105,10 +105,11 @@ class TallSkinnyQR:
         variant_count = len(variants)
 
         if variant_count == 0:
+            self.sw.free(name)
             return None
 
         # transpose and reshape
-        array.resize(m, variant_count)
+        array.resize(sample_count, variant_count)
         array.transpose()
         b = array.to_numpy()
 
@@ -119,13 +120,13 @@ class TallSkinnyQR:
 
         # transpose and reshape to lower triangle
         array.transpose()
-        array.resize(m, m)
+        array.resize(sample_count, sample_count)
 
         return Triangular(
             name=name,
             sw=self.sw,
             chromosome=self.vcf_file.chromosome,
-            variant_count=m,
+            variant_count=variant_count,
             minor_allele_frequency_cutoff=self.minor_allele_frequency_cutoff,
         )
 

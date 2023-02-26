@@ -1,19 +1,22 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import os
 import pickle
 from dataclasses import dataclass, field
 from itertools import pairwise
-from multiprocessing import get_context
 from multiprocessing.shared_memory import SharedMemory
-from multiprocessing.synchronize import RLock
-from secrets import token_hex
+from secrets import token_urlsafe
 
 import numpy as np
+from _posixshmem import shm_open
 from numpy import typing as npt
 
 from ..log import logger
-from .lim import memory_limit
+
+# taken from cpython Lib/multiprocessing/shared_memory.py
+flags: int = os.O_CREAT | os.O_EXCL | os.O_RDWR
+mode: int = 0o600
 
 
 @dataclass(frozen=True)
@@ -30,15 +33,18 @@ class SharedWorkspace:
     name: str
 
     shm: SharedMemory = field(init=False)
-    lock: RLock = field(init=False)
 
     def __post_init__(self) -> None:
         self.shm = SharedMemory(name=self.name)
-        self.lock = RLock(ctx=get_context())
 
     @property
     def size(self) -> int:
         return self.shm.size
+
+    @property
+    def unallocated_size(self) -> int:
+        end = max(a.start + a.size for a in self.allocations.values())
+        return self.shm.size - end
 
     def get_array(self, name: str):
         from .arr import SharedArray
@@ -59,31 +65,30 @@ class SharedWorkspace:
         dtype : str
             dtype
         """
-        with self.lock:
-            allocations = self.allocations
-            if name in allocations:
-                raise ValueError
+        allocations = self.allocations
+        if name in allocations:
+            raise ValueError
 
-            # start at current end
-            start = max(a.start + a.size for a in allocations.values())
+        # start at current end
+        start = max(a.start + a.size for a in allocations.values())
 
-            # calculate size in bytes
-            itemsize = np.dtype(dtype).itemsize
-            size = int(np.prod(shape) * itemsize)
+        # calculate size in bytes
+        itemsize = np.dtype(dtype).itemsize
+        size = int(np.prod(shape) * itemsize)
 
-            # check for overflow
-            end = start + size - 1
-            if end >= self.size:
-                raise MemoryError
+        # check for overflow
+        end = start + size - 1
+        if end >= self.size:
+            raise MemoryError
 
-            allocations[name] = Allocation(start, size, shape, dtype)
+        allocations[name] = Allocation(start, size, shape, dtype)
 
-            logger.info(
-                f'Created new allocation "{name}" '
-                f"at {start} with size {size} "
-                f"({end / self.size:.0%} of workspace used)"
-            )
-            self.allocations = allocations
+        logger.info(
+            f'Created new allocation "{name}" '
+            f"at {start} with size {size} "
+            f"({end / self.size:.0%} of workspace used)"
+        )
+        self.allocations = allocations
 
         # initialize to zero
         array = self.get_array(name)
@@ -92,50 +97,47 @@ class SharedWorkspace:
         return array
 
     def merge(self, *names: str):
-        with self.lock:
-            allocations = self.allocations
+        allocations = self.allocations
 
-            to_merge = [(name, a) for name, a in allocations.items() if name in names]
-            to_merge.sort(key=lambda t: t[-1].start)
+        to_merge = [(name, a) for name, a in allocations.items() if name in names]
+        to_merge.sort(key=lambda t: t[-1].start)
 
-            # check contiguous
-            for (_, a), (_, b) in pairwise(to_merge):
-                if a.start + a.size != b.start:
-                    raise ValueError
-
-            # determine dtype
-            dtype_set = set(a.dtype for _, a in to_merge)
-            if len(dtype_set) != 1:
+        # check contiguous
+        for (_, a), (_, b) in pairwise(to_merge):
+            if a.start + a.size != b.start:
                 raise ValueError
-            (dtype,) = dtype_set
 
-            # determine size
-            start = min(a.start for _, a in to_merge)
-            size = sum(a.size for _, a in to_merge)
+        # determine dtype
+        dtype_set = set(a.dtype for _, a in to_merge)
+        if len(dtype_set) != 1:
+            raise ValueError
+        (dtype,) = dtype_set
 
-            tile_shape_set = set(a.shape[:-1] for _, a in to_merge)
-            if len(tile_shape_set) != 1:
-                raise ValueError
-            (tile_shape,) = tile_shape_set
-            shape = tuple([*tile_shape, sum(a.shape[-1] for _, a in to_merge)])
+        # determine size
+        start = min(a.start for _, a in to_merge)
+        size = sum(a.size for _, a in to_merge)
 
-            for name, _ in to_merge:
-                del allocations[name]
+        tile_shape_set = set(a.shape[:-1] for _, a in to_merge)
+        if len(tile_shape_set) != 1:
+            raise ValueError
+        (tile_shape,) = tile_shape_set
+        shape = tuple([*tile_shape, sum(a.shape[-1] for _, a in to_merge)])
 
-            name, _ = to_merge[0]
-            allocations[name] = Allocation(start, size, shape, dtype)
-            logger.info(
-                f'Created merged allocation "{name}" at {start} with size {size}'
-            )
-            self.allocations = allocations
+        for name, _ in to_merge:
+            del allocations[name]
+
+        name, _ = to_merge[0]
+        allocations[name] = Allocation(start, size, shape, dtype)
+        logger.info(f'Created merged allocation "{name}" at {start} with size {size}')
+        self.allocations = allocations
 
         return self.get_array(name)
 
     def free(self, name) -> None:
-        with self.lock:
-            allocations = self.allocations
-            del allocations[name]
-            self.allocations = allocations
+        allocations = self.allocations
+        del allocations[name]
+        self.allocations = allocations
+        logger.info(f'Free allocation "{name}" ')
 
     def squash(self) -> None:
         data: npt.NDArray = np.ndarray(
@@ -144,30 +146,29 @@ class SharedWorkspace:
             dtype=np.uint8,
         )
 
-        with self.lock:
-            allocations = self.allocations
+        allocations = self.allocations
 
-            to_squash = list(allocations.keys())
-            to_squash.sort(key=lambda t: allocations[t].start)
+        to_squash = list(allocations.keys())
+        to_squash.sort(key=lambda t: allocations[t].start)
 
-            for previous_name, name in pairwise(to_squash):
-                a = allocations[previous_name]
-                b = allocations[name]
+        for previous_name, name in pairwise(to_squash):
+            a = allocations[previous_name]
+            b = allocations[name]
 
-                if a.start + a.size == b.start:
-                    continue  # already contiguous
+            if a.start + a.size == b.start:
+                continue  # already contiguous
 
-                # move memory up to start of previous allocation
-                start = a.start + a.size
-                data[start : start + b.size] = data[b.start : b.start + b.size]
+            # move memory up to start of previous allocation
+            start = a.start + a.size
+            data[start : start + b.size] = data[b.start : b.start + b.size]
 
-                logger.info(
-                    f'Moved allocation "{name}" from {b.start} to {start} '
-                    f'to be contiguous with preceding allocation "{previous_name}"'
-                )
-                allocations[name] = Allocation(start, b.size, b.shape, b.dtype)
+            logger.info(
+                f'Moved allocation "{name}" from {b.start} to {start} '
+                f'to be contiguous with preceding allocation "{previous_name}"'
+            )
+            allocations[name] = Allocation(start, b.size, b.shape, b.dtype)
 
-            self.allocations = allocations
+        self.allocations = allocations
 
     @property
     def allocations(self) -> dict[str, Allocation]:
@@ -175,9 +176,6 @@ class SharedWorkspace:
 
     @allocations.setter
     def allocations(self, allocations: dict[str, Allocation]) -> None:
-        if not self.lock.acquire(block=False):
-            raise ValueError
-
         dict_size = allocations["index"].size
         dict_bytes = pickle.dumps(allocations)
 
@@ -196,26 +194,41 @@ class SharedWorkspace:
     def create(
         cls, size: int | None = None, dict_size: int = 2**20
     ) -> SharedWorkspace:
+        # random name (hopefully unique)
+        name = f"gwas-{token_urlsafe(8)}"
+
+        # create file
+        fd = shm_open(name, flags, mode)
+
         if size is None:
-            available_memory = memory_limit()
-            if not isinstance(available_memory, int):
-                raise ValueError
-            size = (available_memory // 5) * 4
+            # increase size until we hit the limit
+            size = 0
+            size_step: int = 2**30
+            while True:
+                try:
+                    os.posix_fallocate(fd, size, size_step)
+                    size += size_step
+                except OSError:
+                    break
+            if not size:
+                raise RuntimeError
+        else:
+            os.posix_fallocate(fd, 0, size)
 
-        name = f"gwas-{token_hex(4)}"
-        shm = SharedMemory(name=name, create=True, size=size)
+        os.close(fd)
 
-        allocations: dict[str, Allocation] = dict(
-            index=Allocation(start=0, size=dict_size, shape=tuple(), dtype=""),
-        )
-        dict_bytes = pickle.dumps(allocations)
-        shm.buf[: len(dict_bytes)] = dict_bytes  # assume this is below limit
-
-        shm.close()
+        # actually instantiate the python wrapper
+        sw = cls(name)
+        size = sw.size
 
         logger.info(
             f'Created shared workspace "{name}" '
-            f"with a size of {size / 1e9:f} gigabytes"
+            f"with a size of {size} bytes ({size / 1e9:f} gigabytes)"
         )
 
-        return cls(name)
+        # initialize allocations
+        allocations: dict[str, Allocation] = dict(
+            index=Allocation(start=0, size=dict_size, shape=tuple(), dtype=""),
+        )
+        sw.allocations = allocations
+        return sw

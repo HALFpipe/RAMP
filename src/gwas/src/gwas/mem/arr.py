@@ -8,7 +8,7 @@ import scipy
 from numpy import typing as npt
 
 from .._matrix_functions import dimatcopy, set_tril
-from ..vcf import CompressedTextFile
+from ..z import CompressedTextReader
 from .wkspace import Allocation, SharedWorkspace
 
 
@@ -92,8 +92,9 @@ class SharedArray:
         return "arr"
 
     @classmethod
-    def get_name(cls, sw: SharedWorkspace, **kwargs) -> str:
-        prefix = cls.get_prefix(**kwargs)
+    def get_name(cls, sw: SharedWorkspace, prefix: str | None = None, **kwargs) -> str:
+        if prefix is None:
+            prefix = cls.get_prefix(**kwargs)
         allocations = sw.allocations
 
         i = 0
@@ -104,17 +105,30 @@ class SharedArray:
             i += 1
 
     @classmethod
+    def from_array(
+        cls,
+        array: npt.NDArray,
+        sw: SharedWorkspace,
+        **kwargs,
+    ):
+        name = cls.get_name(sw, **kwargs)
+        sa = sw.alloc(name, *array.shape)
+
+        sa.to_numpy()[:] = array
+
+        return sa
+
+    @classmethod
     def from_file(
         cls,
         file_path: Path | str,
         sw: SharedWorkspace,
-        name: str | None = None,
     ):
         file_path = Path(file_path)
 
         header: str | None = None
         first_line: str | None = None
-        with CompressedTextFile(file_path) as file_handle:
+        with CompressedTextReader(file_path) as file_handle:
             for line in file_handle:
                 if line.startswith("#"):
                     header = line
@@ -137,7 +151,7 @@ class SharedArray:
         a = array.to_numpy(include_trailing_free_memory=True)
 
         m: int = 0
-        with CompressedTextFile(file_path) as file_handle:
+        with CompressedTextReader(file_path) as file_handle:
             for line in file_handle:
                 if line.startswith("#"):
                     continue
@@ -161,9 +175,16 @@ class SharedArray:
         header = self.to_header()
         if header is None:
             header = ""
-        np.savetxt(file_path, self.to_numpy().transpose(), header=header)
+
+        # get shortest representation of the floating point numbers
+        # that does not have any loss of precision
+        a = np.vectorize(np.format_float_scientific)(self.to_numpy().transpose())
+        np.savetxt(file_path, a, fmt="%s", header=header)
 
         return file_path
+
+    def free(self):
+        self.sw.free(self.name)
 
     def transpose(self, shape: tuple[int, ...] | None = None) -> None:
         """Transpose the matrix in place
@@ -188,13 +209,13 @@ class SharedArray:
             return
 
         # update array shape
-        with self.sw.lock:
-            allocations = self.sw.allocations
-            a = allocations[self.name]
+        # with self.sw.lock:
+        allocations = self.sw.allocations
+        a = allocations[self.name]
 
-            allocations[self.name] = Allocation(a.start, a.size, a.shape[::-1], a.dtype)
+        allocations[self.name] = Allocation(a.start, a.size, a.shape[::-1], a.dtype)
 
-            self.sw.allocations = allocations
+        self.sw.allocations = allocations
 
     def compress(self, indices: npt.NDArray[np.integer]) -> None:
         """compress rows
@@ -238,16 +259,16 @@ class SharedArray:
         None
 
         """
-        with self.sw.lock:
-            allocations = self.sw.allocations
-            a = allocations[self.name]
+        # with self.sw.lock:
+        allocations = self.sw.allocations
+        a = allocations[self.name]
 
-            # calculate size in bytes
-            itemsize = np.dtype(a.dtype).itemsize
-            size = int(np.prod(shape) * itemsize)
+        # calculate size in bytes
+        itemsize = np.dtype(a.dtype).itemsize
+        size = int(np.prod(shape) * itemsize)
 
-            allocations[self.name] = Allocation(a.start, size, shape, a.dtype)
-            self.sw.allocations = allocations
+        allocations[self.name] = Allocation(a.start, size, shape, a.dtype)
+        self.sw.allocations = allocations
 
     def triangularize(self):
         """Triangularize to upper triangular matrix via GEQRF, which

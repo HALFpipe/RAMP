@@ -24,7 +24,7 @@ def test_sa(tmp_path):
     # io
     path = tmp_path / "a.txt"
     array.to_file(path)
-    array = SharedArray.from_file(path, sw, name="c")
+    array = SharedArray.from_file(path, sw)
     c = array.to_numpy()
     assert np.allclose(a, c)
 

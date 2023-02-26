@@ -1,6 +1,5 @@
-#cython: language_level=3
-from cython cimport NULL, boundscheck, cast, wraparound
-from libc.math cimport lround
+# cython: language_level=3
+from cython cimport boundscheck, cast, wraparound
 
 import numpy as np
 

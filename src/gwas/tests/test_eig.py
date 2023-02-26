@@ -2,7 +2,6 @@
 import gzip
 from contextlib import chdir
 from pathlib import Path
-from shutil import which
 from subprocess import check_call
 
 import numpy as np
@@ -13,6 +12,8 @@ from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri import Triangular, scale
 from gwas.utils import MinorAlleleFrequencyCutoff, chromosome_to_int, chromosomes_set
 from gwas.vcf import VCFFile
+
+from .utils import rmw, to_bgzip
 
 chromosomes = sorted(chromosomes_set() - {1, "X"}, key=chromosome_to_int)
 minor_allele_frequency_cutoff: float = 0.05
@@ -32,14 +33,10 @@ def get_tri_arrays(sw: SharedWorkspace):
     return [get_tri_array(c, sw) for c in chromosomes]
 
 
-def test_eig():
+def test_eig(vcf_files: list[VCFFile]):
     sw = SharedWorkspace.create()
     eig_array = Eigendecomposition.from_tri(*get_tri_arrays(sw))
 
-    vcf_paths = [
-        Path(f"/scratch/ds-opensnp/100/chr{c}.dose.vcf.zst") for c in chromosomes
-    ]
-    vcf_files = [VCFFile(p) for p in vcf_paths]
     (sample_count,) = set(v.sample_count for v in vcf_files)
 
     array = sw.alloc("array", sample_count, 1)
@@ -69,6 +66,7 @@ def test_eig():
         atol=1e-3,
         rtol=1e-3,
     )
+    assert np.abs(numpy_eigenvalues[::-1] - eig_array.eigenvalues).mean() < 1e-4
 
     # check reconstructing covariance
     eig_c = (
@@ -96,58 +94,38 @@ def test_eig():
     )
 
     # check that svd is equal
-    _, numpy_singular_values, _ = np.linalg.svd(
+    _, scipy_singular_values, _ = scipy.linalg.svd(
         a.transpose(),
         full_matrices=False,
+        lapack_driver="gesvd",
     )
-    numpy_scaled_eigenvalues = np.square(numpy_singular_values / np.sqrt(a.shape[1]))
+    scipy_scaled_eigenvalues = np.square(scipy_singular_values / np.sqrt(a.shape[1]))
     assert np.allclose(
         numpy_eigenvalues[::-1],
-        numpy_scaled_eigenvalues,
+        scipy_scaled_eigenvalues,
         rtol=1e-3,
     )
-    assert np.allclose(numpy_scaled_eigenvalues, eig_array.eigenvalues)
+    assert np.allclose(scipy_scaled_eigenvalues, eig_array.eigenvalues)
+    assert np.abs(scipy_scaled_eigenvalues - eig_array.eigenvalues).mean() < 1e-14
 
     sw.close()
     sw.unlink()
 
 
-def test_eig_rmw(tmp_path):
+def test_eig_rmw(tmp_path, vcf_by_chromosome):
     sw = SharedWorkspace.create()
 
     c: int | str = 22
+    vcf_file = vcf_by_chromosome[c]
+
     tri_array = get_tri_array(c, sw)
     eig_array = Eigendecomposition.from_tri(
         tri_array,
         chromosome=c,
     )
 
-    tabix = which("tabix")
-    assert isinstance(tabix, str)
-
-    rmw = which("raremetalworker")
-    assert isinstance(rmw, str)
-
-    vcf_path_zst = Path(f"/scratch/ds-opensnp/100/chr{c}.dose.vcf.zst")
-    vcf_file = VCFFile(vcf_path_zst)
-
-    vcf_path = tmp_path / f"chr{c}.dose.vcf.gz"
-    check_call(
-        [
-            "bash",
-            "-c",
-            f"zstd -c -d --long=31 {vcf_path_zst} | " f"bgzip > {str(vcf_path)}",
-        ]
-    )
-
-    check_call(
-        [
-            tabix,
-            "-p",
-            "vcf",
-            str(vcf_path),
-        ]
-    )
+    vcf_zst_path = vcf_file.file_path
+    vcf_gz_path = to_bgzip(tmp_path, vcf_zst_path)
 
     ped_path = tmp_path / f"chr{c}.ped"
     with ped_path.open("wt") as file_handle:
@@ -167,7 +145,7 @@ def test_eig_rmw(tmp_path):
                 "--dat",
                 str(dat_path),
                 "--vcf",
-                str(vcf_path),
+                str(vcf_gz_path),
                 "--kinGeno",
                 "--kinSave",
                 "--kinOnly",
