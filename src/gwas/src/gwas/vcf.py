@@ -1,62 +1,14 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
-from shutil import which
-from subprocess import DEVNULL, PIPE, Popen
-from typing import IO, Callable
+from typing import Callable
 
 from numpy import typing as npt
 
 from .log import logger
-
-
-class CompressedTextFile(AbstractContextManager):
-    def __init__(self, file_path: Path | str) -> None:
-        self.file_path = Path(file_path)
-
-        self.process_handle: Popen | None = None
-        self.file_handle: IO[str] | None = None
-
-    def __enter__(self) -> IO[str]:
-        if self.file_path.suffix in {".vcf", ".txt"}:
-            self.file_handle = self.file_path.open(mode="rt")
-            return self.file_handle
-
-        decompress_command: list[str] = {
-            ".zst": ["zstd", "--long=31", "-c", "-d"],
-            ".lrz": ["lrzcat", "--quiet"],
-            ".gz": ["bgzip", "-c", "-d"],
-            ".xz": ["xzcat"],
-        }[self.file_path.suffix]
-
-        executable = which(decompress_command[0])
-        if not isinstance(executable, str):
-            raise ValueError
-        decompress_command[0] = executable
-
-        self.process_handle = Popen(
-            [*decompress_command, str(self.file_path)],
-            stderr=DEVNULL,
-            stdin=DEVNULL,
-            stdout=PIPE,
-            text=True,
-            bufsize=1,
-        )
-
-        if self.process_handle.stdout is None:
-            raise IOError
-
-        self.file_handle = self.process_handle.stdout
-        return self.file_handle
-
-    def __exit__(self, exc_type, value, traceback) -> None:
-        if self.process_handle is not None:
-            self.process_handle.__exit__(exc_type, value, traceback)
-        elif self.file_handle is not None:
-            self.file_handle.close()
+from .z import CompressedTextReader
 
 
 @dataclass
@@ -66,7 +18,7 @@ class Variant:
     alternative_allele: str
 
 
-class VCFFile(CompressedTextFile):
+class VCFFile(CompressedTextReader):
     mandatory_columns = [
         "CHROM",
         "POS",
@@ -121,7 +73,7 @@ class VCFFile(CompressedTextFile):
         self.position_column_index = columns.index("POS")
         self.reference_allele_column_index = columns.index("REF")
         self.alternative_allele_column_index = columns.index("ALT")
-
+        self.info_column_index = columns.index("INFO")
         self.format_column_index = columns.index("FORMAT")
 
         examples = line.split()

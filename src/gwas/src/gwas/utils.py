@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from dataclasses import dataclass
+from shutil import which
 
 import numpy as np
 
@@ -28,3 +29,10 @@ class MinorAlleleFrequencyCutoff:
             or ((1 - minor_allele_frequency) < self.minor_allele_frequency_cutoff)
             or np.isclose(row.var(), 0)  # additional safety check
         )
+
+
+def unwrap_which(command: str) -> str:
+    executable = which(command)
+    if executable is None:
+        raise ValueError
+    return executable

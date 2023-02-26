@@ -15,6 +15,7 @@ from .utils import chromosomes_set
 @dataclass
 class Eigendecomposition(SharedArray):
     chromosome: int | str
+    variant_count: int
 
     def to_file_name(self) -> str:
         return f"no-chr{self.chromosome}.eig.txt.gz"
@@ -28,12 +29,24 @@ class Eigendecomposition(SharedArray):
             return "eig"
 
     @property
-    def eigenvalues(self) -> npt.NDArray:
+    def sample_count(self) -> int:
+        return self.shape[0]
+
+    @property
+    def singular_values(self) -> npt.NDArray[np.float64]:
         a = self.to_numpy()
         return a[:, -1]
 
     @property
-    def eigenvectors(self) -> npt.NDArray:
+    def sqrt_eigenvalues(self) -> npt.NDArray[np.float64]:
+        return self.singular_values / np.sqrt(self.variant_count)
+
+    @property
+    def eigenvalues(self) -> npt.NDArray[np.float64]:
+        return np.square(self.sqrt_eigenvalues)
+
+    @property
+    def eigenvectors(self) -> npt.NDArray[np.float64]:
         a = self.to_numpy()
         return a[:, :-1]
 
@@ -71,6 +84,7 @@ class Eigendecomposition(SharedArray):
         a = tri_array.to_numpy()
 
         _, sample_count = a.shape
+        variant_count = sum(tri.variant_count for tri in arrays)
 
         # allocate outputs
         name = cls.get_name(sw, chromosome=chromosome)
@@ -79,10 +93,11 @@ class Eigendecomposition(SharedArray):
             name=name,
             sw=sw,
             chromosome=chromosome,
+            variant_count=variant_count,
         )
 
         # perform high-precision singular value decomposition
-        s = eig.eigenvalues
+        s = eig.singular_values
         v = eig.eigenvectors
         numrank = dgesvdq(a, s, v)
 
@@ -94,13 +109,8 @@ class Eigendecomposition(SharedArray):
         # so we remove them from the workspace
         sw.free(tri_array.name)
         sw.squash()
-        s = eig.eigenvalues
 
         # transpose only the singular vectors to get the eigenvectors
         eig.transpose(shape=(sample_count, sample_count))
-
-        # scale the singular values to get eigenvalues
-        variant_count = sum(tri.variant_count for tri in arrays)
-        s[:] = np.square(s / np.sqrt(variant_count))
 
         return eig
