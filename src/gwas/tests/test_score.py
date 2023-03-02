@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import gzip
-from collections import OrderedDict
 from multiprocessing import Pool
 from pathlib import Path
 from random import choices
@@ -13,6 +12,7 @@ from numpy import typing as npt
 from gwas.eig import Eigendecomposition
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.pheno import VariableCollection
+from gwas.rmw import read_scorefile
 from gwas.tri import Triangular
 from gwas.utils import chromosome_to_int, chromosomes_set
 from gwas.var import VarianceRatio
@@ -26,24 +26,25 @@ other_chromosomes = sorted(chromosomes_set() - {chromosome, "X"}, key=chromosome
 effect_size: float = 2
 minor_allele_frequency_cutoff: float = 0.05
 causal_variant_count = 2**5
-heritability: float = 0.8
+heritability: float = 1
 simulation_count: int = 16
+covariate_count: int = 4
 
 
 @pytest.fixture(scope="session")
-def pfile_by_chromosome(tmpdir_factory, vcf_files):
+def pfile_paths(tmpdir_factory, vcf_paths):
     tmp_path = Path(tmpdir_factory.mktemp("pfile"))
 
-    pfiles: dict[str | int, Path] = OrderedDict()
+    pfiles: list[Path] = list()
     commands: list[list[str]] = list()
-    for vcf_file in vcf_files:
-        pfile_path = tmp_path / f"chr{vcf_file.chromosome}"
+    for vcf_path in vcf_paths:
+        pfile_path = tmp_path / vcf_path.name.split(".")[0]
         commands.append(
             [
                 plink2,
                 "--silent",
                 "--vcf",
-                str(vcf_file.file_path),
+                str(vcf_path),
                 "--threads",
                 str(1),
                 "--memory",
@@ -52,7 +53,7 @@ def pfile_by_chromosome(tmpdir_factory, vcf_files):
                 str(pfile_path),
             ]
         )
-        pfiles[vcf_file.chromosome] = pfile_path
+        pfiles.append(pfile_path)
 
     with Pool() as pool:
         pool.map(check_call, commands)
@@ -61,10 +62,8 @@ def pfile_by_chromosome(tmpdir_factory, vcf_files):
 
 
 @pytest.fixture(scope="session")
-def bfile_path(tmpdir_factory, pfile_by_chromosome):
+def bfile_path(tmpdir_factory, pfile_paths):
     tmp_path = Path(tmpdir_factory.mktemp("bfile"))
-
-    pfile_paths = sorted(pfile_by_chromosome.values())
 
     pfile_list_path = tmp_path / "pfile-list.txt"
     with pfile_list_path.open("wt") as file_handle:
@@ -87,10 +86,10 @@ def bfile_path(tmpdir_factory, pfile_by_chromosome):
 
 
 @pytest.fixture(scope="session")
-def variants(tmpdir_factory, pfile_by_chromosome):
+def variants(tmpdir_factory, pfile_paths):
     tmp_path = Path(tmpdir_factory.mktemp("variants"))
 
-    pfile_path = pfile_by_chromosome[chromosome]
+    (pfile_path,) = [p for p in pfile_paths if p.name.startswith(f"chr{chromosome}")]
     afreq_path = tmp_path / pfile_path.name
 
     check_call(
@@ -180,7 +179,7 @@ def vc(
 ) -> VariableCollection:
     samples = list(simulated_phenotypes[:, 1])
     phenotypes = simulated_phenotypes[:, 2:].astype(float)
-    covariates = np.random.normal(size=(len(samples), 16))
+    covariates = np.random.normal(size=(len(samples), covariate_count))
     covariates -= covariates.mean(axis=0)
     return VariableCollection.from_arrays(
         samples,
@@ -224,12 +223,13 @@ def rmw_score(
 
         for i, sample in enumerate(vc.samples):
             row = format_row(kinship[i, : i + 1])
-            file_handle.write(f"{sample} {row}\n")
+            file_handle.write(f"{row}\n")
 
     covariates = vc.covariates.to_numpy()
     phenotypes = vc.phenotypes.to_numpy()
 
     commands: list[list[str]] = list()
+    prefixes: list[str] = list()
     for j in range(vc.phenotype_count):
         base = f"phenotype_{j + 1:02d}"
         ped_path = tmp_path / f"{base}.ped"
@@ -237,15 +237,16 @@ def rmw_score(
             for i, sample in enumerate(vc.samples):
                 c = format_row(covariates[i, 1:])  # skip intercept
                 p = format_row(phenotypes[i, j])
-                file_handle.write(f"{sample} {sample} 0 0 1 {c} {p}\n")
+                file_handle.write(f"{sample} {sample} 0 0 1 {p} {c}\n")
 
         dat_path = tmp_path / f"{base}.dat"
         with dat_path.open("wt") as file_handle:
+            file_handle.write("T x\n")
             for i in range(vc.covariate_count - 1):  # skip intercept
                 file_handle.write(f"C covariate_{i + 1:02d}\n")
-            file_handle.write("T x\n")
 
-        rmw_path = tmp_path / f"chr{chromosome}.{base}"
+        prefix = str(tmp_path / f"chr{chromosome}.{base}")
+        prefixes.append(prefix)
         commands.append(
             [
                 rmw,
@@ -257,7 +258,7 @@ def rmw_score(
                 str(vcf_gz_path),
                 "--dosage",
                 "--prefix",
-                str(rmw_path),
+                str(prefix),
                 "--LDwindow",
                 "100",
                 "--zip",
@@ -272,7 +273,9 @@ def rmw_score(
     with Pool() as pool:
         pool.map(check_call, commands)
 
-    return tmp_path
+    return np.vstack(
+        [read_scorefile(f"{prefix}.x.singlevar.score.txt.gz") for prefix in prefixes]
+    ).transpose()
 
 
 def test_score(
@@ -281,48 +284,102 @@ def test_score(
     eig: Eigendecomposition,
     rmw_score,
 ):
-    vr = VarianceRatio.from_eig(eig, vc)
-    regression_weights = vr.regression_weights.to_numpy()
-    rotated_residuals = vr.rotated_residuals.to_numpy()
-    inv_covariance = vr.inv_covariance.to_numpy()
+    # load genotypes
+    sample_count = vc.sample_count
+    assert eig.sample_count == sample_count
+    vcf_file = vcf_by_chromosome[chromosome]
+    sw = eig.sw
+    variant_count = sw.unallocated_size // (
+        np.float64().itemsize * 2 * (vc.phenotype_count + vc.sample_count)
+    )
+    variant_count = min(variant_count, vcf_file.variant_count)
 
-    assert regression_weights is not None
-    assert rotated_residuals is not None
-    assert inv_covariance is not None
+    genotypes_array = sw.alloc("genotypes", sample_count, variant_count)
+    genotypes = genotypes_array.to_numpy()
+    with vcf_file:
+        variants = vcf_file.read(genotypes.transpose())
 
-    # sample_count = vc.sample_count
-    # assert eig.sample_count == sample_count
-    # phenotype_count = vc.phenotype_count
+    positions = np.array([v.position for v in variants], dtype=int)
 
-    # vcf_file = vcf_by_chromosome[chromosome]
-    # variant_count = sw.unallocated_size // (
-    #     np.float64().itemsize * 2 * (vc.phenotype_count + vc.sample_count)
-    # )
-    # variant_count = min(variant_count, vcf_file.variant_count)
+    alternate_allele_count = genotypes.sum(axis=0)
+    mean = alternate_allele_count / sample_count
+    alternate_allele_frequency = mean / 2
+    genotypes -= mean
 
-    # genotypes_array = sw.alloc("genotypes", sample_count, variant_count)
-    # genotypes = genotypes_array.to_numpy()
-    # with vcf_file:
-    #     variants = vcf_file.read(genotypes.transpose())
+    rotated_genotypes_array = sw.alloc(
+        "rotated_genotypes",
+        sample_count,
+        variant_count,
+    )
 
-    # minor_allele_count = genotypes.sum(axis=0)
-    # mean = minor_allele_count / sample_count
-    # genotypes -= mean
+    variant_count = len(variants)
+    assert variant_count == vcf_file.variant_count
+    genotypes_array.resize(sample_count, variant_count)
+    genotypes = genotypes_array.to_numpy()
 
-    # rotated_genotypes_array = sw.alloc(
-    #      "rotated_genotypes", sample_count, variant_count,
-    # )
-    # denominator_array = sw.alloc("denominator", phenotype_count, variant_count)
-    # numerator_array = sw.alloc("numerator", phenotype_count, variant_count)
+    rotated_genotypes_array.resize(sample_count, variant_count)
+    rotated_genotypes = rotated_genotypes_array.to_numpy()
 
-    # variant_count = len(variants)
-    # assert variant_count == vcf_file.variant_count
-    # genotypes_array.resize(sample_count, variant_count)
-    # genotypes = genotypes_array.to_numpy()
+    rotated_genotypes[:] = eig.eigenvectors.transpose() @ genotypes
 
-    # rotated_genotypes_array.resize(sample_count, variant_count)
-    # rotated_genotypes = rotated_genotypes_array.to_numpy()
+    # parse rmw scorefile columns
+    assert np.all(rmw_score["POS"] == positions[:, np.newaxis])
+    assert np.all(rmw_score["N_INFORMATIVE"] == vc.sample_count)
+    assert np.allclose(
+        rmw_score["FOUNDER_AF"], alternate_allele_frequency[:, np.newaxis]
+    )
+    assert np.allclose(rmw_score["ALL_AF"], alternate_allele_frequency[:, np.newaxis])
+    assert np.allclose(
+        rmw_score["INFORMATIVE_ALT_AC"],
+        alternate_allele_count[:, np.newaxis],
+    )
 
-    # rotated_genotypes[:] = eig.eigenvectors.transpose() @ genotypes
+    rmw_u_stat = rmw_score["U_STAT"]
+    rmw_sqrt_v_stat = rmw_score["SQRT_V_STAT"]
+    rmw_effsize = rmw_score["ALT_EFFSIZE"]
 
-    assert False
+    finite = np.isfinite(rmw_u_stat).all(axis=1) & np.isfinite(rmw_sqrt_v_stat).all(
+        axis=1
+    )
+
+    for method in ["ml", "pml", "fastlmm", "reml"]:
+        vr = VarianceRatio.from_eig(eig, vc, method=method)
+
+        regression_weights = vr.regression_weights.to_numpy()
+        scaled_residuals = vr.scaled_residuals.to_numpy()
+        variance = vr.variance.to_numpy()
+
+        assert regression_weights is not None
+        assert scaled_residuals is not None
+        assert variance is not None
+
+        u_stat = rotated_genotypes.transpose() @ scaled_residuals
+        v_stat = np.square(rotated_genotypes).transpose() @ variance
+        sqrt_v_stat = np.sqrt(v_stat)
+
+        effsize = u_stat / v_stat
+
+        assert np.square(u_stat[finite, :] - rmw_u_stat[finite, :]).mean() < 0.1
+        assert (
+            np.square(
+                sqrt_v_stat[finite, :] - rmw_sqrt_v_stat[finite, :],
+            ).mean()
+            < 0.1
+        )
+
+        assert (
+            np.corrcoef(u_stat[finite, :].ravel(), rmw_u_stat[finite, :].ravel())[1, 0]
+            > 0.9
+        )
+        assert (
+            np.corrcoef(
+                sqrt_v_stat[finite, :].ravel(), rmw_sqrt_v_stat[finite, :].ravel()
+            )[1, 0]
+            > 0.9
+        )
+        assert (
+            np.corrcoef(effsize[finite, :].ravel(), rmw_effsize[finite, :].ravel())[
+                1, 0
+            ]
+            > 0.9
+        )

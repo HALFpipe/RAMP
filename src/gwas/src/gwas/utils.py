@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from shutil import which
 
 import numpy as np
+from numpy import typing as npt
 
 
 def chromosome_to_int(chromosome: int | str) -> int:
@@ -36,3 +37,14 @@ def unwrap_which(command: str) -> str:
     if executable is None:
         raise ValueError
     return executable
+
+
+def scale_rows(
+    a: npt.NDArray[np.float64],
+    b: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    return (a.transpose() * b.ravel()).transpose()
+
+
+def rotate(self, eig, a: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    return eig.eigenvectors.transpose() @ a
