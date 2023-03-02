@@ -20,7 +20,7 @@ minor_allele_frequency_cutoff: float = 0.05
 
 
 def get_tri_array(c: int | str, sw: SharedWorkspace):
-    tri_path = Path(f"/scratch/ds-opensnp/tri/100/chr{c}.tri.txt.gz")
+    tri_path = Path(f"~/work/opensnp/tri/100/chr{c}.tri.txt.gz")
     tri_array = Triangular.from_file(tri_path, sw)
     assert np.isclose(
         minor_allele_frequency_cutoff,

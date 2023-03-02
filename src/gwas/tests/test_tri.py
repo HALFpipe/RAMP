@@ -8,7 +8,7 @@ from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri import Triangular
 from gwas.vcf import VCFFile
 
-vcf_path_zstd = Path("/scratch/ds-opensnp/3421/chr22.dose.vcf.zst")
+vcf_path_zstd = Path("~/work/opensnp/3421/chr22.dose.vcf.zst")
 minor_allele_frequency_cutoff = 0.05
 
 

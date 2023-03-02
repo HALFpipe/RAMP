@@ -8,14 +8,13 @@ from gwas.utils import chromosome_to_int, chromosomes_set
 from gwas.vcf import VCFFile
 
 chromosomes = sorted(chromosomes_set(), key=chromosome_to_int)
-sample_size: int = 500
+sample_size: int = 3421
 
 
 @pytest.fixture(scope="session")
 def vcf_paths():
     return [
-        Path(f"/scratch/ds-opensnp/{sample_size}/chr{c}.dose.vcf.zst")
-        for c in chromosomes
+        Path(f"~/work/opensnp/{sample_size}/chr{c}.dose.vcf.zst") for c in chromosomes
     ]
 
 
@@ -32,7 +31,7 @@ def vcf_by_chromosome(vcf_files: list[VCFFile]):
 
 @pytest.fixture(scope="session")
 def raw_path():
-    return Path("/scratch/ds-opensnp/3421/raw")
+    return Path("~/work/opensnp/3421/raw")
 
 
 @pytest.fixture(scope="session")
@@ -43,5 +42,5 @@ def tri_by_chromosome(vcf_paths: list[Path]):
         if isinstance(c, str) and c.isdigit():
             c = int(c)
         s = vcf_path.parent.name
-        tris[c] = Path(f"/scratch/ds-opensnp/tri/{s}/chr{c}.tri.txt.gz")
+        tris[c] = Path(f"~/work/opensnp/tri/{s}/chr{c}.tri.txt.gz")
     return tris

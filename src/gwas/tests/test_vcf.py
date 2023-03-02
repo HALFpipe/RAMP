@@ -7,7 +7,7 @@ import pytest
 
 from gwas.vcf import VCFFile
 
-vcf_path_zstd = Path("/scratch/ds-opensnp/100/chr22.dose.vcf.zst")
+vcf_path_zstd = Path("~/work/opensnp/100/chr22.dose.vcf.zst")
 
 
 @pytest.mark.slow
