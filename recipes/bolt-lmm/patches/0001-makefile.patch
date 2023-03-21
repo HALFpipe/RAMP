@@ -1,8 +1,8 @@
 diff --git a/src/Makefile b/src/Makefile
-index 1962c0b..56b0bb3 100644
+index c2ccdd5..f1cbdbc 100644
 --- a/src/Makefile
 +++ b/src/Makefile
-@@ -1,120 +1,14 @@
+@@ -1,126 +1,14 @@
 -### modify these paths to local Boost and NLopt install directories
 -BOOST_INSTALL_DIR = /home/pl88/boost_1_58_0/install
 -NLOPT_INSTALL_DIR = /n/groups/price/poru/HSPH_SVN/src/BOLT-LMM/nlopt-2.4.2
@@ -12,6 +12,8 @@ index 1962c0b..56b0bb3 100644
 -ZLIB_STATIC_DIR = /n/groups/price/poru/external_software/zlib/zlib-1.2.11 # probably unnecessary on most systems
 -LIBSTDCXX_STATIC_DIR = /n/groups/price/poru/external_software/libstdc++/usr/lib/gcc/x86_64-redhat-linux/4.8.5/
 -GLIBC_STATIC_DIR = /home/pl88/glibc-static/usr/lib64
+-
+-ZSTD_DIR = /n/data1/bwh/medicine/loh/ploh/external_software/zstd-1.5.2/lib
 -
 -ifeq ($(strip ${linking}),)
 -	linking = dynamic
@@ -56,6 +58,10 @@ index 1962c0b..56b0bb3 100644
 -		LPATHS += -L${ZLIB_STATIC_DIR}
 -	endif
 -endif
+-
+-# add libzstd path
+-CPATHS += -I${ZSTD_DIR}
+-LPATHS += -L${ZSTD_DIR}
 -
 -# add MKL paths (if not compiling with g++, i.e., compiling with icpc)
 -ifneq (${CC},g++)
@@ -114,7 +120,7 @@ index 1962c0b..56b0bb3 100644
 +LLAPACK=-lmkl_intel_lp64 -lmkl_core -lmkl_gnu_thread
 
  # build link line (minus flags)
- LLIBS = -lboost_program_options -lboost_iostreams -lz -lnlopt
+ LLIBS = -lboost_program_options -lboost_iostreams -lzstd -lz -lnlopt
 -ifeq (${linking},static-except-glibc)
 -	L = -L${LIBSTDCXX_STATIC_DIR} ${LPATHS} -Wl,--wrap=memcpy -Wl,-Bstatic ${LLIBS} ${LLAPACK} -Wl,-Bdynamic ${LIOMP5} -lpthread -lm ${LDL}
 -else ifeq (${linking},static-except-glibc-intel)
@@ -128,7 +134,7 @@ index 1962c0b..56b0bb3 100644
 
  T = bolt
  O = Bolt.o BoltParams.o BoltParEstCV.o BoltReml.o CovariateBasis.o DataMatrix.o FileUtils.o Jackknife.o LDscoreCalibration.o MapInterpolater.o MatrixUtils.o MemoryUtils.o NonlinearOptMulti.o NumericUtils.o PhenoBuilder.o RestrictSnpSet.o SnpData.o SnpInfo.o SpectrumTools.o StatsUtils.o StringUtils.o Timer.o memcpy.o
-@@ -123,10 +17,10 @@ OMAIN = BoltMain.o $O
+@@ -129,10 +17,10 @@ OMAIN = BoltMain.o $O
  .PHONY: clean
 
  %.o: %.cpp
