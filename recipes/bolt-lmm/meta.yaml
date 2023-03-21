@@ -2,10 +2,10 @@
 
 package:
   name: bolt-lmm
-  version: 2.4
+  version: 2.4.1
 
 source:
-  url: https://storage.googleapis.com/broad-alkesgroup-public/BOLT-LMM/downloads/BOLT-LMM_v2.4.tar.gz
+  url: https://storage.googleapis.com/broad-alkesgroup-public/BOLT-LMM/downloads/BOLT-LMM_v2.4.1.tar.gz
   patches:
     - patches/0001-makefile.patch
 
@@ -18,11 +18,13 @@ requirements:
     - mkl-devel
     - nlopt
     - zlib
+    - zstd
   run:
     - boost-cpp
     - mkl
     - nlopt
     - zlib
+    - zstd
 
 test:
   commands:
