@@ -194,16 +194,16 @@ class SharedWorkspace:
     def create(
         cls, size: int | None = None, dict_size: int = 2**20
     ) -> SharedWorkspace:
-        # random name (hopefully unique)
+        # Random name (hopefully unique).
         name = f"gwas-{token_urlsafe(8)}"
 
-        # create file
+        # Create file.
         fd = shm_open(name, flags, mode)
 
         if size is None:
-            # increase size until we hit the limit
+            # Increase size until we hit the limit.
             size = 0
-            size_step: int = 2**30
+            size_step: int = 2**29  # Half a gigabyte.
             while True:
                 try:
                     os.posix_fallocate(fd, size, size_step)
@@ -212,12 +212,15 @@ class SharedWorkspace:
                     break
             if not size:
                 raise RuntimeError
+            # Decrease size by 10% to avoid out-of-memory crashes.
+            size = int(np.round(size * 0.9))
+            os.ftruncate(fd, size)
         else:
             os.posix_fallocate(fd, 0, size)
 
         os.close(fd)
 
-        # actually instantiate the python wrapper
+        # Now we actually instantiate the python wrapper.
         sw = cls(name)
         size = sw.size
 
@@ -226,7 +229,7 @@ class SharedWorkspace:
             f"with a size of {size} bytes ({size / 1e9:f} gigabytes)"
         )
 
-        # initialize allocations
+        # Initialize allocations dictionary.
         allocations: dict[str, Allocation] = dict(
             index=Allocation(start=0, size=dict_size, shape=tuple(), dtype=""),
         )

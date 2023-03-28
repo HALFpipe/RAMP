@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import gzip
 from contextlib import chdir
-from pathlib import Path
 from subprocess import check_call
 
 import numpy as np
@@ -19,23 +18,12 @@ chromosomes = sorted(chromosomes_set() - {1, "X"}, key=chromosome_to_int)
 minor_allele_frequency_cutoff: float = 0.05
 
 
-def get_tri_array(c: int | str, sw: SharedWorkspace):
-    tri_path = Path(f"~/work/opensnp/tri/100/chr{c}.tri.txt.gz")
-    tri_array = Triangular.from_file(tri_path, sw)
-    assert np.isclose(
-        minor_allele_frequency_cutoff,
-        tri_array.minor_allele_frequency_cutoff,
-    )
-    return tri_array
-
-
-def get_tri_arrays(sw: SharedWorkspace):
-    return [get_tri_array(c, sw) for c in chromosomes]
-
-
-def test_eig(vcf_files: list[VCFFile]):
+def test_eig(vcf_files: list[VCFFile], tri_paths_by_chromosome):
     sw = SharedWorkspace.create()
-    eig_array = Eigendecomposition.from_tri(*get_tri_arrays(sw))
+    tri_arrays = [
+        Triangular.from_file(tri_paths_by_chromosome[c], sw) for c in chromosomes
+    ]
+    eig_array = Eigendecomposition.from_tri(*tri_arrays)
 
     (sample_count,) = set(v.sample_count for v in vcf_files)
 
@@ -86,7 +74,11 @@ def test_eig(vcf_files: list[VCFFile]):
 
     # check that qr is equal
     (numpy_tri,) = scipy.linalg.qr(a.transpose(), mode="r")
-    tri_array = sw.merge(*(tri.name for tri in get_tri_arrays(sw)))
+
+    tri_arrays = [
+        Triangular.from_file(tri_paths_by_chromosome[c], sw) for c in chromosomes
+    ]
+    tri_array = sw.merge(*(tri.name for tri in tri_arrays))
     (tri,) = scipy.linalg.qr(tri_array.to_numpy().transpose(), mode="r")
     assert np.allclose(
         tri.transpose() @ tri,
@@ -112,13 +104,13 @@ def test_eig(vcf_files: list[VCFFile]):
     sw.unlink()
 
 
-def test_eig_rmw(tmp_path, vcf_by_chromosome):
+def test_eig_rmw(tmp_path, vcf_by_chromosome, tri_paths_by_chromosome):
     sw = SharedWorkspace.create()
 
     c: int | str = 22
     vcf_file = vcf_by_chromosome[c]
 
-    tri_array = get_tri_array(c, sw)
+    tri_array = Triangular.from_file(tri_paths_by_chromosome[c], sw)
     eig_array = Eigendecomposition.from_tri(
         tri_array,
         chromosome=c,

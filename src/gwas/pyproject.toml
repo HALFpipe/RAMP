@@ -6,7 +6,9 @@ requires-python = ">=3.11"
 
 dependencies = [
   "numpy",
-  "scipy"
+  "pytorch>=2",
+  "scipy",
+  "typing_extensions",
 ]
 
 [project.scripts]
@@ -14,7 +16,7 @@ gwas = "gwas.cli:main"
 
 [build-system]
 requires = [
-  "cython>=3.0a11",
+  "cython>=3b1",
   "numpy",
   "setuptools>=62",
   "setuptools_scm[toml]>=6.2",
@@ -23,7 +25,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest", "pytest-benchmark"]
 
 [tool.isort]
 profile = "black"

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
+import re
 from dataclasses import dataclass
 from shutil import which
+from typing import Any
 
 import numpy as np
 from numpy import typing as npt
@@ -46,5 +48,14 @@ def scale_rows(
     return (a.transpose() * b.ravel()).transpose()
 
 
-def rotate(self, eig, a: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-    return eig.eigenvectors.transpose() @ a
+def to_str(x: Any) -> str:
+    if isinstance(x, np.ndarray):
+        if x.size == 1:
+            x = x.item()
+    if np.issubdtype(type(x), np.floating):
+        return np.format_float_scientific(x)  # type: ignore
+    return str(x)
+
+
+def underscore(x: str) -> str:
+    return re.sub(r"([a-z\d])([A-Z])", r"\1_\2", x).lower()
