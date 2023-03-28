@@ -6,6 +6,8 @@ from dataclasses import dataclass
 import numpy as np
 from numpy import typing as npt
 
+from gwas.mem.wkspace import SharedWorkspace
+
 from ._matrix_functions import dgesvdq
 from .mem.arr import SharedArray
 from .tri import Triangular
@@ -49,6 +51,32 @@ class Eigendecomposition(SharedArray):
     def eigenvectors(self) -> npt.NDArray[np.float64]:
         a = self.to_numpy()
         return a[:, :-1]
+
+    @classmethod
+    def from_arrays(
+        cls,
+        chromosome: int | str,
+        variant_count: int,
+        eigenvalues: npt.NDArray,
+        eigenvectors: npt.NDArray,
+        sw: SharedWorkspace,
+    ) -> Eigendecomposition:
+        _, sample_count = eigenvectors.shape
+        name = cls.get_name(sw, chromosome=chromosome)
+        sw.alloc(name, sample_count, sample_count + 1)
+        eig = cls(
+            name=name,
+            sw=sw,
+            chromosome=chromosome,
+            variant_count=variant_count,
+        )
+
+        s = eig.singular_values
+        v = eig.eigenvectors
+
+        s[:] = np.sqrt(eigenvalues * variant_count)
+        v[:] = eigenvectors
+        return eig
 
     @classmethod
     def from_tri(

@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from pathlib import Path
-
 import numpy as np
 import pytest
 
@@ -8,13 +6,13 @@ from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri import Triangular
 from gwas.vcf import VCFFile
 
-vcf_path_zstd = Path("~/work/opensnp/3421/chr22.dose.vcf.zst")
+chromosome = 22
 minor_allele_frequency_cutoff = 0.05
 
 
 @pytest.fixture(scope="module")
-def vcf_file():
-    vcf_file = VCFFile(vcf_path_zstd)
+def vcf_file(vcf_paths_by_chromosome):
+    vcf_file = VCFFile(vcf_paths_by_chromosome[chromosome])
     return vcf_file
 
 

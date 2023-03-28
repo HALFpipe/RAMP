@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 import numpy as np
 from numpy import typing as npt
@@ -16,7 +15,10 @@ from .mem.arr import SharedArray
 class VariableCollection:
     samples: list[str]
 
+    phenotype_names: list[str]
     phenotypes: SharedArray
+
+    covariate_names: list[str]
     covariates: SharedArray
 
     @property
@@ -36,12 +38,18 @@ class VariableCollection:
     def phenotype_count(self) -> int:
         return self.phenotypes.shape[1]
 
+    def free(self):
+        self.phenotypes.free()
+        self.covariates.free()
+
     @classmethod
     def from_arrays(
         cls,
         samples: list[str],
-        covariates: npt.NDArray[np.float64],
+        phenotype_names: list[str],
         phenotypes: npt.NDArray[np.float64],
+        covariate_names: list[str],
+        covariates: npt.NDArray[np.float64],
         sw: SharedWorkspace,
     ):
         # add intercept if not present
@@ -54,20 +62,10 @@ class VariableCollection:
 
         vc = cls(
             samples,
+            phenotype_names,
             SharedArray.from_array(phenotypes, sw, prefix="phenotypes"),
+            covariate_names,
             SharedArray.from_array(covariates, sw, prefix="covariates"),
         )
 
         return vc
-
-    @classmethod
-    def from_txt(cls, path: Path, sw: SharedWorkspace):
-        data_array = np.loadtxt(path, dtype=str)
-        columns = data_array[0, :]
-
-        phenotypes = data_array[1:, np.char.isdigit(columns)].astype(float)
-        covariates = data_array[1:, 1:][:, ~np.char.isdigit(columns)[1:]].astype(float)
-
-        samples = list(data_array[1:, 0])
-
-        return cls.from_arrays(samples, covariates, phenotypes, sw)

@@ -13,9 +13,10 @@ from .z import CompressedTextReader
 
 @dataclass
 class Variant:
+    chromosome: int | str
     position: int
     reference_allele: str
-    alternative_allele: str
+    alternate_allele: str
 
 
 class VCFFile(CompressedTextReader):
@@ -72,7 +73,7 @@ class VCFFile(CompressedTextReader):
         self.chromosome_column_index = columns.index("CHROM")
         self.position_column_index = columns.index("POS")
         self.reference_allele_column_index = columns.index("REF")
-        self.alternative_allele_column_index = columns.index("ALT")
+        self.alternate_allele_column_index = columns.index("ALT")
         self.info_column_index = columns.index("INFO")
         self.format_column_index = columns.index("FORMAT")
 
@@ -115,10 +116,14 @@ class VCFFile(CompressedTextReader):
             tokens = line.split(maxsplit=n_mandatory_columns)
 
             # parse metadata
+            chromosome: int | str = tokens[self.chromosome_column_index]
+            if isinstance(chromosome, str) and chromosome.isdigit():
+                chromosome = int(chromosome)
+
             reference_allele = tokens[self.reference_allele_column_index]
-            alternative_allele = tokens[self.alternative_allele_column_index]
+            alternate_allele = tokens[self.alternate_allele_column_index]
             if only_snps:
-                if len(reference_allele) != 1 or len(alternative_allele) != 1:
+                if len(reference_allele) != 1 or len(alternate_allele) != 1:
                     continue  # skip line
 
             # parse dosages
@@ -136,9 +141,10 @@ class VCFFile(CompressedTextReader):
 
             variants.append(
                 Variant(
+                    chromosome=chromosome,
                     position=int(tokens[self.position_column_index]),
                     reference_allele=reference_allele,
-                    alternative_allele=alternative_allele,
+                    alternate_allele=alternate_allele,
                 )
             )
             variant_index += 1

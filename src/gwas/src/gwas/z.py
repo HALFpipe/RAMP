@@ -71,14 +71,14 @@ class CompressedTextWriter(AbstractContextManager):
             ".zst": ["zstd", "-11"],
             ".lrz": ["lrzip"],
             ".gz": ["bgzip"],
-            ".xz": ["xzcat"],
+            ".xz": ["xz"],
         }[self.file_path.suffix]
 
         executable = unwrap_which(compress_command[0])
         compress_command[0] = executable
 
         self.process_handle = Popen(
-            [*compress_command, str(self.file_path)],
+            compress_command,
             stderr=DEVNULL,
             stdin=PIPE,
             stdout=self.output_file_handle,
