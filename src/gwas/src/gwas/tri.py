@@ -20,7 +20,11 @@ class Triangular(SharedArray):
     minor_allele_frequency_cutoff: float = 0.05
 
     def to_file_name(self) -> str:
-        return f"chr{self.chromosome}.tri.txt.gz"
+        return self.get_file_name(self.chromosome)
+
+    @staticmethod
+    def get_file_name(chromosome: int | str) -> str:
+        return f"chr{chromosome}.tri.txt.gz"
 
     @staticmethod
     def get_prefix(**kwargs) -> str:

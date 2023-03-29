@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from dataclasses import dataclass
+from typing import ClassVar
 
 import numpy as np
 from numpy import typing as npt
@@ -38,6 +39,8 @@ class NullModelCollection:
     standard_errors: SharedArray
     scaled_residuals: SharedArray
     variance: SharedArray
+
+    methods: ClassVar[list[str]] = ["fastlmm", "ml", "pml", "rml"]
 
     @property
     def phenotype_count(self) -> int:
