@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import pickle
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from itertools import pairwise
 from multiprocessing.shared_memory import SharedMemory
@@ -29,13 +30,20 @@ class Allocation:
 
 
 @dataclass
-class SharedWorkspace:
+class SharedWorkspace(AbstractContextManager):
     name: str
 
     shm: SharedMemory = field(init=False)
 
     def __post_init__(self) -> None:
         self.shm = SharedMemory(name=self.name)
+
+    def __enter__(self) -> SharedWorkspace:
+        return self
+
+    def __exit__(self, *args) -> None:
+        self.close()
+        self.unlink()
 
     @property
     def size(self) -> int:

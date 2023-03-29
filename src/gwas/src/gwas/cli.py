@@ -5,6 +5,7 @@ from multiprocessing import Pool, cpu_count
 from pathlib import Path
 
 from gwas.eig import Eigendecomposition
+from gwas.log import logger
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.pheno import VariableCollection
 from gwas.score import calc_score
@@ -61,84 +62,91 @@ def main():
     minor_allele_frequency_cutoff = float(arguments.minor_allele_frequency_cutoff)
 
     # Allocate shared workspace.
-    sw = SharedWorkspace.create()
-
-    # Load phenotype and covariate data.
-    vc = VariableCollection.from_txt(phenotype_path, covariate_path, sw)
-
-    # Load VCF file metadata.
-    with Pool(processes=min(cpu_count(), len(vcf_paths))) as pool:
-        vcf_files = list(pool.map(VCFFile, vcf_paths))
-    vcf_by_chromosome = {vcf_file.chromosome: vcf_file for vcf_file in vcf_files}
-
-    # Sort `--tri-paths` command line arguments into dictionary.
-    tri_paths_by_chromosome: dict[int | str, Path] = dict()
-    for tri_path in tri_paths:
-        tri = Triangular.from_file(tri_path, sw)
-        tri_paths_by_chromosome[tri.chromosome] = tri_path
-        tri.free()
-
-    # Create accessor.
-    def get_tri(chromosome: int | str) -> Triangular:
-        tri_path: Path | None = None
-        if chromosome in tri_paths_by_chromosome:
-            tri_path = tri_paths_by_chromosome[chromosome]
-        if tri_path is None:
-            tri_path = out_path / Triangular.get_file_name(chromosome)
-
-        # Check if triangularized file already exists, and load it.
-        if tri_path.is_file():
-            return Triangular.from_file(tri_path, sw)
-
-        # Triangularize VCF file.
-        vcf_file = vcf_by_chromosome[chromosome]
-        tri = Triangular.from_vcf(
-            vcf_file,
-            sw,
-            minor_allele_frequency_cutoff,
-        )
-        if tri is None:
-            raise ValueError(f"Could not triangularize {vcf_file.file_path}")
-
-        tri_paths_by_chromosome[chromosome] = tri.to_file(tri_path)
-        return tri
-
-    def run(chromosome: int | str, eig: Eigendecomposition | None) -> None:
-        eig_path = out_path / Eigendecomposition.get_file_name(chromosome)
-        if eig is None:
-            if eig_path.is_file():
-                eig = Eigendecomposition.from_file(eig_path, sw)
-            else:
-                # Leave out current chromosome from calculation.
-                other_chromosomes = set(chromosomes) - {chromosome}
-                tris = [get_tri(c) for c in other_chromosomes]
-                # Calculate eigendecomposition and free tris.
-                eig = Eigendecomposition.from_tri(*tris, chromosome=chromosome)
-                eig.to_file(eig_path)
-
-        nm = NullModelCollection.from_eig(eig, vc, method=method)
-
-        vcf_file = vcf_by_chromosome[chromosome]
-        score_path = out_path / f"chr{chromosome}.score.txt.zst"
-        calc_score(
-            vcf_file,
-            vc,
-            nm,
-            eig,
-            sw,
-            score_path,
+    with SharedWorkspace.create() as sw:
+        # Load VCF file metadata.
+        with Pool(processes=min(cpu_count(), len(vcf_paths))) as pool:
+            vcf_files = list(pool.map(VCFFile, vcf_paths))
+        vcf_by_chromosome = {vcf_file.chromosome: vcf_file for vcf_file in vcf_files}
+        samples = sorted(
+            set.intersection(*(set(vcf_file.samples) for vcf_file in vcf_files))
         )
 
-    chromosomes = sorted(vcf_by_chromosome.keys(), key=chromosome_to_int)
-    tasks = set(chromosomes)
+        # Load phenotype and covariate data.
+        vc = VariableCollection.from_txt(
+            phenotype_path, covariate_path, sw, samples=samples
+        )
+        for vcf_file in vcf_files:
+            vcf_file.update_samples(vc.samples)
+        logger.info(f"Found {len(vc.samples)} samples across input files.")
 
-    for eig_path in eig_paths:
-        if not eig_path.is_file():
-            continue
-        eig = Eigendecomposition.from_file(eig_path, sw)
-        chromosome = eig.chromosome
-        run(chromosome, eig)
-        tasks.remove(chromosome)
+        # Sort `--tri-paths` command line arguments into dictionary.
+        tri_paths_by_chromosome: dict[int | str, Path] = dict()
+        for tri_path in tri_paths:
+            tri = Triangular.from_file(tri_path, sw)
+            tri_paths_by_chromosome[tri.chromosome] = tri_path
+            tri.free()
 
-    for task in tasks:
-        run(task, None)
+        # Create accessor.
+        def get_tri(chromosome: int | str) -> Triangular:
+            tri_path: Path | None = None
+            if chromosome in tri_paths_by_chromosome:
+                tri_path = tri_paths_by_chromosome[chromosome]
+            if tri_path is None:
+                tri_path = out_path / Triangular.get_file_name(chromosome)
+
+            # Check if triangularized file already exists, and load it.
+            if tri_path.is_file():
+                return Triangular.from_file(tri_path, sw)
+
+            # Triangularize VCF file.
+            vcf_file = vcf_by_chromosome[chromosome]
+            tri = Triangular.from_vcf(
+                vcf_file,
+                sw,
+                minor_allele_frequency_cutoff,
+            )
+            if tri is None:
+                raise ValueError(f"Could not triangularize {vcf_file.file_path}")
+
+            tri_paths_by_chromosome[chromosome] = tri.to_file(tri_path)
+            return tri
+
+        def run(chromosome: int | str, eig: Eigendecomposition | None) -> None:
+            eig_path = out_path / Eigendecomposition.get_file_name(chromosome)
+            if eig is None:
+                if eig_path.is_file():
+                    eig = Eigendecomposition.from_file(eig_path, sw)
+                else:
+                    # Leave out current chromosome from calculation.
+                    other_chromosomes = set(chromosomes) - {chromosome}
+                    tris = [get_tri(c) for c in other_chromosomes]
+                    # Calculate eigendecomposition and free tris.
+                    eig = Eigendecomposition.from_tri(*tris, chromosome=chromosome)
+                    eig.to_file(eig_path)
+
+            nm = NullModelCollection.from_eig(eig, vc, method=method)
+
+            vcf_file = vcf_by_chromosome[chromosome]
+            score_path = out_path / f"chr{chromosome}.score.txt.zst"
+            calc_score(
+                vcf_file,
+                vc,
+                nm,
+                eig,
+                sw,
+                score_path,
+            )
+
+        chromosomes = sorted(vcf_by_chromosome.keys(), key=chromosome_to_int)
+        tasks = set(chromosomes)
+
+        for eig_path in eig_paths:
+            if not eig_path.is_file():
+                continue
+            eig = Eigendecomposition.from_file(eig_path, sw)
+            chromosome = eig.chromosome
+            run(chromosome, eig)
+            tasks.remove(chromosome)
+
+        for task in tasks:
+            run(task, None)
