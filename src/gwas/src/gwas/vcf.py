@@ -65,8 +65,7 @@ class VCFFile(CompressedTextReader):
         self.sample_indices: list[int] | None = None
 
         if samples is not None:
-            self.sample_indices = [self.samples.index(sample) for sample in samples]
-            self.samples = samples
+            self.update_samples(samples)
 
         self.sample_count = len(self.samples)
 
@@ -87,6 +86,10 @@ class VCFFile(CompressedTextReader):
         fields = example_format.split(":")
         self.field_count = len(fields)
         self.dosage_field_index = fields.index("DS")
+
+    def update_samples(self, samples: list[str]) -> None:
+        self.sample_indices = [self.samples.index(sample) for sample in samples]
+        self.samples = samples
 
     def read(
         self,

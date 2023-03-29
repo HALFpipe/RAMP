@@ -334,9 +334,11 @@ class Scorefile:
         analyzed_trait = None
         if len(trait_summaries) == 1:
             (analyzed_trait,) = trait_summaries
+        covariate_summaries = make_summaries(vc.covariate_names[1:], covariates[:, 1:])
 
         weights = nm.regression_weights.to_numpy()
         errors = nm.standard_errors.to_numpy()
+
         null_model_estimates = [
             NullModelEstimate(
                 name,
@@ -356,8 +358,8 @@ class Scorefile:
             founders=vc.sample_count,
             make_residuals=False,
             analyzed_founders=vc.sample_count,
-            covariates=vc.covariate_names,
-            covariate_summaries=make_summaries(vc.covariate_names, covariates[:, 1:]),
+            covariates=vc.covariate_names[1:],  # skip intercept
+            covariate_summaries=covariate_summaries,
             inverse_normal=False,
             trait_summaries=trait_summaries,
             null_model_estimates=null_model_estimates,

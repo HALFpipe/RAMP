@@ -181,15 +181,10 @@ class ProfileMaximumLikelihood:
         nm: NullModelCollection,
     ):
         eigenvectors = eig.eigenvectors
-        covariates = vc.covariates.to_numpy()
+        covariates = vc.covariates.to_numpy().copy()
         phenotypes = vc.phenotypes.to_numpy()
 
-        # Add intercept if not present.
-        first_column = covariates[:, 0, np.newaxis]
-        if not np.allclose(first_column, 1):
-            covariates = np.hstack([np.ones_like(first_column), covariates])
-
-        # Subtract column mean from covariates.
+        # Subtract column mean from covariates (except intercept).
         covariates[:, 1:] -= covariates[:, 1:].mean(axis=0)
 
         # Rotate covariates and phenotypes.
@@ -197,7 +192,6 @@ class ProfileMaximumLikelihood:
         rotated_covariates = torch.tensor(eigenvectors.transpose() @ covariates)
         rotated_phenotypes = torch.tensor(eigenvectors.transpose() @ phenotypes)
 
-        # Create class instance.
         ml = cls(vc.sample_count, vc.covariate_count)
 
         # Fit null model for each phenotype.
