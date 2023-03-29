@@ -20,7 +20,11 @@ class Eigendecomposition(SharedArray):
     variant_count: int
 
     def to_file_name(self) -> str:
-        return f"no-chr{self.chromosome}.eig.txt.gz"
+        return self.get_file_name(self.chromosome)
+
+    @staticmethod
+    def get_file_name(chromosome: int | str) -> str:
+        return f"no-chr{chromosome}.eig.txt.gz"
 
     @staticmethod
     def get_prefix(**kwargs) -> str:

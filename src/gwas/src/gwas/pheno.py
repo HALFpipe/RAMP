@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 from numpy import typing as npt
@@ -52,15 +53,7 @@ class VariableCollection:
         covariates: npt.NDArray[np.float64],
         sw: SharedWorkspace,
     ):
-        # add intercept if not present
-        first_column = covariates[:, 0, np.newaxis]
-        if not np.allclose(first_column, 1):
-            covariates = np.hstack([np.ones_like(first_column), covariates])
-
-        # subtract column mean from covariates
-        covariates[:, 1:] -= covariates[:, 1:].mean(axis=0)
-
-        vc = cls(
+        return cls(
             samples,
             phenotype_names,
             SharedArray.from_array(phenotypes, sw, prefix="phenotypes"),
@@ -68,4 +61,26 @@ class VariableCollection:
             SharedArray.from_array(covariates, sw, prefix="covariates"),
         )
 
-        return vc
+    @classmethod
+    def from_txt(cls, phenotype_path: Path, covariate_path: Path, sw: SharedWorkspace):
+        phenotypes_array = np.loadtxt(phenotype_path, dtype=object)
+        phenotype_names = phenotypes_array[0, 1:].tolist()
+        samples = phenotypes_array[1:, 0].tolist()
+        phenotypes = phenotypes_array[1:, 1:].astype(np.float64)
+
+        covariates_array = np.loadtxt(covariate_path, dtype=object)
+        covariate_names = covariates_array[0, 1:].tolist()
+        if samples != covariates_array[1:, 0].tolist():
+            raise ValueError(
+                "Samples do not match between phenotype and covariate files"
+            )
+        covariates = covariates_array[1:, 1:].astype(np.float64)
+
+        return cls.from_arrays(
+            samples,
+            phenotype_names,
+            phenotypes,
+            covariate_names,
+            covariates,
+            sw,
+        )
