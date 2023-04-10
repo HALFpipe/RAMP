@@ -15,7 +15,8 @@ requirements:
     - {{ compiler("cxx") }}
   host:
     - boost-cpp
-    - mkl-devel
+    - "mkl<2023"
+    - mkl-include
     - nlopt
     - zlib
     - zstd
