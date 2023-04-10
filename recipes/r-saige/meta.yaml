@@ -6,7 +6,7 @@ package:
 
 source:
   git_url: https://github.com/saigegit/SAIGE
-  git_rev: 51554b8db12b566c2306ffb31c97481f0d072537
+  git_rev: 13892c8bd88f7bebef3fd5ecd5ba98951b53b9a3
   patches:
     - patches/0001-use-shared-libs-in-makevars.patch
 

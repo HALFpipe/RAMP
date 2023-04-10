@@ -9,7 +9,7 @@ export LIBRARY_PATH=${PREFIX}/lib
 mkdir build
 pushd build
 
-cmake ../gcta
+cmake -DCMAKE_VERBOSE_MAKEFILE=1 ../gcta
 
 make -j$(nproc)
 

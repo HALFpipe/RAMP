@@ -28,7 +28,7 @@ RUN curl --silent --show-error --location \
     bash conda.sh -b -p /usr/local/mambaforge && \
     rm conda.sh && \
     conda config --system --append channels "bioconda" && \
-    conda config --set channel_priority "strict" && \
+    conda config --system --prepend channels "conda-forge/label/cython_dev" && \
     sync && \
     mamba clean --yes --all --force-pkgs-dirs
 
@@ -43,21 +43,6 @@ RUN apt-get update && \
         "build-essential"  # need system `ar` for raremetal
 RUN mamba install --yes "boa" "conda-verify"
 
-FROM builder as r-gmmat
-COPY recipes/r-gmmat r-gmmat
-RUN conda mambabuild --no-anaconda-upload "r-gmmat" && \
-    conda build purge
-
-FROM builder as r-saige
-COPY recipes/r-saige r-saige
-RUN conda mambabuild --no-anaconda-upload "r-saige" && \
-    conda build purge
-
-FROM builder as qctool
-COPY recipes/qctool qctool
-RUN conda mambabuild --no-anaconda-upload "qctool" && \
-    conda build purge
-
 FROM builder as bolt-lmm
 COPY recipes/bolt-lmm bolt-lmm
 RUN conda mambabuild --no-anaconda-upload "bolt-lmm" && \
@@ -68,18 +53,49 @@ COPY recipes/dosage-convertor dosage-convertor
 RUN conda mambabuild --no-anaconda-upload "dosage-convertor" && \
     conda build purge
 
+FROM builder as gcta
+COPY recipes/gcta gcta
+RUN conda mambabuild --no-anaconda-upload "gcta" && \
+    conda build purge
+
+FROM builder as gwas
+COPY src/gwas gwas-protocol/src/gwas
+COPY recipes/gwas gwas-protocol/recipes/gwas
+# copy .git folder too for setuptools_scm
+COPY .git gwas-protocol/.git
+RUN cd gwas-protocol/recipes && \
+    conda mambabuild --no-anaconda-upload "gwas" && \
+    conda build purge
+
+FROM builder as qctool
+COPY recipes/qctool qctool
+RUN conda mambabuild --no-anaconda-upload "qctool" && \
+    conda build purge
+
 FROM builder as raremetal
 COPY recipes/raremetal raremetal
 RUN conda mambabuild --no-anaconda-upload "raremetal" && \
     conda build purge
 
+FROM builder as r-gmmat
+COPY recipes/r-gmmat r-gmmat
+RUN conda mambabuild --no-anaconda-upload "r-gmmat" && \
+    conda build purge
+
+FROM builder as r-saige
+COPY recipes/r-saige r-saige
+RUN conda mambabuild --no-anaconda-upload "r-saige" && \
+    conda build purge
+
 FROM builder as merge
-COPY --from=r-gmmat /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
-COPY --from=r-saige /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
-COPY --from=qctool /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
 COPY --from=bolt-lmm /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
 COPY --from=dosage-convertor /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
+COPY --from=gcta /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
+COPY --from=gwas /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
+COPY --from=qctool /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
 COPY --from=raremetal /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
+COPY --from=r-gmmat /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
+COPY --from=r-saige /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
 RUN conda index /usr/local/mambaforge/conda-bld
 
 # Install packages
@@ -94,12 +110,16 @@ RUN mamba install --yes --use-local \
         "dosage-convertor" \
         "gcta" \
         "gemma" \
+        "gwas" \
         "lrzip" \
         "matplotlib" \
+        "networkx" \
+        "pandas" \
         "parallel" \
         "plink" \
         "plink2" \
         "python>=3.11" \
+        "pytorch<2" \
         "qctool" \
         "raremetal" \
         "r-gmmat" \
