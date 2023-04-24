@@ -179,7 +179,7 @@ class ProfileMaximumLikelihood:
         eig: Eigendecomposition,
         vc: VariableCollection,
         nm: NullModelCollection,
-    ):
+    ) -> None:
         eigenvectors = eig.eigenvectors
         covariates = vc.covariates.to_numpy().copy()
         phenotypes = vc.phenotypes.to_numpy()
@@ -195,7 +195,7 @@ class ProfileMaximumLikelihood:
         ml = cls(vc.sample_count, vc.covariate_count)
 
         # Fit null model for each phenotype.
-        for i in tqdm(range(vc.phenotype_count)):
+        for i in tqdm(range(vc.phenotype_count), desc="phenotypes"):
             o = OptimizeInput(
                 eigenvalues,
                 rotated_covariates,
@@ -205,7 +205,7 @@ class ProfileMaximumLikelihood:
             nm.put(i, r)
 
 
-def logdet(a: torch.Tensor):
+def logdet(a: torch.Tensor) -> torch.Tensor:
     """A re-implementation of torch.logdet that returns infinity instead of NaN, which
     prevents an error in autodiff.
 

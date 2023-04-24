@@ -4,25 +4,24 @@ from __future__ import annotations
 
 import multiprocessing as mp
 from dataclasses import dataclass, field
-from enum import Enum, auto
 from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event
 from pathlib import Path
 from queue import Empty
-from typing import TypeVar
 
 import numpy as np
 from numpy import typing as npt
 
-from gwas.eig import Eigendecomposition
-from gwas.log import logger
-from gwas.mem.arr import SharedArray
-from gwas.mem.wkspace import SharedWorkspace
-from gwas.pheno import VariableCollection
-from gwas.rmw import AnnotatedVariant, CombinedScorefile
-from gwas.var import NullModelCollection
-from gwas.vcf import VCFFile
-from gwas.z import CompressedTextWriter
+from .eig import Eigendecomposition
+from .log import logger
+from .mem.arr import SharedArray
+from .mem.wkspace import SharedWorkspace
+from .pheno import VariableCollection
+from .rmw import AnnotatedVariant, CombinedScorefile
+from .utils import Action, Process, SharedState
+from .var import NullModelCollection
+from .vcf import VCFFile
+from .z import CompressedTextWriter
 
 
 def calc_u_stat(
@@ -58,16 +57,8 @@ def calc_v_stat(
     return invalid
 
 
-class Action(Enum):
-    EVENT = auto()
-    EXIT = auto()
-
-
-T = TypeVar("T")
-
-
 @dataclass
-class TaskSyncCollection:
+class TaskSyncCollection(SharedState):
     # Indicates that the genotypes array is empty and we can read data into it.
     can_read: Event = field(default_factory=mp.Event)
     # Indicates that the genotypes array was read and we can start processing.
@@ -75,38 +66,13 @@ class TaskSyncCollection:
     # Indicates that calculation has finished and we can write out the results.
     can_write: Event = field(default_factory=mp.Event)
 
-    # Indicates that we should exit.
-    should_exit: Event = field(default_factory=mp.Event)
-
     # Passes the number of variants that were read to the calculation process.
     variant_count_queue: Queue[int] = field(default_factory=mp.Queue)
-
     # Passes metadata of the read variants from the reader to the writer.
     annot_variant_queue: Queue[list[AnnotatedVariant]] = field(default_factory=mp.Queue)
 
-    # Passes exceptions.
-    exception_queue: Queue[Exception] = field(default_factory=mp.Queue)
 
-    def get(self, queue: Queue[T]) -> T | Action:
-        logger.debug("Waiting for queue %s", queue)
-        while True:
-            if self.should_exit.is_set():
-                return Action.EXIT
-            try:
-                return queue.get(timeout=1)
-            except Empty:
-                pass
-
-    def wait(self, event: Event) -> Action:
-        logger.debug("Waiting for event %s", event)
-        while True:
-            if self.should_exit.is_set():
-                return Action.EXIT
-            if event.wait(timeout=1):
-                return Action.EVENT
-
-
-class Proc(mp.Process):
+class Worker(Process):
     def __init__(
         self,
         t: TaskSyncCollection,
@@ -114,21 +80,10 @@ class Proc(mp.Process):
         **kwargs,
     ) -> None:
         self.t = t
-
-        super().__init__(*args, **kwargs)
-
-    def func(self) -> None:
-        raise NotImplementedError
-
-    def run(self) -> None:
-        try:
-            self.func()
-        except Exception as e:
-            logger.exception("An error occurred in %s", self.name, exc_info=e)
-            self.t.exception_queue.put_nowait(e)
+        super().__init__(t.exception_queue, *args, **kwargs)
 
 
-class GenotypeReader(Proc):
+class GenotypeReader(Worker):
     def __init__(
         self,
         t: TaskSyncCollection,
@@ -199,7 +154,7 @@ class GenotypeReader(Proc):
                 self.t.annot_variant_queue.put_nowait(annot_variants)
 
 
-class Calc(Proc):
+class Calc(Worker):
     def __init__(
         self,
         t: TaskSyncCollection,
@@ -269,7 +224,7 @@ class Calc(Proc):
             self.t.can_write.set()
 
 
-class ScoreWriter(Proc):
+class ScoreWriter(Worker):
     def __init__(
         self,
         t: TaskSyncCollection,
@@ -341,12 +296,34 @@ def calc_score(
     sw: SharedWorkspace,
     score_path: Path,
 ) -> None:
+    """Calculate the Chen and Abecasis (2007) score statistic for phenotypes with no
+    missing data.
+
+    Args:
+        vcf_file (VCFFile): An object containing the VCF-file header information and
+            which samples to read from it.
+        vc (VariableCollection): An object containing the phenotype and covariate data.
+        nm (NullModelCollection): An object containing the estimated variance
+            components.
+        eig (Eigendecomposition): An object containing the eigenvectors and eigenvalues
+            for the leave-one-chromosome-out kinship matrices.
+        sw (SharedWorkspace): The shared workspace from where we can allocate arrays in
+            shared memory.
+        score_path (Path): The path to use for the output file.
+
+    Raises:
+        Exception: Any exception that is raised by the worker processes.
+    """
     sw.squash()  # make sure that we can use all free memory
 
     variant_count = sw.unallocated_size // (
         np.float64().itemsize * 2 * (vc.phenotype_count + vc.sample_count)
     )
     variant_count = min(variant_count, vcf_file.variant_count)
+
+    logger.info(
+        f"Will calculate score statistics in chunks of {variant_count} variants"
+    )
 
     name = SharedArray.get_name(sw, "genotypes")
     gen_array = sw.alloc(name, vc.sample_count, variant_count)

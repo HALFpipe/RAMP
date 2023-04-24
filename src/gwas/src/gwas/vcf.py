@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,7 +34,7 @@ class VCFFile(CompressedTextReader):
     def __init__(self, file_path: Path | str, samples: list[str] | None = None) -> None:
         super().__init__(file_path)
 
-        logger.info(f'Scanning "{str(file_path)}"')
+        logger.debug(f'Scanning "{str(file_path)}"')
 
         # read header information and example line
         header: str | None = None
@@ -61,13 +60,12 @@ class VCFFile(CompressedTextReader):
             raise ValueError
 
         # set properties
-        self.samples: list[str] = columns[len(self.mandatory_columns) :]
+        self.vcf_samples: list[str] = columns[len(self.mandatory_columns) :]
         self.sample_indices: list[int] | None = None
 
-        if samples is not None:
-            self.update_samples(samples)
-
-        self.sample_count = len(self.samples)
+        if samples is None:
+            samples = self.vcf_samples
+        self.update_samples(samples)
 
         self.chromosome_column_index = columns.index("CHROM")
         self.position_column_index = columns.index("POS")
@@ -88,8 +86,9 @@ class VCFFile(CompressedTextReader):
         self.dosage_field_index = fields.index("DS")
 
     def update_samples(self, samples: list[str]) -> None:
-        self.sample_indices = [self.samples.index(sample) for sample in samples]
+        self.sample_indices = [self.vcf_samples.index(sample) for sample in samples]
         self.samples = samples
+        self.sample_count = len(self.samples)
 
     def read(
         self,

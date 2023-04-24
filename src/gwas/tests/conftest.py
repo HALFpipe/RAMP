@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 import os
 import shelve
-from multiprocessing import Pool
 from pathlib import Path
+from typing import Mapping
 
 import pytest
 
 from gwas.mem.wkspace import SharedWorkspace
-from gwas.tri import Triangular
-from gwas.utils import chromosome_to_int, chromosomes_set
+from gwas.tri import calc_tri
+from gwas.utils import Pool, chromosome_to_int, chromosomes_set
 from gwas.vcf import VCFFile
 
 base_path: Path = Path(os.environ["DATA_PATH"])
@@ -26,9 +26,10 @@ def cache(request) -> shelve.Shelf:
     return c
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def sw(request) -> SharedWorkspace:
     sw = SharedWorkspace.create()
+
     request.addfinalizer(sw.close)
     request.addfinalizer(sw.unlink)
     return sw
@@ -95,23 +96,9 @@ def raw_path():
     return base_path / dataset / "raw"
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def tri_paths_by_chromosome(
-    vcf_by_chromosome: dict[str | int, VCFFile],
+    vcf_by_chromosome: Mapping[int | str, VCFFile],
     sw: SharedWorkspace,
-) -> dict[str | int, Path]:
-    t = dict()
-
-    for c, vcf_file in vcf_by_chromosome.items():
-        vcf_path = vcf_file.file_path
-        tri_path = base_path / dataset / f"tri/{vcf_path.parent.name}/chr{c}.tri.txt.gz"
-
-        if not tri_path.is_file():
-            tri = Triangular.from_vcf(vcf_file, sw)
-            if tri is None:
-                raise RuntimeError(f'Could not triangularize "{vcf_path}"')
-            tri.to_file(tri_path)
-
-        t[c] = tri_path
-
-    return t
+) -> Mapping[str | int, Path]:
+    return calc_tri(chromosomes, vcf_by_chromosome, base_path / dataset, sw)

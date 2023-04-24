@@ -2,6 +2,7 @@
 import json
 from dataclasses import dataclass, fields
 from pathlib import Path
+from typing import Self
 
 import numpy as np
 import scipy
@@ -56,16 +57,23 @@ class SharedArray:
 
         is_at_end = all(b.start <= a.start for b in allocations.values())
         if is_at_end and include_trailing_free_memory:
-            trailing_free_memory = self.sw.shm.size - a.start - a.size
+            trailing_free_memory = self.sw.size - a.start - a.size
 
             tile_shape = shape[:-1]
             tile_size = int(np.prod(tile_shape)) * dtype.itemsize
 
             shape = tuple([*tile_shape, shape[-1] + trailing_free_memory // tile_size])
 
-        buffer = self.sw.shm.buf[a.start :]
+        if a.start % dtype.itemsize != 0:
+            raise ValueError("Array is not aligned")
 
-        return np.ndarray(shape, buffer=buffer, dtype=dtype, order="F")
+        return np.ndarray(
+            shape,
+            buffer=self.sw.buf,
+            offset=a.start,
+            dtype=dtype,
+            order="F",
+        )
 
     @classmethod
     def parse_header(cls, header: str | None) -> dict:
@@ -105,25 +113,27 @@ class SharedArray:
             i += 1
 
     @classmethod
-    def from_array(
+    def from_numpy(
         cls,
         array: npt.NDArray,
         sw: SharedWorkspace,
         **kwargs,
-    ):
+    ) -> Self:
         name = cls.get_name(sw, **kwargs)
         sa = sw.alloc(name, *array.shape)
 
         sa.to_numpy()[:] = array
 
-        return sa
+        cls_names = {field.name for field in fields(cls)}
+        cls_kwargs = {name: v for name, v in kwargs.items() if name in cls_names}
+        return cls(name, sw, **cls_kwargs)
 
     @classmethod
     def from_file(
         cls,
         file_path: Path | str,
         sw: SharedWorkspace,
-    ):
+    ) -> Self:
         file_path = Path(file_path)
 
         header: str | None = None
@@ -270,25 +280,23 @@ class SharedArray:
         allocations[self.name] = Allocation(a.start, size, shape, a.dtype)
         self.sw.allocations = allocations
 
-    def triangularize(self):
-        """Triangularize to upper triangular matrix via GEQRF, which
+    def triangularize(self) -> None:
+        """Triangularize to upper triangular matrix via the LAPACK routine GEQRF, which
         is what scipy.linalg.qr uses internally.
 
-        Parameters
-        ----------
-        self :
-            self
+        Raises:
+            RuntimeError: If the LAPACK routine fails.
         """
         a = self.to_numpy()
 
-        # retrieve function
+        # Retrieve function.
         func = scipy.linalg.get_lapack_funcs("geqrf", (a,))
 
-        # calculate lwork
+        # Calculate lwork.
         _, _, lwork, _ = func(a, lwork=-1, overwrite_a=True)
         lwork = int(lwork)
 
-        # direct computation for better precision
+        # Direct computation for better precision as per
         # https://doi.org/10.1145/1996092.1996103
         _, _, _, info = func(
             a,
@@ -298,5 +306,38 @@ class SharedArray:
         if info != 0:
             raise RuntimeError
 
-        # remove lower triangle
+        # Set lower triangular part to zero.
         set_tril(a)
+
+    def triangularize_with_pivoting(self) -> npt.NDArray[np.integer]:
+        """Triangularize to upper triangular matrix with pivoting via the
+        LAPACK routine GEQP3.
+
+        Raises:
+            RuntimeError: If the LAPACK routine fails.
+        """
+        a = self.to_numpy()
+
+        # Retrieve function.
+        func = scipy.linalg.get_lapack_funcs("geqp3", (a,))
+
+        # Calculate lwork.
+        _, _, _, lwork, _ = func(a, lwork=-1, overwrite_a=True)
+        lwork = int(lwork)
+
+        # Run the computation.
+        _, jpvt, _, _, info = func(
+            a,
+            lwork=lwork,
+            overwrite_a=True,
+        )
+        if info != 0:
+            raise RuntimeError
+
+        # Set lower triangular part to zero.
+        set_tril(a)
+
+        # Make pivot indices 0-based.
+        jpvt -= 1
+
+        return jpvt

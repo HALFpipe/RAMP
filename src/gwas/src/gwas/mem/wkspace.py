@@ -1,23 +1,21 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import mmap
 import os
 import pickle
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from itertools import pairwise
-from multiprocessing.shared_memory import SharedMemory
-from secrets import token_urlsafe
+from multiprocessing import reduction as mp_reduction
+from typing import Callable
 
 import numpy as np
-from _posixshmem import shm_open
 from numpy import typing as npt
+from psutil import virtual_memory
 
+from .._os import c_memfd_create
 from ..log import logger
-
-# taken from cpython Lib/multiprocessing/shared_memory.py
-flags: int = os.O_CREAT | os.O_EXCL | os.O_RDWR
-mode: int = 0o600
 
 
 @dataclass(frozen=True)
@@ -31,12 +29,13 @@ class Allocation:
 
 @dataclass
 class SharedWorkspace(AbstractContextManager):
-    name: str
+    fd: int
+    size: int
 
-    shm: SharedMemory = field(init=False)
+    buf: mmap.mmap = field(init=False)
 
     def __post_init__(self) -> None:
-        self.shm = SharedMemory(name=self.name)
+        self.buf = mmap.mmap(self.fd, self.size, flags=mmap.MAP_SHARED)
 
     def __enter__(self) -> SharedWorkspace:
         return self
@@ -46,13 +45,9 @@ class SharedWorkspace(AbstractContextManager):
         self.unlink()
 
     @property
-    def size(self) -> int:
-        return self.shm.size
-
-    @property
     def unallocated_size(self) -> int:
         end = max(a.start + a.size for a in self.allocations.values())
-        return self.shm.size - end
+        return self.size - end
 
     def get_array(self, name: str):
         from .arr import SharedArray
@@ -91,7 +86,7 @@ class SharedWorkspace(AbstractContextManager):
 
         allocations[name] = Allocation(start, size, shape, dtype)
 
-        logger.info(
+        logger.debug(
             f'Created new allocation "{name}" '
             f"at {start} with size {size} "
             f"({end / self.size:.0%} of workspace used)"
@@ -136,7 +131,7 @@ class SharedWorkspace(AbstractContextManager):
 
         name, _ = to_merge[0]
         allocations[name] = Allocation(start, size, shape, dtype)
-        logger.info(f'Created merged allocation "{name}" at {start} with size {size}')
+        logger.debug(f'Created merged allocation "{name}" at {start} with size {size}')
         self.allocations = allocations
 
         return self.get_array(name)
@@ -145,12 +140,12 @@ class SharedWorkspace(AbstractContextManager):
         allocations = self.allocations
         del allocations[name]
         self.allocations = allocations
-        logger.info(f'Free allocation "{name}" ')
+        logger.debug(f'Free allocation "{name}" ')
 
     def squash(self) -> None:
         data: npt.NDArray = np.ndarray(
             (self.size,),
-            buffer=self.shm.buf,
+            buffer=self.buf,
             dtype=np.uint8,
         )
 
@@ -170,7 +165,7 @@ class SharedWorkspace(AbstractContextManager):
             start = a.start + a.size
             data[start : start + b.size] = data[b.start : b.start + b.size]
 
-            logger.info(
+            logger.debug(
                 f'Moved allocation "{name}" from {b.start} to {start} '
                 f'to be contiguous with preceding allocation "{previous_name}"'
             )
@@ -180,7 +175,7 @@ class SharedWorkspace(AbstractContextManager):
 
     @property
     def allocations(self) -> dict[str, Allocation]:
-        return pickle.loads(self.shm.buf)
+        return pickle.loads(self.buf)
 
     @allocations.setter
     def allocations(self, allocations: dict[str, Allocation]) -> None:
@@ -190,50 +185,48 @@ class SharedWorkspace(AbstractContextManager):
         if len(dict_bytes) > dict_size:
             raise ValueError
 
-        self.shm.buf[: len(dict_bytes)] = dict_bytes
+        self.buf[: len(dict_bytes)] = dict_bytes
 
     def close(self):
-        self.shm.close()
+        self.buf.close()
 
     def unlink(self):
-        self.shm.unlink()
+        os.close(self.fd)
+        # call([
+        #     "bash",
+        #     "-c",
+        #     f"nohup rm -f /dev/shm/{self.name} >/dev/null 2>&1 &"
+        # ])
 
     @classmethod
     def create(
         cls, size: int | None = None, dict_size: int = 2**20
     ) -> SharedWorkspace:
-        # Random name (hopefully unique).
-        name = f"gwas-{token_urlsafe(8)}"
+        """Creates a shared workspace that is stored in an anonymous file,
+        allocated via `memfd_create`. Adapted from
+        https://github.com/ska-sa/katgpucbf/blob/main/src/katgpucbf/dsim/shared_array.py
 
+        Args:
+            size (int | None, optional): Size to allocate in bytes. Defaults to None.
+            dict_size (int, optional): Size to reserve for the allocations dictionary.
+                Defaults to 2**20.
+
+        Returns:
+            SharedWorkspace: _description_
+        """
         # Create file.
-        fd = shm_open(name, flags, mode)
-
+        fd = c_memfd_create("shared-workspace")
+        if fd == -1:
+            raise OSError("Failed to create anonymous file")
         if size is None:
-            # Increase size until we hit the limit.
-            size = 0
-            size_step: int = 2**29  # Half a gigabyte.
-            while True:
-                try:
-                    os.posix_fallocate(fd, size, size_step)
-                    size += size_step
-                except OSError:
-                    break
-            if not size:
-                raise RuntimeError
-            # Decrease size by 10% to avoid out-of-memory crashes.
-            size = int(np.round(size * 0.9))
-            os.ftruncate(fd, size)
-        else:
-            os.posix_fallocate(fd, 0, size)
-
-        os.close(fd)
+            size = int(virtual_memory().available)
+        os.ftruncate(fd, size)
 
         # Now we actually instantiate the python wrapper.
-        sw = cls(name)
-        size = sw.size
+        sw = cls(fd, size)
 
         logger.info(
-            f'Created shared workspace "{name}" '
+            "Created shared workspace "
             f"with a size of {size} bytes ({size / 1e9:f} gigabytes)"
         )
 
@@ -243,3 +236,14 @@ class SharedWorkspace(AbstractContextManager):
         )
         sw.allocations = allocations
         return sw
+
+
+def _reduce(a: SharedWorkspace) -> tuple[Callable, tuple]:
+    return _rebuild, (mp_reduction.DupFd(a.fd), a.size)
+
+
+def _rebuild(dupfd, size: int) -> SharedWorkspace:
+    return SharedWorkspace(dupfd.detach(), size)
+
+
+mp_reduction.register(SharedWorkspace, _reduce)

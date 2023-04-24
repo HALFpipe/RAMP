@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 import gzip
 from contextlib import chdir
+from pathlib import Path
 from subprocess import check_call
 
 import numpy as np
+import pytest
 import scipy
 
 from gwas.eig import Eigendecomposition
@@ -18,59 +20,60 @@ chromosomes = sorted(chromosomes_set() - {1, "X"}, key=chromosome_to_int)
 minor_allele_frequency_cutoff: float = 0.05
 
 
-def test_eig(vcf_files: list[VCFFile], tri_paths_by_chromosome):
-    sw = SharedWorkspace.create()
-    tri_arrays = [
-        Triangular.from_file(tri_paths_by_chromosome[c], sw) for c in chromosomes
-    ]
-    eig_array = Eigendecomposition.from_tri(*tri_arrays)
+@pytest.mark.slow
+def test_eig(
+    vcf_files: list[VCFFile],
+    tri_paths_by_chromosome: dict[str | int, Path],
+    sw: SharedWorkspace,
+):
+    tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes]
+    eig_array = Eigendecomposition.from_files(*tri_paths, sw=sw)
 
     (sample_count,) = set(v.sample_count for v in vcf_files)
 
     array = sw.alloc("array", sample_count, 1)
     a = array.to_numpy(include_trailing_free_memory=True)
 
-    n = 0
+    variant_count = 0
     for vcf_file in vcf_files:
+        if vcf_file.chromosome not in chromosomes:
+            continue
+        vcf_file.update_samples(eig_array.samples)
         with vcf_file:
             variants = vcf_file.read(
-                a[:, n:].transpose(),
+                a[:, variant_count:].transpose(),
                 predicate=MinorAlleleFrequencyCutoff(
                     minor_allele_frequency_cutoff,
                 ),
             )
-            n += len(variants)
+            variant_count += len(variants)
 
-    array.resize(sample_count, n)
+    array.resize(sample_count, variant_count)
     a = array.to_numpy()
     scale(a.transpose())
 
-    # check eigenvalues
-    c = np.cov(a, ddof=0)
-    numpy_eigenvalues, numpy_eigenvectors = np.linalg.eigh(c)
-    assert np.allclose(
-        numpy_eigenvalues[::-1],
-        eig_array.eigenvalues,
-        atol=1e-3,
-        rtol=1e-3,
+    # check that svd is equal
+    _, scipy_singular_values, scipy_eigenvectors = scipy.linalg.svd(
+        a.transpose(),
+        full_matrices=False,
     )
-    assert np.abs(numpy_eigenvalues[::-1] - eig_array.eigenvalues).mean() < 1e-4
+    scipy_eigenvalues = np.square(scipy_singular_values) / variant_count
+    assert np.allclose(scipy_eigenvalues, eig_array.eigenvalues)
+    assert np.abs(scipy_eigenvalues - eig_array.eigenvalues).mean() < 1e-14
 
     # check reconstructing covariance
+    c = np.cov(a, ddof=0)
     eig_c = (
         eig_array.eigenvectors * eig_array.eigenvalues
     ) @ eig_array.eigenvectors.transpose()
     assert np.allclose(c, eig_c, atol=1e-3)
+    assert np.abs(c - eig_c).mean() < 1e-4
 
     # check that eigenvectors are just permuted
-    permutation = np.rint(numpy_eigenvectors.transpose() @ eig_array.eigenvectors)
-    assert np.all(
-        np.isclose(permutation, 0)
-        | np.isclose(permutation, 1)
-        | np.isclose(permutation, -1)
-    )
-    assert np.all(1 == np.count_nonzero(permutation, axis=0))
-    assert np.all(1 == np.count_nonzero(permutation, axis=1))
+    permutation = np.rint(scipy_eigenvectors @ eig_array.eigenvectors).astype(int)
+    assert ((permutation == 0) | (np.abs(permutation) == 1)).all()
+    assert (1 == np.count_nonzero(permutation, axis=0)).all()
+    assert (1 == np.count_nonzero(permutation, axis=1)).all()
 
     # check that qr is equal
     (numpy_tri,) = scipy.linalg.qr(a.transpose(), mode="r")
@@ -84,29 +87,20 @@ def test_eig(vcf_files: list[VCFFile], tri_paths_by_chromosome):
         tri.transpose() @ tri,
         numpy_tri.transpose() @ numpy_tri,
     )
+    assert np.allclose(tri.transpose() @ tri / variant_count, c, atol=1e-3)
 
-    # check that svd is equal
-    _, scipy_singular_values, _ = scipy.linalg.svd(
-        a.transpose(),
-        full_matrices=False,
-        lapack_driver="gesvd",
-    )
-    scipy_scaled_eigenvalues = np.square(scipy_singular_values / np.sqrt(a.shape[1]))
-    assert np.allclose(
-        numpy_eigenvalues[::-1],
-        scipy_scaled_eigenvalues,
-        rtol=1e-3,
-    )
-    assert np.allclose(scipy_scaled_eigenvalues, eig_array.eigenvalues)
-    assert np.abs(scipy_scaled_eigenvalues - eig_array.eigenvalues).mean() < 1e-14
-
-    sw.close()
-    sw.unlink()
+    array.free()
+    eig_array.free()
+    tri_array.free()
+    assert len(sw.allocations) == 1
 
 
-def test_eig_rmw(tmp_path, vcf_by_chromosome, tri_paths_by_chromosome):
-    sw = SharedWorkspace.create()
-
+def test_eig_rmw(
+    tmp_path: Path,
+    vcf_by_chromosome: dict[int | str, VCFFile],
+    tri_paths_by_chromosome: dict[str | int, Path],
+    sw: SharedWorkspace,
+):
     c: int | str = 22
     vcf_file = vcf_by_chromosome[c]
 
@@ -151,10 +145,12 @@ def test_eig_rmw(tmp_path, vcf_by_chromosome, tri_paths_by_chromosome):
     with gzip.open(tmp_path / "Empirical.Kinship.gz", "rt") as file_handle:
         lines = file_handle.readlines()
         header = lines.pop(0)
-        assert header.split() == vcf_file.samples
-        for i, line in enumerate(lines):
+        samples = header.split()
+        assert set(samples) == set(vcf_file.samples)
+        sample_indices = [vcf_file.samples.index(s) for s in samples]
+        for i, line in zip(sample_indices, lines):
             tokens = line.split()
-            for j, token in enumerate(tokens):
+            for j, token in zip(sample_indices, tokens):
                 kinship[i, j] = float(token)
                 kinship[j, i] = float(token)
 
@@ -163,5 +159,5 @@ def test_eig_rmw(tmp_path, vcf_by_chromosome, tri_paths_by_chromosome):
     ) @ eig_array.eigenvectors.transpose()
     assert np.allclose(eig_c, kinship)
 
-    sw.close()
-    sw.unlink()
+    eig_array.free()
+    assert len(sw.allocations) == 1

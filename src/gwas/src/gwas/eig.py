@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Self
 
 import numpy as np
 from numpy import typing as npt
@@ -16,15 +17,19 @@ from .utils import chromosomes_set
 
 @dataclass
 class Eigendecomposition(SharedArray):
-    chromosome: int | str
+    chromosome: int | str | None
+    samples: list[str]
     variant_count: int
 
     def to_file_name(self) -> str:
         return self.get_file_name(self.chromosome)
 
     @staticmethod
-    def get_file_name(chromosome: int | str) -> str:
-        return f"no-chr{chromosome}.eig.txt.gz"
+    def get_file_name(chromosome: int | str | None) -> str:
+        if chromosome is None:
+            return "eig.txt.gz"
+        else:
+            return f"no-chr{chromosome}.eig.txt.gz"
 
     @staticmethod
     def get_prefix(**kwargs) -> str:
@@ -49,10 +54,21 @@ class Eigendecomposition(SharedArray):
 
     @property
     def eigenvalues(self) -> npt.NDArray[np.float64]:
+        """Returns the eigenvalues in descending order.
+
+        Returns:
+            npt.NDArray[np.float64]: Eigenvalues.
+        """
         return np.square(self.sqrt_eigenvalues)
 
     @property
     def eigenvectors(self) -> npt.NDArray[np.float64]:
+        """Return the n-by-n matrix of eigenvectors, where each column is an
+        eigenvector.
+
+        Returns:
+            npt.NDArray[np.float64]: Eigenvectors.
+        """
         a = self.to_numpy()
         return a[:, :-1]
 
@@ -60,16 +76,18 @@ class Eigendecomposition(SharedArray):
     def from_arrays(
         cls,
         chromosome: int | str,
+        samples: list[str],
         variant_count: int,
         eigenvalues: npt.NDArray,
         eigenvectors: npt.NDArray,
         sw: SharedWorkspace,
-    ) -> Eigendecomposition:
+    ) -> Self:
         _, sample_count = eigenvectors.shape
         name = cls.get_name(sw, chromosome=chromosome)
         sw.alloc(name, sample_count, sample_count + 1)
         eig = cls(
             name=name,
+            samples=samples,
             sw=sw,
             chromosome=chromosome,
             variant_count=variant_count,
@@ -87,7 +105,7 @@ class Eigendecomposition(SharedArray):
         cls,
         *arrays: Triangular,
         chromosome: int | str | None = None,
-    ) -> Eigendecomposition:
+    ) -> Self:
         if len(arrays) == 0:
             raise ValueError
 
@@ -104,9 +122,13 @@ class Eigendecomposition(SharedArray):
                     # out the X chromosome is valid
                     chromosomes -= {"X"}
 
-            if len(chromosomes) != 1:
-                raise RuntimeError
-            (chromosome,) = chromosomes
+            if len(chromosomes) == 1:
+                (chromosome,) = chromosomes
+
+        samples = arrays[0].samples
+        for tri in arrays:
+            if tri.samples != samples:
+                raise ValueError(f"Samples do not match: {tri.samples} != {samples}")
 
         # concatenate triangular matrices
         sw = arrays[0].sw
@@ -123,6 +145,7 @@ class Eigendecomposition(SharedArray):
         sw.alloc(name, sample_count, sample_count + 1)
         eig = cls(
             name=name,
+            samples=samples,
             sw=sw,
             chromosome=chromosome,
             variant_count=variant_count,
@@ -146,3 +169,20 @@ class Eigendecomposition(SharedArray):
         eig.transpose(shape=(sample_count, sample_count))
 
         return eig
+
+    @classmethod
+    def from_files(
+        cls,
+        *tri_paths: Path,
+        sw: SharedWorkspace,
+        samples: list[str] | None = None,
+        chromosome: int | str | None = None,
+    ) -> Self:
+        tris: list[Triangular] = list()
+        for tri_path in tri_paths:
+            tri = Triangular.from_file(tri_path, sw)
+            if samples is not None:
+                tri.subset_samples(samples)
+                tri.transpose()
+            tris.append(tri)
+        return cls.from_tri(*tris, chromosome=chromosome)

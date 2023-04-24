@@ -21,6 +21,18 @@ setup(
                     "mkl_rt",
                 ],
             ),
+            Extension(
+                "gwas._os",
+                [
+                    "src/gwas/_os.pyx",
+                ],
+                define_macros=[
+                    ("NPY_NO_DEPRECATED_API", None),
+                    ("NDEBUG", None),
+                ],
+                include_dirs=[],
+                libraries=[],
+            ),
         ]
     ),
     zip_safe=False,

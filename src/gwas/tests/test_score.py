@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import gzip
 from dataclasses import dataclass
-from multiprocessing import Pool
 from pathlib import Path
 from random import sample, seed
 from subprocess import check_call
@@ -19,7 +18,7 @@ from gwas.pheno import VariableCollection
 from gwas.rmw import CombinedScorefile, Scorefile, ScorefileHeader
 from gwas.score import calc_score, calc_u_stat, calc_v_stat
 from gwas.tri import Triangular
-from gwas.utils import chromosome_to_int, chromosomes_set
+from gwas.utils import Pool, chromosome_to_int, chromosomes_set
 from gwas.var import NullModelCollection
 from gwas.vcf import VCFFile
 
@@ -37,7 +36,7 @@ simulation_count: int = 16
 covariate_count: int = 4
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def pfile_paths(
     directory_factory: DirectoryFactory, sample_size: int, vcf_paths: list[Path]
 ):
@@ -73,7 +72,7 @@ def pfile_paths(
     return pfiles
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def bfile_path(
     directory_factory: DirectoryFactory, sample_size: int, pfile_paths: list[Path]
 ):
@@ -108,7 +107,7 @@ def bfile_path(
     return bfile_path
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def variants(
     directory_factory: DirectoryFactory, sample_size: int, pfile_paths: list[Path]
 ):
@@ -149,7 +148,7 @@ class SimulationResult:
     par: npt.NDArray[np.str_]
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def simulation(
     directory_factory: DirectoryFactory,
     sample_size: int,
@@ -198,7 +197,7 @@ def simulation(
     return SimulationResult(phen, par)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def vc(
     simulation: SimulationResult,
     sw: SharedWorkspace,
@@ -228,7 +227,7 @@ def vc(
     return vc
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def eig(
     directory_factory: DirectoryFactory,
     sample_size: int,
@@ -250,7 +249,7 @@ def eig(
     return eig
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def rmw_scorefile_paths(
     directory_factory: DirectoryFactory,
     sample_size: int,
@@ -396,7 +395,7 @@ class RmwScore:
     array: npt.NDArray
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def rmw_score(
     rmw_scorefile_paths: list[Path],
 ) -> RmwScore:
@@ -413,7 +412,7 @@ def rmw_score(
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def rotated_genotypes(
     vcf_by_chromosome: dict[int | str, VCFFile],
     vc: VariableCollection,
@@ -472,7 +471,7 @@ def rotated_genotypes(
     return rotated_genotypes
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def expected_effect(
     rmw_score: npt.NDArray,
     simulation: SimulationResult,
@@ -488,7 +487,7 @@ def expected_effect(
     return expected_effect
 
 
-@pytest.fixture(scope="session", params=["ml", "pml", "reml", "fastlmm"])
+@pytest.fixture(scope="module", params=["ml", "pml", "reml", "fastlmm"])
 def nm(
     vc: VariableCollection,
     eig: Eigendecomposition,
