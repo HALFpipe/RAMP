@@ -1,22 +1,23 @@
 [project]
-name = "gwas"
+name = "stratify"
 dynamic = ["version"]
 
 requires-python = ">=3.11"
 
 dependencies = [
+  "gwas",
+  "matplotlib",
   "numpy",
-  "pytorch<2",
+  "pandas",
+  "seaborn",
   "scipy",
 ]
 
 [project.scripts]
-gwas = "gwas.cli:main"
+stratify = "stratify.cli:main"
 
 [build-system]
 requires = [
-  "cython>=3b1",
-  "numpy",
   "setuptools>=62",
   "setuptools_scm[toml]>=6.2",
   "wheel",
