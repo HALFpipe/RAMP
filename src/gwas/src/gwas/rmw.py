@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import annotations
-
 from copy import copy
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import IO, Any, ClassVar, Generator, Iterable, Sequence
+from typing import IO, Any, ClassVar, Generator, Iterable, Self, Sequence
 
 import numpy as np
 import scipy
@@ -45,7 +43,7 @@ class VariableSummary:
             ]
         )
 
-    def is_close(self, other: VariableSummary) -> bool:
+    def is_close(self, other: Self) -> bool:
         return np.allclose(self.values, other.values)
 
 
@@ -89,7 +87,7 @@ class AnnotatedVariant(Variant):
     call_rate: float
 
     @classmethod
-    def from_array(cls, array: npt.NDArray) -> Generator[AnnotatedVariant, None, None]:
+    def from_array(cls, array: npt.NDArray) -> Generator[Self, None, None]:
         for record in array:
             yield cls(
                 record["CHROM"],

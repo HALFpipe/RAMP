@@ -68,7 +68,7 @@ class CompressedTextWriter(AbstractContextManager):
             self.output_file_handle = self.file_path.open(mode="wb")
 
         compress_command: list[str] = {
-            ".zst": ["zstd", "-11"],
+            ".zst": ["zstd", "-B0", "-T0", "-11"],
             ".lrz": ["lrzip"],
             ".gz": ["bgzip"],
             ".xz": ["xz"],

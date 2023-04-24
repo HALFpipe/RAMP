@@ -47,3 +47,8 @@ def test_vcf_file(tmp_path, compression, vcf_paths_by_chromosome):
         vcf_file.read(array)
 
     assert np.abs(array).sum() > 0
+
+
+def test_record_count(benchmark, vcf_paths_by_chromosome):
+    vcf_path = vcf_paths_by_chromosome[chromosome]
+    benchmark(VCFFile, vcf_path)

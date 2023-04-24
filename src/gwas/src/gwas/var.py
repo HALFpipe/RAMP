@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import ClassVar, Self
 
 import numpy as np
 from numpy import typing as npt
@@ -23,7 +23,7 @@ class NullModelResult:
     variance: float | npt.NDArray[np.float64]
 
     @classmethod
-    def null(cls):
+    def null(cls) -> Self:
         return cls(np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan)
 
 
@@ -46,7 +46,7 @@ class NullModelCollection:
     def phenotype_count(self) -> int:
         return self.regression_weights.shape[0]
 
-    def put(self, phenotype_index: int, r: NullModelResult):
+    def put(self, phenotype_index: int, r: NullModelResult) -> None:
         self.heritability[phenotype_index] = r.heritability
         self.genetic_variance[phenotype_index] = r.genetic_variance
         self.error_variance[phenotype_index] = r.error_variance
@@ -62,7 +62,7 @@ class NullModelCollection:
         residuals[:, phenotype_index] = np.ravel(r.scaled_residuals)
         variance[:, phenotype_index] = np.ravel(r.variance)
 
-    def free(self):
+    def free(self) -> None:
         self.regression_weights.free()
         self.standard_errors.free()
         self.scaled_residuals.free()
@@ -75,13 +75,16 @@ class NullModelCollection:
         vc: VariableCollection,
         method: str | None = "ml",
         **kwargs,
-    ):
+    ) -> Self:
         from .ml import (
             FaST_LMM,
             MaximumLikelihood,
             ProfileMaximumLikelihood,
             RestrictedMaximumLikelihood,
         )
+
+        if eig.samples != vc.samples:
+            raise ValueError("Arguments `eig` and `vc` must have the same samples.")
 
         sw = eig.sw
         name = SharedArray.get_name(sw, "regression-weights")
