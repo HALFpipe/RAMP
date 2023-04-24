@@ -114,6 +114,7 @@ RUN mamba install --yes --use-local \
         "lrzip" \
         "matplotlib" \
         "networkx" \
+        "p7zip>=15.09" \
         "pandas" \
         "parallel" \
         "plink" \
@@ -137,3 +138,6 @@ RUN mamba install --yes --use-local \
 # =====
 FROM base
 COPY --from=install /usr/local/mambaforge /usr/local/mambaforge
+
+# To create a local environment run:
+# mamba create --name "gwas" "python>=3.11" "mamba" "jupyterlab" "ipywidgets" "numpy" "scipy" "bcftools" "bzip2" "matplotlib" "networkx" "p7zip>=15.09" "pandas" "plink" "plink2" "pytorch<2" "tabix"
