@@ -8,14 +8,14 @@ ENV LC_ALL="C.UTF-8" \
 
 RUN apt-get update && \
     apt-get install --yes --no-install-recommends \
-        "ca-certificates" \
-        "curl" \
-        "gdb" \
-        "libc6-dbg" \
-        "libencode-perl" \
-        "libfindbin-libs-perl" \
-        "less" \
-        "valgrind" && \
+    "ca-certificates" \
+    "curl" \
+    "gdb" \
+    "libc6-dbg" \
+    "libencode-perl" \
+    "libfindbin-libs-perl" \
+    "less" \
+    "valgrind" && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Install conda
@@ -23,8 +23,8 @@ RUN apt-get update && \
 FROM base as conda
 
 RUN curl --silent --show-error --location \
-        "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh" \
-        --output "conda.sh" &&  \
+    "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh" \
+    --output "conda.sh" &&  \
     bash conda.sh -b -p /usr/local/mambaforge && \
     rm conda.sh && \
     conda config --system --append channels "bioconda" && \
@@ -38,9 +38,9 @@ FROM conda as builder
 
 RUN apt-get update && \
     apt-get install --yes --no-install-recommends \
-        "git" \
-        "subversion" \
-        "build-essential"  # need system `ar` for raremetal
+    "git" \
+    "subversion" \
+    "build-essential"  # need system `ar` for raremetal
 RUN mamba install --yes "boa" "conda-verify"
 
 FROM builder as bolt-lmm
@@ -87,6 +87,11 @@ COPY recipes/r-saige r-saige
 RUN conda mambabuild --no-anaconda-upload "r-saige" && \
     conda build purge
 
+FROM builder as python-blosc2
+COPY recipes/python-blosc2 python-blosc2
+RUN conda mambabuild --no-anaconda-upload "python-blosc2" && \
+    conda build purge
+
 FROM builder as merge
 COPY --from=bolt-lmm /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
 COPY --from=dosage-convertor /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
@@ -96,6 +101,7 @@ COPY --from=qctool /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-b
 COPY --from=raremetal /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
 COPY --from=r-gmmat /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
 COPY --from=r-saige /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
+COPY --from=python-blosc2 /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
 RUN conda index /usr/local/mambaforge/conda-bld
 
 # Install packages
@@ -104,29 +110,29 @@ FROM conda as install
 
 COPY --from=merge /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
 RUN mamba install --yes --use-local \
-        "bcftools" \
-        "bolt-lmm" \
-        "bzip2" \
-        "dosage-convertor" \
-        "gcta" \
-        "gemma" \
-        "gwas" \
-        "lrzip" \
-        "matplotlib" \
-        "networkx" \
-        "p7zip>=15.09" \
-        "pandas" \
-        "parallel" \
-        "plink" \
-        "plink2" \
-        "python>=3.11" \
-        "pytorch<2" \
-        "qctool" \
-        "raremetal" \
-        "r-gmmat" \
-        "r-saige" \
-        "r-skat" \
-        "tabix" && \
+    "python>=3.11" \
+    "bolt-lmm" \
+    "dosage-convertor" \
+    "gcta" \
+    "gwas" \
+    "python-blosc2" \
+    "qctool" \
+    "raremetal" \
+    "r-gmmat" \
+    "r-saige" \
+    "bcftools>=1.17" \
+    "bzip2" \
+    "gemma" \
+    "lrzip" \
+    "matplotlib" \
+    "networkx" \
+    "p7zip>=15.09" \
+    "pandas" \
+    "parallel" \
+    "plink" \
+    "plink2" \
+    "r-skat" \
+    "tabix" && \
     sync && \
     rm -rf /usr/local/mambaforge/conda-bld && \
     mamba clean --yes --all --force-pkgs-dirs && \
@@ -140,4 +146,4 @@ FROM base
 COPY --from=install /usr/local/mambaforge /usr/local/mambaforge
 
 # To create a local environment run:
-# mamba create --name "gwas" "python>=3.11" "mamba" "jupyterlab" "ipywidgets" "numpy" "scipy" "bcftools" "bzip2" "matplotlib" "networkx" "p7zip>=15.09" "pandas" "plink" "plink2" "pytorch<2" "tabix"
+# mamba create --name "gwas" "python>=3.11" "mamba" "jupyterlab" "ipywidgets" "numpy" "scipy" "bcftools>=1.15" "bzip2" "matplotlib" "networkx" "p7zip>=15.09" "pandas" "plink" "plink2" "pytorch<2" "tabix" "pybind11" "cython>=3b1" "mkl-include" "mypy" "pytest-benchmark" "lz4"
