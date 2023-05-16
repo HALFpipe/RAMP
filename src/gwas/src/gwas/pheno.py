@@ -101,6 +101,21 @@ class VariableCollection:
             new_phenotypes, sw, prefix="phenotypes"
         )
         new_covariates = self.covariates.to_numpy()[sample_indices, :]
+        zero_variance = np.isclose(np.var(new_covariates, axis=0), 0)
+        if np.any(zero_variance):
+            removed_covariates = [
+                name for name, zero in zip(self.covariate_names, zero_variance) if zero
+            ]
+            logger.warning(
+                f"Removing covariates with zero variance {removed_covariates} "
+                "while subsetting samples"
+            )
+            self.covariate_names = [
+                name
+                for name, zero in zip(self.covariate_names, zero_variance)
+                if not zero
+            ]
+            new_covariates = new_covariates[:, ~zero_variance]
         self.covariates.free()
         self.covariates = SharedArray.from_numpy(
             new_covariates, sw, prefix="covariates"
