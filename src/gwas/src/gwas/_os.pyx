@@ -1,8 +1,15 @@
 # cython: language_level=3
 
-cdef extern from "<sys/mman.h>" nogil:
-    int memfd_create(const char *name, unsigned int flags)
 
+cdef extern from "<unistd.h>" nogil:
+    long syscall(long number, ...)
+
+
+cdef extern from "<sys/syscall.h>" nogil:
+    enum: SYS_memfd_create
+
+
+cdef extern from "<linux/memfd.h>" nogil:
     enum: MFD_CLOEXEC
 
 
@@ -17,6 +24,5 @@ def c_memfd_create(str name, unsigned int flags=MFD_CLOEXEC):
     name_bytes = name.encode("utf-8")
     cdef char *c_name = name_bytes
 
-    cdef int fd = memfd_create(c_name, flags)
-
+    cdef int fd = syscall(SYS_memfd_create, c_name, flags)
     return fd
