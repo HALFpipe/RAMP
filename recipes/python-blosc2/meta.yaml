@@ -14,27 +14,26 @@ requirements:
     - {{ compiler("cxx") }}
     - cmake
     - make
+    - pkg-config
   host:
     - c-blosc2
     - "cython<1"
-    - numpy>=1.20.3
+    - "numpy>=1.20.3"
     - pip
-    - pkg-config
-    - python
+    - "python>=3.11"
     - scikit-build
     - setuptools
     - wheel
   run:
-    - python
+    - "python>=3.11"
     - msgpack-python
-    - ndindex>=1.4
-    - numpy>=1.20.3
+    - "ndindex>=1.4"
+    - "numpy>=1.20.3"
     - py-cpuinfo
     - rich
 
 test:
   requires:
-    - numpy
     - psutil
     - pytest
     - pytorch
@@ -51,8 +50,7 @@ about:
   home: https://github.com/Blosc/python-blosc2
   license_family: BSD
   license: BSD-3-Clause
-  license_file:
-    - LICENSE.txt
+  license_file: LICENSE.txt
   dev_url: https://github.com/Blosc/python-blosc2
   doc_url: https://www.blosc.org/python-blosc2/python-blosc2.html
   summary: A Python wrapper for the extremely fast Blosc2 compression library
