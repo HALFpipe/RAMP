@@ -1,19 +1,20 @@
 diff --git a/setup.py b/setup.py
-index 0ca60d2..ed30993 100644
+index ef7b1fb..8e462c2 100644
 --- a/setup.py
 +++ b/setup.py
-@@ -6,6 +6,7 @@
+@@ -6,6 +6,8 @@
  # LICENSE.txt file in the root directory of this source tree)
  #######################################################################
 
 +import os
- from pathlib import Path
- from textwrap import dedent
++
+ from skbuild import setup
 
-@@ -62,5 +63,7 @@ setup(
-     platforms=["any"],
-     packages=["blosc2"],
+
+@@ -30,5 +32,7 @@ setup(
      package_dir={"blosc2": "blosc2"},
+     include_package_data=True,
+     cmake_process_manifest_hook=exclude_pkgconfig,
 +    cmake_args=["-DCMAKE_VERBOSE_MAKEFILE:BOOL=ON"]
 +    + (["-DUSE_SYSTEM_BLOSC2:BOOL=ON"] if int(os.environ.get("USE_SYSTEM_BLOSC2", "0")) else []),
      install_requires=open("requirements-runtime.txt").read().split(),
