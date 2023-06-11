@@ -38,7 +38,7 @@ RUN curl --silent --show-error --location \
 FROM conda as builder
 
 RUN mamba install --yes "boa" "conda-verify"
-COPY recipes/conda-build-config.yaml /root/conda-build-config.yaml
+COPY recipes/conda_build_config.yaml /root/conda_build_config.yaml
 
 FROM builder as bolt-lmm
 COPY recipes/bolt-lmm bolt-lmm
