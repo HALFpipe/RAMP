@@ -1,0 +1,34 @@
+package:
+  name: gwas
+  version: 0.1.0
+
+source:
+  git_url: ../..
+
+requirements:
+  build:
+    - {{ compiler("c") }}
+    - {{ compiler("cxx") }}
+    - "sysroot_linux-64>=2.17"
+  host:
+    - "cython>=3b1"
+    - mkl
+    - mkl-include
+    - "numpy>=1.22"
+    - "python>=3.11"
+    - pip
+    - "setuptools>=62"
+    - "setuptools_scm>=6.2"
+    - wheel
+  run:
+    - mkl
+    - networkx
+    - "numpy>=1.22"
+    - "python>=3.11"
+    - "pytorch<2"
+    - scipy
+    - tqdm
+
+test:
+  commands:
+    - test $(gwas 2>&1 | wc -w) -gt 0

@@ -1,4 +1,4 @@
-FROM ubuntu as base
+FROM ubuntu:rolling as base
 
 ENV LC_ALL="C.UTF-8" \
     LANG="C.UTF-8" \
@@ -11,6 +11,7 @@ RUN apt-get update && \
     "ca-certificates" \
     "curl" \
     "gdb" \
+    "git" "git-lfs" \
     "libc6-dbg" \
     "libencode-perl" \
     "libfindbin-libs-perl" \
@@ -36,12 +37,8 @@ RUN curl --silent --show-error --location \
 # ==============
 FROM conda as builder
 
-RUN apt-get update && \
-    apt-get install --yes --no-install-recommends \
-    "git" \
-    "subversion" \
-    "build-essential"  # need system `ar` for raremetal
 RUN mamba install --yes "boa" "conda-verify"
+COPY recipes/conda-build-config.yaml /root/conda-build-config.yaml
 
 FROM builder as bolt-lmm
 COPY recipes/bolt-lmm bolt-lmm
@@ -115,7 +112,6 @@ RUN mamba install --yes --use-local \
     "dosage-convertor" \
     "gcta" \
     "gwas" \
-    "python-blosc2" \
     "qctool" \
     "raremetal" \
     "r-gmmat" \
@@ -125,14 +121,15 @@ RUN mamba install --yes --use-local \
     "gemma" \
     "lrzip" \
     "matplotlib" \
-    "networkx" \
     "p7zip>=15.09" \
     "pandas" \
     "parallel" \
     "plink" \
     "plink2" \
+    "python-blosc2" \
     "r-skat" \
-    "tabix" && \
+    "tabix" \
+    "threadpoolctl" && \
     sync && \
     rm -rf /usr/local/mambaforge/conda-bld && \
     mamba clean --yes --all --force-pkgs-dirs && \
@@ -146,4 +143,10 @@ FROM base
 COPY --from=install /usr/local/mambaforge /usr/local/mambaforge
 
 # To create a local environment run:
-# mamba create --name "gwas" "python>=3.11" "mamba" "jupyterlab" "ipywidgets" "numpy" "scipy" "bcftools>=1.15" "bzip2" "matplotlib" "networkx" "p7zip>=15.09" "pandas" "plink" "plink2" "pytorch<2" "tabix" "pybind11" "cython>=3b1" "mkl-include" "mypy" "pytest-benchmark" "lz4"
+# mamba create --name "gwas" \
+#   "python>=3.11" "mamba" \
+#   "jupyterlab" "ipywidgets" \
+#   "numpy" "scipy" "matplotlib" "networkx" "pandas" "pytorch<2" \
+#   "bzip2" "p7zip>=15.09" \
+#   "bcftools>=1.17" "plink" "plink2" "tabix" \
+#   "cython>=3b1" "mkl-include" "mypy" "pytest-benchmark" "threadpoolctl"
