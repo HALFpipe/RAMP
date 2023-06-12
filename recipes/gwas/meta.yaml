@@ -30,8 +30,10 @@ requirements:
     - seaborn
     - "pytorch<2"
     - networkx
+    - psutil
     - threadpoolctl
     - tqdm
+    - pyyaml
 
 test:
   commands:

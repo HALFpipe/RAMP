@@ -1,0 +1,12 @@
+diff --git a/metro/include/metro/ShotgunStochasticSearch.hpp b/metro/include/metro/ShotgunStochasticSearch.hpp
+index 9a9f52f48..b671fcca0 100644
+--- a/metro/include/metro/ShotgunStochasticSearch.hpp
++++ b/metro/include/metro/ShotgunStochasticSearch.hpp
+@@ -7,6 +7,7 @@
+ #ifndef METRO_SHOTGUNSTOCHASTICSEARCH_HPP
+ #define METRO_SHOTGUNSTOCHASTICSEARCH_HPP
+ 
++#include <cstdint>
+ #include <vector>
+ #include <unordered_map>
+ #include <boost/function.hpp>
