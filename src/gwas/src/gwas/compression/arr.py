@@ -9,10 +9,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Generic, Mapping, Sequence, Type, TypeVar
 
 import blosc2
-import numcodecs
 import numpy as np
-import zarr
-from numcodecs.abc import Codec as ZarrCodec
 
 from ..log import logger
 
@@ -20,14 +17,6 @@ from ..log import logger
 @dataclass(frozen=True, kw_only=True)
 class CompressionMethod:
     suffix: ClassVar[str] = ""
-
-
-@dataclass(frozen=True, kw_only=True)
-class ZarrCompressionMethod(CompressionMethod):
-    codec: ZarrCodec
-    filters: tuple[ZarrCodec, ...] = field(default_factory=tuple)
-
-    suffix: ClassVar[str] = ".zarr"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -69,23 +58,6 @@ compression_methods: Mapping[str, CompressionMethod] = dict(
             blosc2.Filter.BYTEDELTA,
         ),
     ),
-    zarr_zstd=ZarrCompressionMethod(
-        codec=numcodecs.Zstd(level=11),
-    ),
-    zarr_zstd_shuffle=ZarrCompressionMethod(
-        codec=numcodecs.Blosc(
-            cname="zstd",
-            clevel=9,
-            shuffle=numcodecs.Blosc.SHUFFLE,
-        ),
-    ),
-    zarr_zstd_bitshuffle=ZarrCompressionMethod(
-        codec=numcodecs.Blosc(
-            cname="zstd",
-            clevel=9,
-            shuffle=numcodecs.Blosc.BITSHUFFLE,
-        ),
-    ),
 )
 
 
@@ -105,35 +77,12 @@ class ArrayProxy(Generic[T]):
     chunk_shape: tuple[int, ...] | None = None
 
     def __setitem__(self, key: tuple[slice, ...], value: np.ndarray) -> None:
-        if isinstance(self.compression_method, ZarrCompressionMethod):
-            array = self.get_zarr()
-        elif isinstance(self.compression_method, Blosc2CompressionMethod):
+        if isinstance(self.compression_method, Blosc2CompressionMethod):
             array = self.get_blosc2_ndarray()
         else:
             raise ValueError
 
         array[key] = value
-
-    def get_zarr(self) -> zarr.Array:
-        if not isinstance(self.compression_method, ZarrCompressionMethod):
-            raise RuntimeError
-
-        chunks = self.chunk_shape if self.chunk_shape is not None else True
-
-        array = zarr.open_array(
-            store=str(self.file_path),
-            mode="a",
-            shape=self.shape,
-            dtype=self.dtype,
-            chunks=chunks,  # type: ignore
-            compressor=self.compression_method.codec,  # type: ignore
-            filters=list(self.compression_method.filters),
-        )
-
-        if array.shape != self.shape:
-            raise RuntimeError(f"Array shape {array.shape} does not match {self.shape}")
-
-        return array
 
     def reduce_shape(
         self,
