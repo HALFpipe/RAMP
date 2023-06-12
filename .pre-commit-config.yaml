@@ -13,7 +13,11 @@ repos:
       - id: fix-encoding-pragma
       - id: fix-byte-order-marker
       - id: trailing-whitespace
+        exclude_types:
+          - diff
       - id: end-of-file-fixer
+        exclude_types:
+          - diff
   - repo: https://github.com/psf/black
     rev: 23.3.0
     hooks:
@@ -22,17 +26,17 @@ repos:
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     rev: v0.0.272
     hooks:
-    - id: ruff
+      - id: ruff
   - repo: https://github.com/codespell-project/codespell
     rev: v2.2.4
     hooks:
-    - id: codespell
-      types_or: [python, rst, markdown]
+      - id: codespell
+        types_or: [python, rst, markdown]
   - repo: https://github.com/MarcoGorelli/cython-lint
     rev: v0.15.0
     hooks:
-    - id: cython-lint
-    - id: double-quote-cython-strings
+      - id: cython-lint
+      - id: double-quote-cython-strings
   - repo: https://github.com/pycqa/isort
     rev: 5.12.0
     hooks:
@@ -45,5 +49,5 @@ repos:
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.3.0
     hooks:
-    - id: mypy
-      additional_dependencies: [numpy, types-PyYAML]
+      - id: mypy
+        additional_dependencies: [numpy, types-PyYAML]
