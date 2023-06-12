@@ -7,12 +7,12 @@ from typing import Self
 import numpy as np
 from numpy import typing as npt
 
-from gwas.mem.wkspace import SharedWorkspace
-
 from ._matrix_functions import dgesvdq
 from .mem.arr import SharedArray
+from .mem.wkspace import SharedWorkspace
 from .tri import Triangular
 from .utils import chromosomes_set
+from .vcf.base import VCFFile
 
 
 @dataclass
@@ -186,3 +186,60 @@ class Eigendecomposition(SharedArray):
                 tri.transpose()
             tris.append(tri)
         return cls.from_tri(*tris, chromosome=chromosome)
+
+
+@dataclass
+class EigendecompositionCollection:
+    chromosome: int | str | None
+    samples: list[str]
+    eigenvector_arrays: list[SharedArray]
+
+    @property
+    def sample_count(self) -> int:
+        return len(self.samples)
+
+    @property
+    def job_count(self) -> int:
+        return len(self.eigenvector_arrays)
+
+    @classmethod
+    def from_eigendecompositions(
+        cls,
+        vcf_file: VCFFile,
+        eigs: list[Eigendecomposition],
+    ) -> Self:
+        sw: SharedWorkspace = eigs[0].sw
+
+        chromosomes = {eig.chromosome for eig in eigs}
+        if len(chromosomes) != 1:
+            raise ValueError("Eigendecompositions must be from the same chromosome")
+        (chromosome,) = chromosomes
+
+        base_samples = [
+            sample
+            for sample in vcf_file.vcf_samples
+            if any(sample in eig.samples for eig in eigs)
+        ]
+        base_sample_count = len(base_samples)
+
+        eigenvector_arrays = list()
+        for eig in eigs:
+            sample_count = len(eig.samples)
+
+            sample_indices = [base_samples.index(sample) for sample in eig.samples]
+
+            name = f"expanded-{eig.name}"
+            array = sw.alloc(name, base_sample_count, sample_count)
+
+            matrix = array.to_numpy()
+            matrix[:] = 0
+            matrix[sample_indices, :] = eig.eigenvectors
+            eig.free()
+
+            eigenvector_arrays.append(array)
+
+        return cls(
+            chromosome,
+            base_samples,
+            eigenvector_arrays,
+        )

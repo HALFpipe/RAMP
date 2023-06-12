@@ -5,6 +5,7 @@ from subprocess import check_call
 
 from gwas.utils import unwrap_which
 
+bcftools = unwrap_which("bcftools")
 gcta64 = unwrap_which("gcta64")
 plink2 = unwrap_which("plink2")
 rmw = unwrap_which("raremetalworker")

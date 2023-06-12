@@ -4,11 +4,7 @@ dynamic = ["version"]
 
 requires-python = ">=3.11"
 
-dependencies = [
-  "numpy",
-  "pytorch<2",
-  "scipy",
-]
+dependencies = ["numpy", "pandas", "torch<2", "scipy", "threadpoolctl"]
 
 [project.scripts]
 gwas = "gwas.cli:main"
@@ -27,6 +23,7 @@ build-backend = "setuptools.build_meta"
 test = ["pytest", "pytest-benchmark"]
 
 [tool.isort]
+line_length = 88
 profile = "black"
 
 [tool.pylint.format]

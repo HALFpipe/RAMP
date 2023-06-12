@@ -1,50 +1,21 @@
 # -*- coding: utf-8 -*-
 
-from copy import copy
+from collections import OrderedDict
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import IO, Any, ClassVar, Generator, Iterable, Self, Sequence
+from typing import IO, Any, ClassVar, Iterable
 
 import numpy as np
+import pandas as pd
 import scipy
 from numpy import typing as npt
 from tqdm.auto import tqdm
 
-from gwas import __version__
-from gwas.pheno import VariableCollection
-from gwas.utils import to_str, underscore
-from gwas.var import NullModelCollection
-from gwas.vcf import Variant
-from gwas.z import CompressedTextReader, CompressedTextWriter
-
-
-@dataclass
-class VariableSummary:
-    name: str
-    minimum: float
-    lower_quartile: float
-    median: float
-    upper_quartile: float
-    maximum: float
-    mean: float
-    variance: float
-
-    @property
-    def values(self) -> npt.NDArray[np.float64]:
-        return np.array(
-            [
-                self.minimum,
-                self.lower_quartile,
-                self.median,
-                self.upper_quartile,
-                self.maximum,
-                self.mean,
-                self.variance,
-            ]
-        )
-
-    def is_close(self, other: Self) -> bool:
-        return np.allclose(self.values, other.values)
+from . import __version__
+from .compression.pipe import CompressedTextReader, CompressedTextWriter
+from .null_model.base import NullModelCollection
+from .pheno import VariableCollection, VariableSummary
+from .utils import to_str, underscore
 
 
 @dataclass
@@ -66,9 +37,9 @@ class ScorefileHeader:
     make_residuals: bool
     analyzed_founders: int
     covariates: list[str]
-    covariate_summaries: list[VariableSummary]
+    covariate_summaries: OrderedDict[str, VariableSummary]
     inverse_normal: bool
-    trait_summaries: list[VariableSummary]
+    trait_summaries: OrderedDict[str, VariableSummary]
     null_model_estimates: list[NullModelEstimate]
     analyzed_trait: VariableSummary | None
     genetic_variance: npt.NDArray[np.float64]
@@ -78,26 +49,6 @@ class ScorefileHeader:
     @property
     def phenotype_count(self) -> int:
         return len(self.trait_summaries)
-
-
-@dataclass
-class AnnotatedVariant(Variant):
-    alternate_allele_count: float
-    alternate_allele_frequency: float
-    call_rate: float
-
-    @classmethod
-    def from_array(cls, array: npt.NDArray) -> Generator[Self, None, None]:
-        for record in array:
-            yield cls(
-                record["CHROM"],
-                record["POS"],
-                record["REF"],
-                record["ALT"],
-                record["ALT_AC"],
-                record["ALT_AF"],
-                record["CALL_RATE"],
-            )
 
 
 def write_delim(file_handle: IO[str], *values: str):
@@ -159,7 +110,7 @@ class Scorefile:
             analyzed_trait=None,
             trait_summaries=list(),
         )
-        summaries = list()
+        summaries: OrderedDict[str, VariableSummary] = OrderedDict()
         with CompressedTextReader(file_path) as file:
             for line in file:
                 if line.startswith("##"):
@@ -212,11 +163,11 @@ class Scorefile:
                             header_dict["heritability"] = array
                             continue
 
-                        summary = VariableSummary(name, *array)
+                        summary = VariableSummary(*array)
                         if name == "AnalyzedTrait":
                             header_dict["analyzed_trait"] = summary
                         else:
-                            summaries.append(summary)
+                            summaries[name] = summary
 
                     continue
                 if line.startswith("#"):
@@ -277,7 +228,7 @@ class Scorefile:
         cls,
         file_path: Path | str,
         header: ScorefileHeader,
-        variants: list[AnnotatedVariant],
+        variants: pd.DataFrame,
         u_stat: npt.NDArray[np.float64],
         v_stat: npt.NDArray[np.float64],
     ):
@@ -303,39 +254,37 @@ class Scorefile:
     def make_header(
         vc: VariableCollection,
         nm: NullModelCollection,
+        phenotype_name: str | None = None,
     ) -> ScorefileHeader:
         covariates = vc.covariates.to_numpy()
         phenotypes = vc.phenotypes.to_numpy()
 
+        phenotype_index: int | None = None
+        if phenotype_name is not None:
+            phenotype_index = vc.phenotype_names.index(phenotype_name)
+
         def make_summaries(names: list[str], values: npt.NDArray[np.float64]):
-            summaries = list()
+            summaries: OrderedDict[str, VariableSummary] = OrderedDict()
             for i, name in enumerate(names):
+                if phenotype_name is not None and name != phenotype_name:
+                    continue
+
                 value = values[:, i]
-                (minimum, lower_quartile, media, upper_quartile, maximum) = np.quantile(
-                    value, [0.00, 0.25, 0.50, 0.75, 1.00]
-                )
-                summaries.append(
-                    VariableSummary(
-                        name,
-                        minimum,
-                        lower_quartile,
-                        media,
-                        upper_quartile,
-                        maximum,
-                        value.mean(),
-                        value.var(ddof=1),
-                    )
-                )
+                summaries[name] = VariableSummary.from_array(value)
             return summaries
 
         trait_summaries = make_summaries(vc.phenotype_names, phenotypes)
         analyzed_trait = None
         if len(trait_summaries) == 1:
-            (analyzed_trait,) = trait_summaries
+            (analyzed_trait,) = trait_summaries.values()
         covariate_summaries = make_summaries(vc.covariate_names[1:], covariates[:, 1:])
 
         weights = nm.regression_weights.to_numpy()
         errors = nm.standard_errors.to_numpy()
+
+        if phenotype_index is not None:
+            weights = weights[phenotype_index, :]
+            errors = errors[phenotype_index, :]
 
         null_model_estimates = [
             NullModelEstimate(
@@ -388,22 +337,20 @@ class Scorefile:
 
         summary_columns = ["min", "25th", "median", "75th", "max", "mean", "variance"]
 
-        def write_summary(summary: VariableSummary, title: str | None = None):
-            if title is None:
-                title = summary.name
+        def write_summary(name: str, summary: VariableSummary):
             write_delim(
                 file_handle,
-                title,
+                name,
                 *map(to_str, summary.values),
             )
 
         def write_summaries(
             title: str,
-            summaries: list[VariableSummary],
+            summaries: OrderedDict[str, VariableSummary],
         ):
             write_delim(file_handle, title, *summary_columns)
-            for summary in summaries:
-                write_summary(summary)
+            for name, summary in summaries.items():
+                write_summary(name, summary)
 
         write_summaries("CovariateSummaries", header.covariate_summaries)
 
@@ -415,12 +362,10 @@ class Scorefile:
 
         write_summaries("TraitSummaries", header.trait_summaries)
 
-        cls.write_null_model(
-            file_handle, header.null_model_estimates, header.trait_summaries
-        )
+        cls.write_null_model(file_handle, header.null_model_estimates)
 
         if header.analyzed_trait is not None:
-            write_summary(header.analyzed_trait, title="AnalyzedTrait")
+            write_summary("AnalyzedTrait", header.analyzed_trait)
 
         write_delim(file_handle, "Sigma_g2_Hat", *map(to_str, header.genetic_variance))
         write_delim(file_handle, "Sigma_e2_Hat", *map(to_str, header.error_variance))
@@ -438,7 +383,6 @@ class Scorefile:
     def write_null_model(
         file_handle: IO[str],
         null_model_estimates: list[NullModelEstimate],
-        _: list[VariableSummary],
     ):
         file_handle.write("## - NullModelEstimates\n")
         file_handle.write("## - Name\tBetaHat\tSE(BetaHat)\n")
@@ -450,7 +394,7 @@ class Scorefile:
 
     @staticmethod
     def make_metadata(
-        variant: AnnotatedVariant,
+        variant: pd.Series,
         **kwargs,
     ) -> Iterable[str]:
         # RareMetalWorker only calculates these for genotype data, not dosage data,
@@ -470,8 +414,8 @@ class Scorefile:
             n_informative,
             variant.alternate_allele_frequency,
             variant.alternate_allele_frequency,
-            variant.alternate_allele_count,
-            variant.call_rate,
+            np.nan,
+            1,
             hwe_pvalue,
             n_ref,
             n_het,
@@ -502,7 +446,7 @@ class Scorefile:
     def write_scores(
         cls,
         file_handle: IO[str],
-        variants: list[AnnotatedVariant],
+        variants: pd.DataFrame,
         u_stat: npt.NDArray[np.float64],
         v_stat: npt.NDArray[np.float64],
         **kwargs,
@@ -514,7 +458,7 @@ class Scorefile:
             raise ValueError("Variant count does not match U and V shape.")
 
         phenotype_count = u_stat.shape[1]
-        for i, variant in enumerate(variants):
+        for i, variant in enumerate(variants.itertuples()):
             file_handle.write("\t".join(cls.make_metadata(variant, **kwargs)))
 
             for j in range(phenotype_count):
@@ -522,156 +466,3 @@ class Scorefile:
                 cls.write_score(file_handle, u_stat[i, j], v_stat[i, j])
 
             file_handle.write("\n")
-
-
-class CombinedScorefile(Scorefile):
-    reduced_names: ClassVar[tuple[str, ...]] = (
-        "CHROM",
-        "POS",
-        "REF",
-        "ALT",
-        "ALT_AF",
-        "ALT_AC",
-    )
-    reduced_types: ClassVar = (
-        object,
-        int,
-        object,
-        object,
-        float,
-        float,
-    )
-    score_names: ClassVar[tuple[str, ...]] = (
-        "U_STAT",
-        "V_STAT",
-    )
-    score_types: ClassVar = (
-        float,
-        float,
-    )
-
-    @classmethod
-    def get_dtype(cls, header: ScorefileHeader):
-        phenotype_names = [p.name for p in header.trait_summaries]
-        dtype_list = list(zip(cls.reduced_names, cls.reduced_types))
-        for phenotype_name in phenotype_names:
-            for score_name, score_type in zip(cls.score_names, cls.score_types):
-                dtype_list.append((f"{score_name}[{phenotype_name}]", score_type))
-        return np.dtype(dtype_list)
-
-    @staticmethod
-    def make_metadata(
-        variant: AnnotatedVariant,
-        **kwargs,
-    ) -> Iterable[str]:
-        metadata = (
-            variant.chromosome,
-            variant.position,
-            variant.reference_allele,
-            variant.alternate_allele,
-            variant.alternate_allele_frequency,
-            variant.alternate_allele_count,
-        )
-        return map(to_str, metadata)
-
-    @staticmethod
-    def write_null_model(
-        file_handle: IO[str],
-        null_model_estimates: list[NullModelEstimate],
-        trait_summaries: list[VariableSummary],
-    ):
-        file_handle.write("## - NullModelEstimates\n")
-
-        header: list[str] = list()
-        for s in trait_summaries:
-            header.append(f"BetaHat[{s.name}]")
-            header.append(f"SE(BetaHat)[{s.name}]")
-        write_delim(file_handle, " - Name", *header)
-
-        for n in null_model_estimates:
-            values: list[str] = list()
-            for j in range(n.beta_hat.size):
-                values.append(to_str(n.beta_hat[j]))
-                values.append(to_str(n.se_beta_hat[j]))
-
-            write_delim(file_handle, f" - {n.name}", *values)
-
-    @classmethod
-    def write_names(cls, file_handle: IO[str], vc: VariableCollection):
-        names = [*cls.reduced_names]
-
-        for phenotype_name in vc.phenotype_names:
-            for score_name in cls.score_names:
-                names.append(f"{score_name}[{phenotype_name}]")
-
-        file_handle.write("#" + "\t".join(names) + "\n")
-
-    @classmethod
-    def write_score(
-        cls,
-        file_handle: IO[str],
-        u_stat: float,
-        v_stat: float,
-    ):
-        stats = (
-            u_stat,
-            v_stat,
-        )
-        file_handle.write("\t".join(map(to_str, stats)))
-
-    @classmethod
-    def to_scorefiles(
-        cls,
-        file_path: Path | str,
-        prefix: Path | str,
-    ) -> Generator[Path, None, None]:
-        file_path = Path(file_path)
-        header, array = cls.read(file_path)
-
-        tokens = file_path.name.split(".")
-        suffix = tokens.pop(-1)
-        if tokens[-1] == "txt":
-            suffix = f"{tokens.pop(-1)}.{suffix}"
-
-        for i, summary in enumerate(header.trait_summaries):
-            phenotype_name = summary.name
-            phenotype_path = Path(f"{prefix}.{phenotype_name}.{suffix}")
-
-            phenotype_header = copy(header)
-            phenotype_header.trait_summaries = [summary]
-            phenotype_header.analyzed_trait = summary
-
-            for n in phenotype_header.null_model_estimates:
-                n.beta_hat = n.beta_hat[i]
-                n.se_beta_hat = n.se_beta_hat[i]
-
-            phenotype_header.heritability = header.heritability[i]
-            phenotype_header.genetic_variance = header.genetic_variance[i]
-            phenotype_header.error_variance = header.error_variance[i]
-
-            variants = list(AnnotatedVariant.from_array(array))
-            u_stat = array[f"U_STAT[{phenotype_name}]"]
-            v_stat = array[f"V_STAT[{phenotype_name}]"]
-
-            cls.from_stat(phenotype_path, phenotype_header, variants, u_stat, v_stat)
-
-            yield phenotype_path
-
-    @classmethod
-    def from_scorefiles(
-        cls,
-        file_paths: Sequence[Path | str],
-    ) -> tuple[ScorefileHeader, npt.NDArray]:
-        raise NotImplementedError
-        # headers = list()
-        # arrays = list()
-        # for path in file_paths:
-        #     header, array = Scorefile.read(path)
-        #     headers.append(header)
-        #     arrays.append(array)
-
-        # array = np.vstack(arrays).transpose()
-
-        # u_stat = array["U_STAT"]
-        # sqrt_v_stat = array["SQRT_V_STAT"]
-        # v_stat = np.square(sqrt_v_stat)

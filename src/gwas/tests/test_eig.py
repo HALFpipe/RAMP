@@ -3,6 +3,7 @@ import gzip
 from contextlib import chdir
 from pathlib import Path
 from subprocess import check_call
+from typing import Mapping
 
 import numpy as np
 import pytest
@@ -11,10 +12,10 @@ import scipy
 from gwas.eig import Eigendecomposition
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri import Triangular, scale
-from gwas.utils import MinorAlleleFrequencyCutoff, chromosome_to_int, chromosomes_set
-from gwas.vcf import VCFFile
+from gwas.utils import chromosome_to_int, chromosomes_set
+from gwas.vcf.base import VCFFile
 
-from .utils import rmw, to_bgzip
+from .utils import bcftools, rmw, tabix, to_bgzip
 
 chromosomes = sorted(chromosomes_set() - {1, "X"}, key=chromosome_to_int)
 minor_allele_frequency_cutoff: float = 0.05
@@ -22,10 +23,14 @@ minor_allele_frequency_cutoff: float = 0.05
 
 @pytest.mark.slow
 def test_eig(
-    vcf_files: list[VCFFile],
-    tri_paths_by_chromosome: dict[str | int, Path],
+    vcf_files_by_size_and_chromosome: Mapping[str, Mapping[int | str, VCFFile]],
+    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
     sw: SharedWorkspace,
 ):
+    sampe_size_label = "small"
+    vcf_files = list(vcf_files_by_size_and_chromosome[sampe_size_label].values())
+    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sampe_size_label]
+
     tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes]
     eig_array = Eigendecomposition.from_files(*tri_paths, sw=sw)
 
@@ -38,15 +43,18 @@ def test_eig(
     for vcf_file in vcf_files:
         if vcf_file.chromosome not in chromosomes:
             continue
-        vcf_file.update_samples(eig_array.samples)
+        vcf_file.set_samples(set(eig_array.samples))
+        assert vcf_file.samples == eig_array.samples
+        vcf_file.set_variants_from_cutoffs(
+            minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
+        )
         with vcf_file:
-            variants = vcf_file.read(
-                a[:, variant_count:].transpose(),
-                predicate=MinorAlleleFrequencyCutoff(
-                    minor_allele_frequency_cutoff,
-                ),
+            start = variant_count
+            end = variant_count + vcf_file.variant_count
+            vcf_file.read(
+                a[:, start:end].transpose(),
             )
-            variant_count += len(variants)
+            variant_count += vcf_file.variant_count
 
     array.resize(sample_count, variant_count)
     a = array.to_numpy()
@@ -97,14 +105,20 @@ def test_eig(
 
 def test_eig_rmw(
     tmp_path: Path,
-    vcf_by_chromosome: dict[int | str, VCFFile],
-    tri_paths_by_chromosome: dict[str | int, Path],
+    vcf_files_by_size_and_chromosome: Mapping[str, Mapping[int | str, VCFFile]],
+    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
     sw: SharedWorkspace,
 ):
     c: int | str = 22
-    vcf_file = vcf_by_chromosome[c]
+    sampe_size_label = "small"
+    vcf_file = vcf_files_by_size_and_chromosome[sampe_size_label][c]
+    vcf_file.set_variants_from_cutoffs(
+        minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
+    )
 
-    tri_array = Triangular.from_file(tri_paths_by_chromosome[c], sw)
+    tri_array = Triangular.from_file(
+        tri_paths_by_size_and_chromosome[sampe_size_label][c], sw
+    )
     eig_array = Eigendecomposition.from_tri(
         tri_array,
         chromosome=c,
@@ -122,7 +136,49 @@ def test_eig_rmw(
     with dat_path.open("wt") as file_handle:
         file_handle.write("T variable")
 
+    variants_path = tmp_path / f"chr{c}.variants.txt"
+    with variants_path.open("wt") as file_handle:
+        file_handle.write(
+            "\n".join(
+                (
+                    ":".join(
+                        (
+                            str(vcf_file.chromosome),
+                            str(row.position),
+                            row.reference_allele,
+                            row.alternate_allele,
+                        )
+                    )
+                    for row in vcf_file.variants.itertuples()
+                )
+            )
+        )
+
     with chdir(tmp_path):
+        filtered_vcf_path = tmp_path / f"chr{c}.filt.vcf.gz"
+        check_call(
+            [
+                bcftools,
+                "view",
+                "--include",
+                f"ID=@{variants_path}",
+                "--output-type",
+                "z",
+                "--output-file",
+                str(filtered_vcf_path),
+                str(vcf_gz_path),
+            ]
+        )
+
+        check_call(
+            [
+                tabix,
+                "-p",
+                "vcf",
+                str(filtered_vcf_path),
+            ]
+        )
+
         check_call(
             [
                 rmw,
@@ -131,10 +187,12 @@ def test_eig_rmw(
                 "--dat",
                 str(dat_path),
                 "--vcf",
-                str(vcf_gz_path),
+                str(filtered_vcf_path),
                 "--kinGeno",
                 "--kinSave",
                 "--kinOnly",
+                "--kinMaf",
+                "0.00",  # We already filtered in the previous step.
                 "--dosage",
                 "--noPhoneHome",
             ]
@@ -157,7 +215,16 @@ def test_eig_rmw(
     eig_c = (
         eig_array.eigenvectors * eig_array.eigenvalues
     ) @ eig_array.eigenvectors.transpose()
-    assert np.allclose(eig_c, kinship)
+    assert np.allclose(eig_c, kinship, atol=1e-6)
+
+    numpy_eigenvalues, numpy_eigenvectors = np.linalg.eigh(kinship)
+    permutation = np.rint(
+        numpy_eigenvectors.transpose() @ eig_array.eigenvectors
+    ).astype(int)
+    assert ((permutation == 0) | (np.abs(permutation) == 1)).all()
+    assert (1 == np.count_nonzero(permutation, axis=0)).all()
+    assert (1 == np.count_nonzero(permutation, axis=1)).all()
+    assert np.allclose(numpy_eigenvalues[::-1], eig_array.eigenvalues, atol=1e-6)
 
     eig_array.free()
     assert len(sw.allocations) == 1

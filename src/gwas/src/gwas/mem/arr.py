@@ -2,14 +2,14 @@
 import json
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Self
+from typing import Any, Self
 
 import numpy as np
 import scipy
 from numpy import typing as npt
 
 from .._matrix_functions import dimatcopy, set_tril
-from ..z import CompressedTextReader
+from ..compression.pipe import CompressedTextReader
 from .wkspace import Allocation, SharedWorkspace
 
 
@@ -23,8 +23,17 @@ class SharedArray:
         a = self.sw.allocations[self.name]
         return tuple(a.shape)
 
+    @property
+    def dtype(self) -> np.dtype:
+        a = self.sw.allocations[self.name]
+        return np.dtype(a.dtype)
+
     def to_file_name(self) -> str:
         raise NotImplementedError
+
+    def __setitem__(self, key: Any, value: npt.NDArray) -> None:
+        numpy_array = self.to_numpy()
+        numpy_array[key] = value
 
     def to_numpy(
         self,
@@ -129,11 +138,10 @@ class SharedArray:
         return cls(name, sw, **cls_kwargs)
 
     @classmethod
-    def from_file(
+    def read_file_metadata(
         cls,
         file_path: Path | str,
-        sw: SharedWorkspace,
-    ) -> Self:
+    ) -> tuple[int, dict]:
         file_path = Path(file_path)
 
         header: str | None = None
@@ -152,8 +160,19 @@ class SharedArray:
         tokens = first_line.split()
 
         n = len(tokens)
-
         kwargs = cls.parse_header(header)
+
+        return n, kwargs
+
+    @classmethod
+    def from_file(
+        cls,
+        file_path: Path | str,
+        sw: SharedWorkspace,
+    ) -> Self:
+        file_path = Path(file_path)
+        n, kwargs = cls.read_file_metadata(file_path)
+
         name = cls.get_name(sw, **kwargs)
 
         sw.alloc(name, n, 1)

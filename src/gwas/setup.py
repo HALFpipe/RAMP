@@ -1,7 +1,24 @@
 # -*- coding: utf-8 -*-
+import sys
+
 import numpy as np
 from Cython.Build import cythonize
 from setuptools import Extension, setup
+
+# Adapted from https://github.com/pandas-dev/pandas/blob/main/setup.py
+debugging_symbols_requested = "--with-debugging-symbols" in sys.argv
+if debugging_symbols_requested:
+    sys.argv.remove("--with-debugging-symbols")
+
+extra_compile_args: list[str] = ["-O3", "-std=c++20"]
+extra_link_args: list[str] = ["-g3"]
+if debugging_symbols_requested:
+    extra_compile_args.append("-Wall")
+    extra_compile_args.append("-Werror")
+    extra_compile_args.append("-UNDEBUG")
+    extra_compile_args.append("-O0")
+    extra_compile_args.append("-march=native")
+
 
 setup(
     ext_modules=cythonize(
@@ -22,11 +39,12 @@ setup(
                 ],
             ),
             Extension(
-                "gwas._os",
+                "gwas.mem._os",
                 [
-                    "src/gwas/_os.pyx",
+                    "src/gwas/mem/_os.pyx",
                 ],
                 define_macros=[
+                    ("_GNU_SOURCE", None),
                     ("NPY_NO_DEPRECATED_API", None),
                     ("NDEBUG", None),
                 ],
@@ -34,6 +52,15 @@ setup(
                 libraries=[],
             ),
         ]
-    ),
+    )
+    + [
+        Extension(
+            "gwas.vcf._read",
+            ["src/gwas/vcf/_read.cpp"],
+            include_dirs=[np.get_include()],
+            extra_compile_args=extra_compile_args,
+            extra_link_args=extra_link_args,
+        ),
+    ],
     zip_safe=False,
 )

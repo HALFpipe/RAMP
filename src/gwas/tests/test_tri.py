@@ -8,43 +8,37 @@ from numpy import typing as npt
 
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri import Triangular
-from gwas.vcf import VCFFile
+from gwas.vcf.base import VCFFile
 
+sample_size_label = "large"
 chromosome = 22
 minor_allele_frequency_cutoff = 0.05
 
 
 @pytest.fixture(scope="module")
-def vcf_file(vcf_by_chromosome: dict[int | str, VCFFile]) -> VCFFile:
-    return vcf_by_chromosome[chromosome]
+def vcf_file(
+    vcf_files_by_size_and_chromosome: dict[str, dict[int | str, VCFFile]]
+) -> VCFFile:
+    return vcf_files_by_size_and_chromosome[sample_size_label][chromosome]
 
 
 @pytest.fixture(scope="module")
 def dosage_array(vcf_file: VCFFile) -> npt.NDArray:
+    vcf_file.set_variants_from_cutoffs(
+        minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
+    )
     a = np.zeros((vcf_file.variant_count, vcf_file.sample_count))
-
     with vcf_file:
         vcf_file.read(a)
 
-    # calculate variant properties
-    minor_allele_frequency = np.mean(a, axis=1) / 2
-
-    # create filter vector
-    include = np.ones(len(minor_allele_frequency), dtype=bool)
-
-    include &= minor_allele_frequency >= minor_allele_frequency_cutoff
-    include &= minor_allele_frequency <= (1 - minor_allele_frequency_cutoff)
-
-    # apply scaling to variants that pass the filter
-    a = a[include, :]
-
-    mean = 2 * minor_allele_frequency
-    a -= mean[include, np.newaxis]
+    mean = np.mean(a, axis=1)
+    minor_allele_frequency = mean / 2
+    a -= mean[:, np.newaxis]
 
     standard_deviation = np.sqrt(
         2 * minor_allele_frequency * (1 - minor_allele_frequency)
     )
-    a /= standard_deviation[include, np.newaxis]
+    a /= standard_deviation[:, np.newaxis]
 
     return a
 
@@ -66,22 +60,27 @@ def numpy_tri(dosage_array: npt.NDArray) -> npt.NDArray:
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("log_size", [34, 30])
 def test_tri(
-    vcf_file: VCFFile, numpy_tri: npt.NDArray, sample_size: int, log_size: int
+    vcf_file: VCFFile,
+    dosage_array: npt.NDArray,
+    numpy_tri: npt.NDArray,
 ):
+    log_size = 30  # 1 gigabyte.
     sw = SharedWorkspace.create(size=2**log_size)
 
-    if sample_size == 3421:
-        # Check that we cannot use a direct algorithm because we would
-        # run out of memory.
-        with pytest.raises(ValueError):
-            sw.alloc("a", vcf_file.variant_count, vcf_file.sample_count)
+    vcf_file.set_variants_from_cutoffs(
+        minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
+    )
+    assert dosage_array.shape[0] == vcf_file.variant_count
+
+    # Check that we cannot use a direct algorithm because we would
+    # run out of memory.
+    with pytest.raises(MemoryError):
+        sw.alloc("a", vcf_file.variant_count, vcf_file.sample_count)
 
     tri = Triangular.from_vcf(
         vcf_file=vcf_file,
         sw=sw,
-        minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
     )
     assert isinstance(tri, Triangular)
     a = tri.to_numpy()
@@ -101,7 +100,7 @@ def test_tri(
 
 
 @pytest.mark.slow
-def test_tri_file(tmp_path: Path, numpy_tri: npt.NDArray):
+def test_tri_file(tmp_path: Path, numpy_tri: npt.NDArray, sw: SharedWorkspace):
     sw = SharedWorkspace.create()
     n = numpy_tri.shape[0]
 
@@ -118,6 +117,7 @@ def test_tri_file(tmp_path: Path, numpy_tri: npt.NDArray):
         samples=samples,
         variant_count=199357,
         minor_allele_frequency_cutoff=0.01,
+        r_squared_cutoff=-np.inf,
     )
 
     tri_path = tri.to_file(tmp_path)
@@ -132,13 +132,12 @@ def test_tri_file(tmp_path: Path, numpy_tri: npt.NDArray):
         tri.minor_allele_frequency_cutoff,
     )
 
-    sw.close()
-    sw.unlink()
+    b.free()
+    tri.free()
+    assert len(sw.allocations) == 1
 
 
-def test_tri_subset_samples():
-    sw = SharedWorkspace.create()
-
+def test_tri_subset_samples(sw: SharedWorkspace):
     k = 100
 
     A = np.random.rand(10000, k)
@@ -158,7 +157,13 @@ def test_tri_subset_samples():
     assert isinstance(R, np.ndarray) and not isinstance(R, tuple)
 
     tri = Triangular.from_numpy(
-        R, sw, chromosome=1, samples=samples, variant_count=10000
+        R,
+        sw,
+        chromosome=1,
+        samples=samples,
+        variant_count=10000,
+        minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
+        r_squared_cutoff=-np.inf,
     )
     assert isinstance(tri, Triangular)
     assert np.allclose(tri.to_numpy(), R)
@@ -175,5 +180,5 @@ def test_tri_subset_samples():
     assert isinstance(R2, np.ndarray)
     assert np.allclose(R2.transpose() @ R2, D)
 
-    sw.close()
-    sw.unlink()
+    tri.free()
+    assert len(sw.allocations) == 1

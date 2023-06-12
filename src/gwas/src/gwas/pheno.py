@@ -8,9 +8,9 @@ from typing import Self
 import numpy as np
 from numpy import typing as npt
 
-from gwas.log import logger
-from gwas.mem.arr import SharedArray
-from gwas.mem.wkspace import SharedWorkspace
+from .log import logger
+from .mem.arr import SharedArray
+from .mem.wkspace import SharedWorkspace
 
 
 def read_and_combine(paths: list[Path]) -> tuple[list[str], list[str], npt.NDArray]:
@@ -84,6 +84,9 @@ class VariableCollection:
         self.phenotypes = SharedArray.from_numpy(
             new_phenotypes, self.phenotypes.sw, prefix="phenotypes"
         )
+        logger.debug(
+            f"Subsetting variable collection to have {self.phenotype_count} phenotypes"
+        )
 
     def subset_samples(self, samples: list[str]) -> None:
         if samples == self.samples:
@@ -100,15 +103,20 @@ class VariableCollection:
         self.phenotypes = SharedArray.from_numpy(
             new_phenotypes, sw, prefix="phenotypes"
         )
+
         new_covariates = self.covariates.to_numpy()[sample_indices, :]
-        zero_variance = np.isclose(np.var(new_covariates, axis=0), 0)
+        zero_variance: npt.NDArray[np.bool_] = np.isclose(
+            new_covariates[:, 1:].var(axis=0), 0
+        )
         if np.any(zero_variance):
             removed_covariates = [
-                name for name, zero in zip(self.covariate_names, zero_variance) if zero
+                name
+                for name, zero in zip(self.covariate_names[1:], zero_variance)
+                if zero
             ]
-            logger.warning(
-                f"Removing covariates with zero variance {removed_covariates} "
-                "while subsetting samples"
+            logger.debug(
+                f"Removing covariates {removed_covariates} because they have zero "
+                "variance after subsetting samples"
             )
             self.covariate_names = [
                 name
@@ -116,9 +124,15 @@ class VariableCollection:
                 if not zero
             ]
             new_covariates = new_covariates[:, ~zero_variance]
+
         self.covariates.free()
         self.covariates = SharedArray.from_numpy(
             new_covariates, sw, prefix="covariates"
+        )
+
+        logger.debug(
+            f"Subsetting variable collection to have {len(samples)} samples, "
+            f"{self.covariate_count} covariates, and {self.phenotype_count} phenotypes."
         )
 
     @classmethod
@@ -158,7 +172,7 @@ class VariableCollection:
         phenotypes = phenotypes[criterion, :]
         covariates = covariates[criterion, :]
 
-        logger.info(
+        logger.debug(
             f"Creating variable collection with {len(samples)} samples, "
             f"{covariates.shape[1]} covariates, and {phenotypes.shape[1]} phenotypes."
         )
@@ -220,5 +234,50 @@ class VariableCollection:
             covariate_names,
             covariate_array,
             sw,
+            **kwargs,
+        )
+
+
+@dataclass
+class VariableSummary:
+    minimum: float
+    lower_quartile: float
+    median: float
+    upper_quartile: float
+    maximum: float
+
+    mean: float
+    variance: float
+
+    @property
+    def values(self) -> npt.NDArray[np.float64]:
+        return np.array(
+            [
+                self.minimum,
+                self.lower_quartile,
+                self.median,
+                self.upper_quartile,
+                self.maximum,
+                self.mean,
+                self.variance,
+            ]
+        )
+
+    def is_close(self, other: Self) -> bool:
+        return np.allclose(self.values, other.values)
+
+    @classmethod
+    def from_array(cls, value: npt.NDArray[np.float64], **kwargs) -> Self:
+        (minimum, lower_quartile, median, upper_quartile, maximum) = np.quantile(
+            value, [0, 0.25, 0.5, 0.75, 1]
+        )
+        return cls(
+            float(minimum),
+            float(lower_quartile),
+            float(median),
+            float(upper_quartile),
+            float(maximum),
+            float(value.mean()),
+            float(value.var(ddof=1)),
             **kwargs,
         )

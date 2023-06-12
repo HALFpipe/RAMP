@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import multiprocessing as mp
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum, auto
 from multiprocessing import get_context
 from multiprocessing import pool as mp_pool
@@ -13,9 +12,10 @@ from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event
 from queue import Empty
 from shutil import which
-from typing import Any, TypeVar
+from typing import Any, Type, TypeVar, get_args, get_origin
 
 import numpy as np
+import torch.multiprocessing as mp
 from numpy import typing as npt
 
 from gwas.log import logger, setup_logging
@@ -29,22 +29,15 @@ def chromosome_to_int(chromosome: int | str) -> int:
     raise ValueError(f'Unknown chromsome "{chromosome}"')
 
 
+def chromosome_from_int(chromosome_int: int) -> int | str:
+    if chromosome_int == 23:
+        return "X"
+    else:
+        return chromosome_int
+
+
 def chromosomes_set() -> set[int | str]:
     return set(range(1, 22 + 1)) | {"X"}
-
-
-@dataclass
-class MinorAlleleFrequencyCutoff:
-    minor_allele_frequency_cutoff: float = 0.05
-
-    def __call__(self, row) -> bool:
-        mean = float(row.mean())
-        minor_allele_frequency = mean / 2
-        return not (
-            (minor_allele_frequency < self.minor_allele_frequency_cutoff)
-            or ((1 - minor_allele_frequency) < self.minor_allele_frequency_cutoff)
-            or np.isclose(row.var(), 0)  # additional safety check
-        )
 
 
 def unwrap_which(command: str) -> str:
@@ -98,7 +91,7 @@ class Action(Enum):
     EXIT = auto()
 
 
-T = TypeVar("T")
+V = TypeVar("V")
 
 
 @dataclass
@@ -108,7 +101,7 @@ class SharedState:
     # Passes exceptions.
     exception_queue: Queue[Exception] = field(default_factory=mp.Queue)
 
-    def get(self, queue: Queue[T]) -> T | Action:
+    def get(self, queue: Queue[V]) -> V | Action:
         """Get an item from a queue while checking for exit.
 
         Args:
@@ -174,3 +167,36 @@ def invert_pivot(pivot: npt.NDArray[np.integer]) -> npt.NDArray[np.integer]:
     inverse = np.empty_like(pivot)
     inverse[pivot] = np.arange(pivot.size)
     return inverse
+
+
+T = TypeVar("T")
+
+
+def parse_obj_as(cls: Type[T], data: Any) -> T:
+    """Parses an object as the specified type. Inspired by the Pydantic function of the
+    same name.
+
+    Args:
+        cls (Type[T]): The type to parse as.
+        data (Any): The data to parse.
+
+    Returns:
+        T: The parsed object.
+    """
+    if is_dataclass(cls):
+        return cls(
+            **{f.name: parse_obj_as(f.type, data.get(f.name)) for f in fields(cls)}
+        )  # type: ignore
+
+    origin = get_origin(cls)
+    if origin is list:
+        (value_cls,) = get_args(cls)
+        return [parse_obj_as(value_cls, element) for element in data]  # type: ignore
+    elif origin is dict:
+        (key_cls, value_cls) = get_args(cls)
+        return {
+            parse_obj_as(key_cls, key): parse_obj_as(value_cls, value)
+            for key, value in data.items()
+        }  # type: ignore
+
+    return data

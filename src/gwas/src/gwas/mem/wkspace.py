@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import mmap
 import os
 import pickle
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from itertools import pairwise
+from mmap import MAP_SHARED, mmap
 from multiprocessing import reduction as mp_reduction
 from typing import Callable
 
@@ -14,8 +14,8 @@ import numpy as np
 from numpy import typing as npt
 from psutil import virtual_memory
 
-from .._os import c_memfd_create
 from ..log import logger
+from ._os import c_memfd_create
 
 
 @dataclass(frozen=True)
@@ -32,10 +32,10 @@ class SharedWorkspace(AbstractContextManager):
     fd: int
     size: int
 
-    buf: mmap.mmap = field(init=False)
+    buf: mmap = field(init=False)
 
     def __post_init__(self) -> None:
-        self.buf = mmap.mmap(self.fd, self.size, flags=mmap.MAP_SHARED)
+        self.buf = mmap(self.fd, self.size, flags=MAP_SHARED)
 
     def __enter__(self) -> SharedWorkspace:
         return self
@@ -48,6 +48,11 @@ class SharedWorkspace(AbstractContextManager):
     def unallocated_size(self) -> int:
         end = max(a.start + a.size for a in self.allocations.values())
         return self.size - end
+
+    @property
+    def proportion_allocated(self) -> float:
+        end = max(a.start + a.size for a in self.allocations.values())
+        return end / self.size
 
     def get_array(self, name: str):
         from .arr import SharedArray
@@ -225,7 +230,7 @@ class SharedWorkspace(AbstractContextManager):
         # Now we actually instantiate the python wrapper.
         sw = cls(fd, size)
 
-        logger.info(
+        logger.debug(
             "Created shared workspace "
             f"with a size of {size} bytes ({size / 1e9:f} gigabytes)"
         )

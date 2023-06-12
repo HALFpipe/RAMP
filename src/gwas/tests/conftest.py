@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import os
-import shelve
 from pathlib import Path
 from typing import Mapping
 
@@ -8,22 +7,13 @@ import pytest
 
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri import calc_tri
-from gwas.utils import Pool, chromosome_to_int, chromosomes_set
-from gwas.vcf import VCFFile
+from gwas.utils import chromosome_to_int, chromosomes_set
+from gwas.vcf.base import VCFFile, calc_vcf
 
 base_path: Path = Path(os.environ["DATA_PATH"])
 dataset: str = "opensnp"
 chromosomes = sorted(chromosomes_set(), key=chromosome_to_int)
-
-
-@pytest.fixture(scope="session")
-def cache(request) -> shelve.Shelf:
-    parent_path = base_path / dataset / "pytest"
-    parent_path.mkdir(exist_ok=True, parents=True)
-
-    c = shelve.open(str(parent_path / "cache"))
-    request.addfinalizer(c.close)
-    return c
+sample_sizes = dict(small=100, medium=500, large=3421)
 
 
 @pytest.fixture(scope="module")
@@ -54,40 +44,74 @@ def directory_factory() -> DirectoryFactory:
     return DirectoryFactory()
 
 
-@pytest.fixture(scope="session", params=[100, 500, 3421])
-def sample_size(request) -> int:
-    sample_size = request.param
-    return sample_size
+@pytest.fixture(scope="session", params=sample_sizes.keys())
+def sample_size_label(request) -> str:
+    return request.param
 
 
 @pytest.fixture(scope="session")
-def vcf_paths_by_chromosome(sample_size: int) -> dict[int | str, Path]:
+def sample_size(sample_size_label: str) -> int:
+    return sample_sizes[sample_size_label]
+
+
+@pytest.fixture(scope="session")
+def vcf_paths_by_size_and_chromosome() -> dict[str, dict[int | str, Path]]:
     return {
-        c: (base_path / dataset / str(sample_size) / f"chr{c}.dose.vcf.zst")
-        for c in chromosomes
+        sample_size_label: {
+            c: (base_path / dataset / str(sample_size) / f"chr{c}.dose.vcf.zst")
+            for c in chromosomes
+        }
+        for sample_size_label, sample_size in sample_sizes.items()
     }
 
 
 @pytest.fixture(scope="session")
-def vcf_paths(vcf_paths_by_chromosome) -> list[Path]:
+def vcf_files_by_size_and_chromosome(
+    vcf_paths_by_size_and_chromosome: Mapping[str, dict[int | str, Path]],
+) -> Mapping[str, dict[int | str, VCFFile]]:
+    vcf_files_by_size_and_chromosome: dict[str, dict[int | str, VCFFile]] = {
+        sample_size_label: dict() for sample_size_label in sample_sizes.keys()
+    }
+    for (
+        sample_size_label,
+        vcf_paths_by_chromosome,
+    ) in vcf_paths_by_size_and_chromosome.items():
+        vcf_paths = [vcf_paths_by_chromosome[c] for c in chromosomes]
+        vcf_files = calc_vcf(
+            vcf_paths,
+            base_path / dataset / "pytest" / str(sample_sizes[sample_size_label]),
+        )
+        for vcf_file in vcf_files:
+            vcf_files_by_size_and_chromosome[sample_size_label][
+                vcf_file.chromosome
+            ] = vcf_file
+
+    return vcf_files_by_size_and_chromosome
+
+
+@pytest.fixture(scope="session")
+def vcf_paths_by_chromosome(
+    sample_size_label: str,
+    vcf_paths_by_size_and_chromosome: Mapping[str, Mapping[int | str, Path]],
+) -> Mapping[int | str, Path]:
+    return vcf_paths_by_size_and_chromosome[sample_size_label]
+
+
+@pytest.fixture(scope="session")
+def vcf_paths(vcf_paths_by_chromosome: Mapping[int | str, Path]) -> list[Path]:
     return [vcf_paths_by_chromosome[c] for c in chromosomes]
 
 
 @pytest.fixture(scope="session")
 def vcf_files(
-    cache: shelve.Shelf,
-    sample_size: int,
-    vcf_paths: list[Path],
+    sample_size_label: str,
+    vcf_files_by_size_and_chromosome: Mapping[str, Mapping[int | str, VCFFile]],
 ) -> list[VCFFile]:
-    key = f"vcf_files_{sample_size}"
-    if key not in cache:
-        with Pool() as pool:
-            cache[key] = list(pool.map(VCFFile, vcf_paths))
-    return cache[key]
+    return [vcf_files_by_size_and_chromosome[sample_size_label][c] for c in chromosomes]
 
 
 @pytest.fixture(scope="session")
-def vcf_by_chromosome(vcf_files: list[VCFFile]):
+def vcf_files_by_chromosome(vcf_files: list[VCFFile]) -> Mapping[int | str, VCFFile]:
     return {vcf_file.chromosome: vcf_file for vcf_file in vcf_files}
 
 
@@ -97,8 +121,24 @@ def raw_path():
 
 
 @pytest.fixture(scope="module")
-def tri_paths_by_chromosome(
-    vcf_by_chromosome: Mapping[int | str, VCFFile],
+def tri_paths_by_size_and_chromosome(
+    vcf_files_by_size_and_chromosome: Mapping[str, Mapping[int | str, VCFFile]],
     sw: SharedWorkspace,
+) -> Mapping[str, Mapping[str | int, Path]]:
+    return {
+        sample_size_label: calc_tri(
+            chromosomes,
+            v,
+            base_path / dataset / "tri" / f"{sample_sizes[sample_size_label]}",
+            sw,
+        )
+        for sample_size_label, v in vcf_files_by_size_and_chromosome.items()
+    }
+
+
+@pytest.fixture(scope="module")
+def tri_paths_by_chromosome(
+    sample_size_label: str,
+    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
 ) -> Mapping[str | int, Path]:
-    return calc_tri(chromosomes, vcf_by_chromosome, base_path / dataset, sw)
+    return tri_paths_by_size_and_chromosome[sample_size_label]

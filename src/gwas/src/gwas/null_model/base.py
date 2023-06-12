@@ -46,6 +46,10 @@ class NullModelCollection:
     def phenotype_count(self) -> int:
         return self.regression_weights.shape[0]
 
+    @property
+    def sample_count(self) -> int:
+        return self.scaled_residuals.shape[1]
+
     def put(self, phenotype_index: int, r: NullModelResult) -> None:
         self.heritability[phenotype_index] = r.heritability
         self.genetic_variance[phenotype_index] = r.genetic_variance
@@ -111,10 +115,10 @@ class NullModelCollection:
         if method == "fastlmm":
             FaST_LMM.fit(eig, vc, nm, **kwargs)
         elif method == "ml":
-            MaximumLikelihood.fit(eig, vc, nm)
+            MaximumLikelihood.fit(eig, vc, nm, **kwargs)
         elif method == "pml":
-            ProfileMaximumLikelihood.fit(eig, vc, nm)
+            ProfileMaximumLikelihood.fit(eig, vc, nm, **kwargs)
         elif method == "reml":
-            RestrictedMaximumLikelihood.fit(eig, vc, nm)
+            RestrictedMaximumLikelihood.fit(eig, vc, nm, **kwargs)
 
         return nm

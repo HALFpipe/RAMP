@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
-from dataclasses import dataclass, field
-from typing import Callable, ClassVar, NamedTuple
+from dataclasses import dataclass
+from functools import cached_property
+from multiprocessing import cpu_count
+from typing import ClassVar, NamedTuple
 
 import numpy as np
 import scipy
@@ -8,11 +10,13 @@ import torch
 from functorch import grad_and_value, hessian
 from functorch.compile import memory_efficient_fusion
 from numpy import typing as npt
+from threadpoolctl import threadpool_limits
 from tqdm.auto import tqdm
 
-from gwas.eig import Eigendecomposition
-from gwas.pheno import VariableCollection
-from gwas.var import NullModelCollection, NullModelResult
+from ..eig import Eigendecomposition
+from ..pheno import VariableCollection
+from ..utils import Pool
+from .base import NullModelCollection, NullModelResult
 
 torch.set_default_tensor_type(torch.DoubleTensor)
 torch.set_default_dtype(torch.float64)
@@ -22,6 +26,12 @@ class OptimizeInput(NamedTuple):
     eigenvalues: torch.Tensor
     rotated_covariates: torch.Tensor
     rotated_phenotype: torch.Tensor
+
+
+class OptimizeJob(NamedTuple):
+    phenotype_index: int
+    num_nested_threads: int
+    optimize_input: OptimizeInput
 
 
 class OptimizeResult(NamedTuple):
@@ -34,7 +44,6 @@ class ProfileMaximumLikelihood:
     covariate_count: int
 
     needs_grad: ClassVar[bool] = True
-    func: Callable = field(init=False)
 
     def get_initial_terms(self, o: OptimizeInput):
         var: float = o.rotated_phenotype.var().item()
@@ -44,7 +53,8 @@ class ProfileMaximumLikelihood:
     def bounds(self):
         return [(1e-4, np.inf), (0, np.inf)]
 
-    def __post_init__(self):
+    @cached_property
+    def func(self):
         o = OptimizeInput(
             torch.rand(self.sample_count),
             torch.rand(self.sample_count, self.covariate_count),
@@ -62,7 +72,7 @@ class ProfileMaximumLikelihood:
         for _ in range(3):
             func(terms, o)
 
-        self.func = func
+        return func
 
     @staticmethod
     def get_regression_weights(terms: torch.Tensor, o: OptimizeInput):
@@ -138,9 +148,9 @@ class ProfileMaximumLikelihood:
         return value.item(), grad.detach().numpy()
 
     def get_heritability(self, terms, _: npt.NDArray) -> tuple[float, float, float]:
-        genetic_variance = terms[1]
-        error_variance = terms[0]
-        heritability = genetic_variance / (genetic_variance + error_variance)
+        genetic_variance = float(terms[1])
+        error_variance = float(terms[0])
+        heritability = float(genetic_variance / (genetic_variance + error_variance))
         return heritability, genetic_variance, error_variance
 
     def optimize(self, o: OptimizeInput) -> OptimizeResult:
@@ -157,21 +167,23 @@ class ProfileMaximumLikelihood:
         )
         return optimize_result
 
-    def apply(self, o: OptimizeInput):
-        optimize_result = self.optimize(o)
-        terms = torch.tensor(optimize_result.x)
-        weights, errors, residuals, variance = self.get_standard_errors(
-            terms,
-            o,
-        )
-        resid_numpy = residuals.detach().numpy()
-        return NullModelResult(
-            *self.get_heritability(terms, resid_numpy),
-            weights.detach().numpy(),
-            errors.detach().numpy(),
-            resid_numpy,
-            variance.detach().numpy(),
-        )
+    def apply(self, optimize_job: OptimizeJob) -> tuple[int, NullModelResult]:
+        (phenotype_index, num_nested_threads, o) = optimize_job
+        with threadpool_limits(limits=num_nested_threads):
+            optimize_result = self.optimize(o)
+            terms = torch.tensor(optimize_result.x)
+            weights, errors, residuals, variance = self.get_standard_errors(
+                terms,
+                o,
+            )
+            resid_numpy = residuals.detach().numpy()
+            return phenotype_index, NullModelResult(
+                *self.get_heritability(terms, resid_numpy),
+                weights.detach().numpy(),
+                errors.detach().numpy(),
+                resid_numpy,
+                variance.detach().numpy(),
+            )
 
     @classmethod
     def fit(
@@ -179,6 +191,7 @@ class ProfileMaximumLikelihood:
         eig: Eigendecomposition,
         vc: VariableCollection,
         nm: NullModelCollection,
+        num_threads: int = cpu_count(),
     ) -> None:
         eigenvectors = eig.eigenvectors
         covariates = vc.covariates.to_numpy().copy()
@@ -195,14 +208,29 @@ class ProfileMaximumLikelihood:
         ml = cls(vc.sample_count, vc.covariate_count)
 
         # Fit null model for each phenotype.
-        for i in tqdm(range(vc.phenotype_count), desc="phenotypes"):
-            o = OptimizeInput(
-                eigenvalues,
-                rotated_covariates,
-                rotated_phenotypes[:, i, np.newaxis],
+        num_processes = min(num_threads, vc.phenotype_count)
+        num_nested_threads = num_threads // num_processes
+        optimize_jobs = (
+            OptimizeJob(
+                phenotype_index,
+                num_nested_threads,
+                OptimizeInput(
+                    eigenvalues,
+                    rotated_covariates,
+                    rotated_phenotypes[:, phenotype_index, np.newaxis],
+                ),
             )
-            r = ml.apply(o)
-            nm.put(i, r)
+            for phenotype_index in range(vc.phenotype_count)
+        )
+
+        with Pool(processes=num_processes) as pool:
+            for i, r in tqdm(
+                pool.imap_unordered(ml.apply, optimize_jobs),
+                desc="fitting null models",
+                unit="phenotypes",
+                total=vc.phenotype_count,
+            ):
+                nm.put(i, r)
 
 
 def logdet(a: torch.Tensor) -> torch.Tensor:
@@ -320,7 +348,7 @@ class FaST_LMM(ProfileMaximumLikelihood):
         variance_ratio = terms[0]
         genetic_variance = float(np.square(scaled_residuals).mean())
         error_variance = float(variance_ratio * genetic_variance)
-        heritability = np.reciprocal(1 + variance_ratio)
+        heritability = float(np.reciprocal(1 + variance_ratio))
         return heritability, genetic_variance, error_variance
 
     def wrapper(self, log_variance_ratio: npt.NDArray, o: OptimizeInput):
