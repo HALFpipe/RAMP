@@ -8,11 +8,11 @@ from typing import Any, Sequence
 
 import numpy as np
 import scipy
-from gwas.pheno import read_and_combine
 from numpy import typing as npt
 
+from ..log import logger
+from ..pheno import read_and_combine
 from .base import SampleID
-from .log import logger
 from .populations import plot_populations, populations, super_populations
 
 

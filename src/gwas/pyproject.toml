@@ -4,10 +4,19 @@ dynamic = ["version"]
 
 requires-python = ">=3.11"
 
-dependencies = ["numpy", "pandas", "torch<2", "scipy", "threadpoolctl"]
+dependencies = [
+  "numpy",
+  "scipy",
+  "pandas",
+  "matplotlib",
+  "seaborn",
+  "torch<2",
+  "threadpoolctl",
+]
 
 [project.scripts]
-gwas = "gwas.cli:main"
+score = "gwas.score.cli:main"
+stratify = "gwas.stratify.cli:main"
 
 [build-system]
 requires = [

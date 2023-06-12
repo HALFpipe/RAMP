@@ -4,8 +4,6 @@ from itertools import product
 
 import numpy as np
 import scipy
-import seaborn as sns
-from matplotlib import pyplot as plt
 from numpy import typing as npt
 
 from .base import SampleID
@@ -76,6 +74,9 @@ def plot_populations(
         sample_populations (dict[str, set[SampleID]]): The samples classified by
             population.
     """
+    import seaborn as sns
+    from matplotlib import pyplot as plt
+
     component_count = sample_components.shape[1]
     k = component_count - 1
 

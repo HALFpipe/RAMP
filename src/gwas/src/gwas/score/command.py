@@ -8,16 +8,16 @@ from typing import Mapping, Sequence
 import numpy as np
 from tqdm.auto import tqdm
 
-from gwas.compression.arr import compression_methods
-from gwas.eig import Eigendecomposition
-from gwas.log import logger
-from gwas.mem.arr import SharedArray
-from gwas.mem.wkspace import SharedWorkspace
-from gwas.pheno import VariableCollection
-from gwas.score.job import JobCollection
-from gwas.tri import calc_tri
-from gwas.utils import chromosome_to_int
-from gwas.vcf.base import VCFFile, calc_vcf
+from ..compression.arr import compression_methods
+from ..eig import Eigendecomposition
+from ..log import logger
+from ..mem.arr import SharedArray
+from ..mem.wkspace import SharedWorkspace
+from ..pheno import VariableCollection
+from ..score.job import JobCollection
+from ..tri import calc_tri
+from ..utils import chromosome_to_int
+from ..vcf.base import VCFFile, calc_vcf
 
 
 @dataclass
