@@ -22,11 +22,15 @@ requirements:
     - wheel
   run:
     - mkl
-    - networkx
-    - "numpy>=1.22"
     - "python>=3.11"
-    - "pytorch<2"
+    - "numpy>=1.22"
     - scipy
+    - pandas
+    - matplotlib
+    - seaborn
+    - "pytorch<2"
+    - networkx
+    - threadpoolctl
     - tqdm
 
 test:
