@@ -68,7 +68,7 @@ jobs:
           platforms: linux/amd64
           cache-from: type=registry,ref=${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.repo }}:buildcache
           cache-to: type=registry,ref=${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.repo }}:buildcache,compression=zstd,mode=max
-          outputs: type=image,name=${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.tag }},push=true,compression=zstd
+          outputs: type=image,name=${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.tag }},push=true,compression=gzip,compression-level=9
           labels: |
             org.opencontainers.image.title=${{ github.event.repository.name }}
             org.opencontainers.image.url=${{ github.event.repository.html_url }}
