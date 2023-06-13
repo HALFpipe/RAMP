@@ -110,14 +110,18 @@ class ArrayProxy(Generic[T]):
         if all(isinstance(s, int) for s in reduced_shape):
             shape = tuple(s for s in reduced_shape if s is not None)
             if prod(shape) > max_size:
-                raise RuntimeError("This should not happen")
+                raise RuntimeError(
+                    "Shape reduction failed to produce size within bounds"
+                )
             return shape
         else:
             raise RuntimeError("Empty dimensions remain")
 
     def get_blosc2_ndarray(self) -> blosc2.NDArray:
         if not isinstance(self.compression_method, Blosc2CompressionMethod):
-            raise RuntimeError
+            raise RuntimeError(
+                "Tried to get Blosc2 array with non-Blosc2 compression method"
+            )
 
         blosc2.set_nthreads(cpu_count())
 
@@ -164,10 +168,13 @@ class ArrayProxy(Generic[T]):
 
         logger.debug(f"Using Blosc2 array {array.info}")
 
-        if array.shape != self.shape:
-            raise ValueError
-        if array.dtype != self.dtype:
-            raise ValueError
+        if array.shape != self.shape or array.dtype != self.dtype:
+            raise ValueError(
+                f'Existing array at "{self.file_path}" with shape {array.shape} and '
+                f"dtype {array.dtype} does not match required shape {self.shape} or "
+                f"dtype {self.dtype}. Please delete the file or use a different "
+                "output directory"
+            )
 
         return array
 

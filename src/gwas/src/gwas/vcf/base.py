@@ -156,10 +156,10 @@ class VCFFile(CompressedTextReader):
                 break
 
         if not isinstance(column_names_line, str):
-            raise ValueError
+            raise ValueError(f"Could not find column names in {file_path}")
 
         if not len(example_lines) > 0:
-            raise ValueError
+            raise ValueError(f"Could not find example lines in {file_path}")
 
         self.example_lines = example_lines
 

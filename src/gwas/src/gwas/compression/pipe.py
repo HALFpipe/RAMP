@@ -14,6 +14,8 @@ pipe_max_size: int = int(Path("/proc/sys/fs/pipe-max-size").read_text())
 class CompressedReader(AbstractContextManager):
     def __init__(self, file_path: Path | str, is_text: bool = True) -> None:
         self.file_path: Path = Path(file_path)
+        if not self.file_path.is_file():
+            raise FileNotFoundError(self.file_path)
         self.is_text = is_text
 
         self.process_handle: Popen | None = None

@@ -154,3 +154,7 @@ cython_debug/
 
 # Visual Studio Code project settings
 .vscode/*
+
+# Cython generated files
+src/gwas/src/gwas/mem/_os.c
+src/gwas/src/gwas/_matrix_functions.c
