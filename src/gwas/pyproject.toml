@@ -12,8 +12,10 @@ dependencies = [
   "seaborn",
   "torch<2",
   "networkx",
+  "psutil",
   "threadpoolctl",
   "tqdm",
+  "pyyaml",
 ]
 
 [project.scripts]
