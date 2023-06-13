@@ -65,7 +65,7 @@ def main() -> None:
         "--compression-method",
         required=False,
         choices=compression_methods.keys(),
-        default="zstd",
+        default="blosc2_zstd_bitshuffle",
     )
     argument_parser.add_argument(
         "--add-principal-components",
