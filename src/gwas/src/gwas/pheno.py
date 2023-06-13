@@ -268,9 +268,13 @@ class VariableSummary:
 
     @classmethod
     def from_array(cls, value: npt.NDArray[np.float64], **kwargs) -> Self:
-        (minimum, lower_quartile, median, upper_quartile, maximum) = np.quantile(
-            value, [0, 0.25, 0.5, 0.75, 1]
+        if value.size == 0:
+            raise ValueError("Cannot compute summary from an empty array")
+        quantiles = np.quantile(
+            value,
+            np.array([0, 0.25, 0.5, 0.75, 1]),
         )
+        (minimum, lower_quartile, median, upper_quartile, maximum) = quantiles.ravel()
         return cls(
             float(minimum),
             float(lower_quartile),

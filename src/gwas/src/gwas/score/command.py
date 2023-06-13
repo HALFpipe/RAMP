@@ -72,12 +72,10 @@ class GwasCommand:
         (
             missing_value_patterns,
             missing_value_pattern_indices,
-            missing_value_pattern_counts,
         ) = np.unique(
             np.isfinite(vc.phenotypes.to_numpy()),
             axis=1,
             return_inverse=True,
-            return_counts=True,
         )
         (_, missing_value_pattern_count) = missing_value_patterns.shape
         vc.free()
@@ -101,14 +99,24 @@ class GwasCommand:
                     if i == j
                 ]
             )
+            if len(pattern_samples) == 0:
+                logger.warning(
+                    f"Phenotypes {pattern_phenotypes} are missing for all samples. "
+                    "Skipping"
+                )
+                continue
+            if len(pattern_phenotypes) == 0:
+                raise RuntimeError(
+                    f"No phenotypes in chunk {i}. This should not happen"
+                )
+                continue
 
             vc = self.get_variable_collection()
             vc.subset_phenotypes(pattern_phenotypes)
             vc.subset_samples(pattern_samples)
-
-            # Sanity check.
             if not vc.is_finite:
-                raise ValueError(
+                # Sanity check.
+                raise RuntimeError(
                     f"Missing values remain in chunk {i}. This should not happen"
                 )
 
@@ -135,9 +143,7 @@ class GwasCommand:
             variable_collections.append(vc)
 
         # Sort by number of phenotypes.
-        variable_collections = [
-            variable_collections[i] for i in np.argsort(-missing_value_pattern_counts)
-        ]
+        variable_collections.sort(key=lambda vc: -vc.phenotype_count)
         return variable_collections
 
     def __post_init__(self) -> None:
