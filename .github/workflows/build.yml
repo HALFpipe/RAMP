@@ -12,16 +12,9 @@ on:
 jobs:
   docker_build:
     runs-on: self-hosted
-
     outputs:
       tag: ${{ steps.build_tag.outputs.tag }}
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
@@ -31,12 +24,12 @@ jobs:
           username: hippocampusgirl
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Login to GitHub Container Registry
+      - name: Login to container registry
         uses: docker/login-action@v2
         with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ secrets.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
 
       - name: Set up build tag
         id: build_tag
@@ -60,65 +53,59 @@ jobs:
             sed -r 's/([A-Za-z0-9])([A-Z])([a-z0-9])/\1-\L\2\3/g' | \
             tr '[:upper:]' '[:lower:]' \
           )
-          echo "repo=${owner}/${name}" >> ${GITHUB_OUTPUT}
-          echo "tag=${owner}/${name}:${version}" >> ${GITHUB_OUTPUT}
+          echo "repo=${name}" >> ${GITHUB_OUTPUT}
+          echo "tag=${name}:${version}" >> ${GITHUB_OUTPUT}
 
-      - name: Docker build and push
-        uses: docker/build-push-action@v3
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build and push to container registry
+        uses: docker/build-push-action@v4
         with:
+          context: "."
+          file: "./Dockerfile"
           push: true
-          context: .
-          file: ./Dockerfile
           platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.repo }}:buildcache
+          cache-to: type=registry,ref=${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.repo }}:buildcache,mode=max
           tags: |
-            ${{ steps.build_tag.outputs.tag }}
-            ghcr.io/${{ steps.build_tag.outputs.tag }}
+            ${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.tag }}
           labels: |
             org.opencontainers.image.title=${{ github.event.repository.name }}
             org.opencontainers.image.url=${{ github.event.repository.html_url }}
             org.opencontainers.image.source=${{ github.event.repository.html_url }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.repository.updated_at}}
 
   singularity_build:
     runs-on: self-hosted
-
     needs:
       - docker_build
-
     strategy:
       matrix:
         singularity_version:
           - "latest"
           - "v2.6"
-
     container:
       image: quay.io/singularity/docker2singularity:${{ matrix.singularity_version }}
       options: --privileged
-      volumes:
-        - /usr:/host/usr
-        - /opt:/host/opt
-
     steps:
-      - name: Increase available disk space
+      - name: Patch docker2singularity
         shell: bash
         run: |
-          rm -rf /host/{usr/share/dotnet,usr/local/lib/android,opt/ghc}
           wget -qO /tmp/docker2singularity.patch https://gist.githubusercontent.com/HippocampusGirl/e2c2166cbdc71e11b75380d34448b3f3/raw
           patch /docker2singularity.sh /tmp/docker2singularity.patch
 
       - name: Convert to Singularity
         shell: bash
         env:
-          DOCKER_IMAGE_NAME: ${{ needs.docker_build.outputs.tag }}
+          docker_build_tag: ${{ needs.docker_build.outputs.tag }}
         run: |
-          SINGULARITY_IMAGE_NAME=$(echo -n ${DOCKER_IMAGE_NAME} | tr -c '[:alnum:]' '-')
+          singularity_image_name=$(echo -n ${docker_build_tag} | tr -c '[:alnum:]' '-')
           mkdir -p -v /output
           docker-entrypoint.sh /docker2singularity.sh \
-            --name ${SINGULARITY_IMAGE_NAME} \
-            ${DOCKER_IMAGE_NAME}
-          echo "image=${SINGULARITY_IMAGE_FILE}" >> ${GITHUB_OUTPUT}
+            --name ${singularity_image_name} \
+            ${{ secrets.REGISTRY }}/${docker_build_tag}
 
       - name: Upload to DigitalOcean
         shell: bash
@@ -139,6 +126,6 @@ jobs:
             --host-bucket="%(bucket)s.${DIGITALOCEAN_REGION}.digitaloceanspaces.com" \
             --dump-config \
             > ${HOME}/.s3cfg
-          SINGULARITY_IMAGE_FILE=$(find "/output" -type f | head -n1)
-          s3cmd put ${SINGULARITY_IMAGE_FILE} s3://${DIGITALOCEAN_SPACE_NAME}/singularity/
-          s3cmd setacl s3://${DIGITALOCEAN_SPACE_NAME}/singularity/$(basename ${SINGULARITY_IMAGE_FILE}) --acl-public
+          singularity_image_file=$(find "/output" -type f | head -n1)
+          s3cmd put ${singularity_image_file} s3://${DIGITALOCEAN_SPACE_NAME}/singularity/
+          s3cmd setacl s3://${DIGITALOCEAN_SPACE_NAME}/singularity/$(basename ${singularity_image_file}) --acl-public

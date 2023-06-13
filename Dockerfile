@@ -108,28 +108,25 @@ FROM conda as install
 COPY --from=merge /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
 RUN mamba install --yes --use-local \
     "python>=3.11" \
-    "bolt-lmm" \
-    "dosage-convertor" \
-    "gcta" \
-    "gwas" \
-    "qctool" \
-    "raremetal" \
-    "r-gmmat" \
-    "r-saige" \
-    "bcftools>=1.17" \
-    "bzip2" \
+        "bcftools>=1.17" \
     "gemma" \
+        "plink" \
+        "plink2" \
+        "r-skat" \
+        "tabix" \
+    "bzip2" \
     "lrzip" \
-    "matplotlib" \
     "p7zip>=15.09" \
-    "pandas" \
     "parallel" \
-    "plink" \
-    "plink2" \
-    "python-blosc2" \
-    "r-skat" \
-    "tabix" \
-    "threadpoolctl" && \
+        "bolt-lmm" \
+        "dosage-convertor" \
+        "gcta" \
+        "gwas" \
+        "python-blosc2" \
+        "qctool" \
+        "raremetal" \
+        "r-gmmat" \
+        "r-saige" && \
     sync && \
     rm -rf /usr/local/mambaforge/conda-bld && \
     mamba clean --yes --all --force-pkgs-dirs && \
@@ -137,12 +134,13 @@ RUN mamba install --yes --use-local \
     find /usr/local/mambaforge/ -follow -type f -name "*.a" -delete && \
     sync
 
+
 # Final
 # =====
 FROM base
 COPY --from=install /usr/local/mambaforge /usr/local/mambaforge
 
-# To create a local environment run:
+# To create a local development environment run:
 # mamba create --name "gwas" \
 #   "python>=3.11" "mamba" \
 #   "jupyterlab" "ipywidgets" \
