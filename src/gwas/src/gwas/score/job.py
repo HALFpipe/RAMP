@@ -154,6 +154,8 @@ class JobCollection:
     sw: SharedWorkspace = field(init=False)
 
     def __post_init__(self) -> None:
+        if len(self.variable_collections) == 0:
+            raise ValueError("No phenotypes to analyze")
         self.sw = next(chain.from_iterable(self.variable_collections)).phenotypes.sw
         # Create an array proxy.
         self.array_proxy = ArrayProxy(

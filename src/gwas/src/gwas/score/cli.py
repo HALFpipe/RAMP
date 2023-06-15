@@ -17,16 +17,16 @@ def main() -> None:
 
     argument_parser = ArgumentParser()
 
-    # Input files.
+    # Input files
     argument_parser.add_argument("--vcf", nargs="+", required=True)
     argument_parser.add_argument("--tri", nargs="+", required=False, default=list())
     argument_parser.add_argument("--phenotypes", nargs="+", required=True)
     argument_parser.add_argument("--covariates", nargs="+", required=True)
 
-    # Output files.
+    # Output files
     argument_parser.add_argument("--output-directory", required=True)
 
-    # Data processing options.
+    # Data processing options
     argument_parser.add_argument(
         "--kinship-minor-allele-frequency-cutoff",
         "--kin-maf",
@@ -80,7 +80,7 @@ def main() -> None:
         default="listwise_deletion",
     )
 
-    # Program options.
+    # Program options
     argument_parser.add_argument(
         "--log-level", choices=logging.getLevelNamesMapping().keys(), default="INFO"
     )
