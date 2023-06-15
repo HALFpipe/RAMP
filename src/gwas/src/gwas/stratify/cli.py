@@ -4,6 +4,7 @@ import re
 from argparse import Action, ArgumentError, ArgumentParser, Namespace
 from collections import defaultdict
 from itertools import product
+from pathlib import Path
 from typing import Any, Sequence
 
 import numpy as np
@@ -69,12 +70,22 @@ def main():
     )
 
     argument_parser = ArgumentParser()
+
+    # Input files
     argument_parser.add_argument("--mds", metavar="CSV", required=True)
     argument_parser.add_argument("--covariates", nargs="+")
     argument_parser.add_argument("--phenotypes", nargs="+")
 
-    argument_parser.add_argument("--minimum-sample-size", type=int, default=50)
+    # Output files
+    argument_parser.add_argument("--output-directory", required=True)
+    argument_parser.add_argument(
+        "--output-sample-ids",
+        required=False,
+        choices=["fid", "iid", "both_with_underscore"],
+        default="both_with_underscore",
+    )
 
+    # Split options
     group = argument_parser.add_mutually_exclusive_group()
     group.add_argument("--by-population", action="store_true", default=False)
     group.add_argument("--by-super-population", action="store_true", default=False)
@@ -96,7 +107,6 @@ def main():
         type=float,
         default=6,
     )
-
     argument_parser.add_argument(
         "--by",
         type=str,
@@ -109,9 +119,11 @@ def main():
         nargs=3,
         metavar=("NAME", "LOWER_BOUND", "UPPER_BOUND"),
     )
+    argument_parser.add_argument("--minimum-sample-size", type=int, default=50)
 
+    # Sample matching options
     argument_parser.add_argument(
-        "--rename-samples",
+        "--rename-samples-replace",
         type=str,
         nargs=2,
         action="append",
@@ -126,15 +138,15 @@ def main():
         metavar=("FROM_COLUMN", "TO_COLUMN", "CSV_PATH"),
         default=list(),
     )
-    argument_parser.add_argument("--normalize-case", action="store_true", default=False)
     argument_parser.add_argument(
-        "--normalize-special", action="store_true", default=False
+        "--match-case-insensitive",
+        action="store_true",
+        default=False,
     )
     argument_parser.add_argument(
-        "--output-sample-ids",
-        required=False,
-        choices=["fid", "iid", "merge_both_with_underscore"],
-        default="merge_both_with_underscore",
+        "--match-alphanumeric-only",
+        action="store_true",
+        default=False,
     )
 
     argument_parser.add_argument("--debug", action="store_true", default=False)
@@ -158,11 +170,11 @@ def run(arguments: Namespace) -> None:
 
     def rename_sample(sample: str) -> str:
         sample = sample.strip()
-        for old, new in arguments.rename_samples:
+        for old, new in arguments.rename_samples_replace:
             sample = re.sub(old, new, sample)
-        if arguments.normalize_case:
+        if arguments.match_case_insensitive:
             sample = sample.lower()
-        if arguments.normalize_special:
+        if arguments.match_alphanumeric_only:
             sample = "".join(filter(str.isalnum, sample))
         sample = sample_mapping.get(sample, sample)
         return sample
@@ -305,8 +317,8 @@ def run(arguments: Namespace) -> None:
     if len(removed_samples) > 0:
         logger.warning(
             f"The following {len(removed_samples)} samples "
-            "were not found in the MDS file: %s",
-            ", ".join(sorted(removed_samples)),
+            "were not found in the MDS file\n"
+            ", ".join(sorted(removed_samples))
         )
 
     # Classify the samples by groups.
@@ -365,6 +377,11 @@ def run(arguments: Namespace) -> None:
         )
 
         if len(class_samples) < arguments.minimum_sample_size:
+            logger.info(
+                f"Will not output {dict(zip(variables, value_tuple))} because it has "
+                f"only {len(class_samples)} samples, which is less than "
+                f"{arguments.minimum_sample_size}"
+            )
             continue
 
         # Remove samples not in the class.
@@ -380,9 +397,13 @@ def run(arguments: Namespace) -> None:
 
         phenotype_names_new.extend(f"{prefix}_{name}" for name in phenotype_names_base)
 
+    output_directory = Path.cwd()
+    if arguments.output_directory is not None:
+        output_directory = Path(arguments.output_directory)
+
     phenotype_array_new = np.hstack(phenotype_arrays)
     write_table(
-        "phenotypes",
+        str(output_directory / "stratified_phenotypes"),
         phenotype_samples,
         phenotype_names_new,
         phenotype_array_new,
@@ -390,7 +411,7 @@ def run(arguments: Namespace) -> None:
     )
 
     write_table(
-        "covariates",
+        str(output_directory / "stratified_covariates"),
         covariate_samples,
         covariate_names,
         covariate_array,
