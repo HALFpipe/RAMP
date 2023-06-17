@@ -3,6 +3,7 @@ from argparse import Namespace
 from collections import defaultdict
 from itertools import product
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -24,7 +25,8 @@ def write_table(
 ) -> None:
     index = [s.to_str(method=output_sample_ids) for s in samples]
     data_frame = pd.DataFrame(array, index=index, columns=columns)
-    data_frame.to_csv(f"{prefix}.tsv", sep="\t", index=True)
+    csv_kwargs: dict[str, Any] = dict(sep="\t", index=True, na_rep="n/a")
+    data_frame.to_csv(f"{prefix}.tsv", **csv_kwargs)
 
 
 def run(arguments: Namespace) -> None:
