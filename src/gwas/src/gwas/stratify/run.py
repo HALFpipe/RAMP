@@ -58,10 +58,10 @@ def run(arguments: Namespace) -> None:
     )
 
     if len(sample_renamer.removed_samples) > 0:
+        removed_samples_str = ", ".join(sorted(sample_renamer.removed_samples))
         logger.warning(
             f"The following {len(sample_renamer.removed_samples)} samples "
-            "were not found in the MDS file\n"
-            ", ".join(sorted(sample_renamer.removed_samples))
+            f"were not found in the MDS file: {removed_samples_str}",
         )
 
     if arguments.add_components_to_covariates:
@@ -145,10 +145,16 @@ def finalize_sample_classes(
         sample_classes[k] = dict(v)
 
     # Remove zero-length classes.
-    for _, class_dict in sample_classes.items():
+    for by, class_dict in sample_classes.items():
         keys = list(class_dict.keys())
         for k in keys:
-            if len(class_dict[k]) == 0:
+            if len(class_dict[k]) < arguments.minimum_sample_size:
+                class_info = {by: k}
+                logger.info(
+                    f"Will not output {class_info} because it has "
+                    f"only {len(class_dict[k])} samples, which is less than "
+                    f"{arguments.minimum_sample_size}"
+                )
                 del class_dict[k]
 
     # Create mixed sample classes.
@@ -157,6 +163,9 @@ def finalize_sample_classes(
             continue
         mixed = set.union(*class_dict.values())
         class_dict["mixed"] = mixed
+    # import pdb
+
+    # pdb.set_trace()
 
     # Create non-main ancestry group.
     sample_populations = sample_classes["population"]
@@ -193,13 +202,18 @@ def apply_classes_to_phenotypes(
             )
         )
 
+        class_info = dict(zip(variables, value_tuple))
         if len(class_samples) < arguments.minimum_sample_size:
             logger.info(
-                f"Will not output {dict(zip(variables, value_tuple))} because it has "
+                f"Will not output {class_info} because it has "
                 f"only {len(class_samples)} samples, which is less than "
                 f"{arguments.minimum_sample_size}"
             )
             continue
+        else:
+            logger.info(
+                f"Will output group {class_info} with " f"{len(class_samples)} samples"
+            )
 
         # Remove samples not in the class.
         class_phenotype_array = phenotype_array.copy()

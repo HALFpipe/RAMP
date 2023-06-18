@@ -3,8 +3,8 @@
 from itertools import product
 
 import numpy as np
-import scipy
 from numpy import typing as npt
+from scipy.stats import multivariate_normal
 
 from .base import SampleID
 
@@ -150,7 +150,7 @@ def plot_populations(
             c = reference_components[p][:, [c1, c2]]
             mean = np.mean(c, axis=0)
             covariance = np.cov(c.transpose())
-            marginal_multivariate_normal = scipy.stats.multivariate_normal(
+            marginal_multivariate_normal = multivariate_normal(
                 mean=mean, cov=covariance
             )
             z[p] = marginal_multivariate_normal.logpdf(coordinates)

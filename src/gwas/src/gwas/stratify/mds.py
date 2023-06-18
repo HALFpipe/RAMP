@@ -54,6 +54,11 @@ def classify_samples_by_mds(
                     continue
                 sample_populations[q].update(sample_populations.pop(p))
 
+    # Also delete super populations
+    for p in list(sample_populations.keys()):
+        if p in arguments.ignore_population:
+            del sample_populations[p]
+
     if len(sample_populations) > 0:
         # Plot the samples.
         plot_populations(
