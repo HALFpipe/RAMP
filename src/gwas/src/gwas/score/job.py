@@ -17,9 +17,9 @@ from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..null_model.base import NullModelCollection
 from ..pheno import VariableCollection, VariableSummary
-from ..score.calc import calc_score
 from ..utils import parse_obj_as
 from ..vcf.base import VCFFile
+from .run import calc_score
 
 
 @dataclass
@@ -189,7 +189,7 @@ class JobCollection:
         with CompressedTextWriter(
             self.file_path.with_suffix(".yaml.gz")
         ) as file_handle:
-            yaml.dump(value, file_handle, sort_keys=False)
+            yaml.dump(value, file_handle, sort_keys=False, width=np.inf)
 
     def run(self) -> None:
         sw = self.sw
