@@ -1,14 +1,25 @@
 # -*- coding: utf-8 -*-
 import pickle
 from contextlib import AbstractContextManager
+from multiprocessing import cpu_count
 from pathlib import Path
 from subprocess import DEVNULL, PIPE, Popen
-from typing import IO, Any
+from types import TracebackType
+from typing import IO, Any, Mapping, Type
 
 from ..log import logger
 from ..utils import unwrap_which
 
 pipe_max_size: int = int(Path("/proc/sys/fs/pipe-max-size").read_text())
+
+decompress_commands: Mapping[str, list[str]] = {
+    ".zst": ["zstd", "--long=31", "-c", "-d"],
+    ".lrz": ["lrzcat", "--quiet"],
+    ".gz": ["bgzip", "-c", "-d"],
+    ".xz": ["xz", "--decompress", "--stdout"],
+    ".bz2": ["bzip2", "--decompress", "--stdout"],
+    ".lz4": ["lz4", "-c", "-d"],
+}
 
 
 class CompressedReader(AbstractContextManager):
@@ -22,17 +33,18 @@ class CompressedReader(AbstractContextManager):
         self.file_handle: IO[str] | None = None
 
     def __enter__(self) -> IO:
-        if self.file_path.suffix in {".vcf", ".txt"}:
+        return self.open()
+
+    def open(self) -> IO:
+        suffix = self.file_path.suffix
+        if suffix in {".vcf", ".txt"}:
+            # File is not compressed
             self.file_handle = self.file_path.open(mode="rt")
             return self.file_handle
+        if suffix not in decompress_commands:
+            raise ValueError(f'Compression for file suffix "{suffix}" is not supported')
 
-        decompress_command: list[str] = {
-            ".zst": ["zstd", "--long=31", "-c", "-d"],
-            ".lrz": ["lrzcat", "--quiet"],
-            ".gz": ["bgzip", "-c", "-d"],
-            ".xz": ["xzcat"],
-            ".bz2": ["bzip2", "-c", "-d"],
-        }[self.file_path.suffix]
+        decompress_command: list[str] = decompress_commands[suffix]
 
         executable = unwrap_which(decompress_command[0])
         decompress_command[0] = executable
@@ -54,7 +66,20 @@ class CompressedReader(AbstractContextManager):
         self.file_handle = self.process_handle.stdout
         return self.file_handle
 
-    def __exit__(self, exc_type, value, traceback) -> None:
+    def __exit__(
+        self,
+        exc_type: Type[BaseException] | None,
+        value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close(exc_type, value, traceback)
+
+    def close(
+        self,
+        exc_type: Type[BaseException] | None = None,
+        value: BaseException | None = None,
+        traceback: TracebackType | None = None,
+    ) -> None:
         if self.process_handle is not None:
             self.process_handle.__exit__(exc_type, value, traceback)
         elif self.file_handle is not None:
@@ -77,28 +102,44 @@ class CompressedTextReader(CompressedReader):
 
 
 class CompressedWriter(AbstractContextManager):
-    def __init__(self, file_path: Path | str, is_text: bool = True) -> None:
+    def __init__(
+        self,
+        file_path: Path | str,
+        is_text: bool = True,
+        num_threads: int = cpu_count(),
+    ) -> None:
         self.file_path: Path = Path(file_path)
         self.is_text = is_text
+        self.num_threads = num_threads
 
         self.input_file_handle: IO | None = None
         self.output_file_handle: IO[bytes] | None = None
         self.process_handle: Popen | None = None
 
     def __enter__(self) -> IO:
-        if self.file_path.suffix in {".vcf", ".txt"}:
+        return self.open()
+
+    def open(self) -> IO:
+        suffix = self.file_path.suffix
+        if suffix in {".vcf", ".txt"}:
             self.input_file_handle = self.file_path.open(mode="wt")
             return self.input_file_handle
         else:
             self.output_file_handle = self.file_path.open(mode="wb")
+        if suffix not in decompress_commands:
+            raise ValueError(
+                f'Decompression for file suffix "{suffix}" is not supported'
+            )
 
-        compress_command: list[str] = {
-            ".zst": ["zstd", "-B0", "-T0", "-11"],
+        compress_commands: Mapping[str, list[str]] = {
+            ".zst": ["zstd", "-B0", f"-T{self.num_threads:d}", "-11"],
             ".lrz": ["lrzip"],
-            ".gz": ["bgzip"],
+            ".gz": ["bgzip", "--threads", f"{self.num_threads:d}"],
             ".xz": ["xz"],
             ".bz2": ["bzip2", "-c"],
-        }[self.file_path.suffix]
+            ".lz4": ["lz4"],
+        }
+        compress_command: list[str] = compress_commands[self.file_path.suffix]
 
         executable = unwrap_which(compress_command[0])
         compress_command[0] = executable
@@ -120,7 +161,20 @@ class CompressedWriter(AbstractContextManager):
         self.input_file_handle = self.process_handle.stdin
         return self.input_file_handle
 
-    def __exit__(self, exc_type, value, traceback) -> None:
+    def __exit__(
+        self,
+        exc_type: Type[BaseException] | None,
+        value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close(exc_type, value, traceback)
+
+    def close(
+        self,
+        exc_type: Type[BaseException] | None = None,
+        value: BaseException | None = None,
+        traceback: TracebackType | None = None,
+    ) -> None:
         if self.process_handle is not None:
             self.process_handle.__exit__(exc_type, value, traceback)
         elif self.input_file_handle is not None:
@@ -131,16 +185,16 @@ class CompressedWriter(AbstractContextManager):
 
 
 class CompressedBytesWriter(CompressedWriter):
-    def __init__(self, file_path: Path | str) -> None:
-        super().__init__(file_path, is_text=False)
+    def __init__(self, file_path: Path | str, **kwargs) -> None:
+        super().__init__(file_path, is_text=False, **kwargs)
 
     def __enter__(self) -> IO[bytes]:
         return super().__enter__()
 
 
 class CompressedTextWriter(CompressedWriter):
-    def __init__(self, file_path: Path | str) -> None:
-        super().__init__(file_path, is_text=True)
+    def __init__(self, file_path: Path | str, **kwargs) -> None:
+        super().__init__(file_path, is_text=True, **kwargs)
 
 
 def load_from_cache(cache_path: Path, key: str) -> Any:
@@ -156,5 +210,5 @@ def load_from_cache(cache_path: Path, key: str) -> Any:
 
 
 def save_to_cache(cache_path: Path, key: str, value: Any) -> None:
-    with CompressedBytesWriter(cache_path / f"{key}.zst") as file_handle:
+    with CompressedBytesWriter(cache_path / f"{key}.pickle.zst") as file_handle:
         pickle.dump(value, file_handle)

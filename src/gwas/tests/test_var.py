@@ -6,7 +6,7 @@ import pytest
 import scipy
 import torch
 
-from gwas.ml import (
+from gwas.null_model.ml import (
     MaximumLikelihood,
     ProfileMaximumLikelihood,
     RestrictedMaximumLikelihood,

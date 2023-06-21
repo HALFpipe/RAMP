@@ -13,7 +13,7 @@ from gwas.compression.pipe import (
 )
 
 
-@pytest.mark.parametrize("compression", ["zst", "xz", "gz", "lrz", "bz2"])
+@pytest.mark.parametrize("compression", ["zst", "xz", "gz", "lrz", "bz2", "lz4"])
 def test_compressed_text(tmp_path: Path, compression: str):
     x: str = "test" * 1000
 
@@ -24,7 +24,7 @@ def test_compressed_text(tmp_path: Path, compression: str):
         assert file_handle.read().strip() == x
 
 
-@pytest.mark.parametrize("compression", ["zst", "xz", "gz", "lrz", "bz2"])
+@pytest.mark.parametrize("compression", ["zst", "xz", "gz", "lrz", "bz2", "lz4"])
 def test_compressed_bytes(tmp_path: Path, compression: str):
     x = np.random.rand(1000, 1000)
 
@@ -33,15 +33,3 @@ def test_compressed_bytes(tmp_path: Path, compression: str):
         pickle.dump(x, file_handle)
     with CompressedBytesReader(test_path) as file_handle:
         assert np.allclose(pickle.load(file_handle), x)
-
-
-# def test_array_proxy(tmp_path: Path):
-#     array_proxy = ArrayProxy(
-#         file_path=tmp_path / "test.b2array",
-#         shape=(1000, 1000, 10),
-#         dtype=np.float64,
-#     )
-
-#     import pdb
-
-#     pdb.set_trace()

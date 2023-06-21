@@ -51,6 +51,11 @@ class ScorefileHeader:
         return len(self.trait_summaries)
 
 
+def parse_delim(value: str) -> tuple[str, npt.NDArray[np.float64]]:
+    name, values = value.split("\t", maxsplit=1)
+    return name, np.fromstring(values, sep="\t")
+
+
 def write_delim(file_handle: IO[str], *values: str):
     file_handle.write("##" + "\t".join(values) + "\n")
 
@@ -96,14 +101,81 @@ class Scorefile:
         float,
     )
 
+    @classmethod
+    def parse_header_line(
+        cls,
+        line: str,
+        header_dict: dict[str, Any],
+        summaries: OrderedDict[str, VariableSummary],
+    ) -> None:
+        value = line.removeprefix("##")
+        if "=" in value:
+            key, value = value.split("=", maxsplit=1)
+            key = underscore(key)
+
+            value = value.strip()
+            if "," in value:
+                header_dict[key] = value.split(",")
+            elif "\t" in value:
+                header_dict[key] = value.split("\t")
+            else:
+                if key in {"heritability"}:
+                    header_dict[key] = float(value)
+                else:
+                    header_dict[key] = value
+        elif value.startswith(" - "):
+            value = value.removeprefix(" - ")
+            if value.startswith("NullModelEstimates"):
+                return
+            if value.startswith("Name\tBetaHat"):
+                return
+            name, array = parse_delim(value)
+            header_dict["null_model_estimates"].append(
+                NullModelEstimate(
+                    name,
+                    beta_hat=array[::2],
+                    se_beta_hat=array[1::2],
+                )
+            )
+        elif "\t" in value:
+            cls.parse_header_line_delim(value, header_dict, summaries)
+
     @staticmethod
+    def parse_header_line_delim(
+        value: str,
+        header_dict: dict[str, Any],
+        summaries: OrderedDict[str, VariableSummary],
+    ) -> None:
+        # Set active summaries list.
+        if value.startswith("CovariateSummaries"):
+            summaries = header_dict["covariate_summaries"]
+            return
+        elif value.startswith("TraitSummaries"):
+            summaries = header_dict["trait_summaries"]
+            return
+
+        name, array = parse_delim(value)
+        if name == "Sigma_g2_Hat":
+            header_dict["genetic_variance"] = array
+            return
+        elif name == "Sigma_e2_Hat":
+            header_dict["error_variance"] = array
+            return
+        elif name == "Heritability":
+            header_dict["heritability"] = array
+            return
+
+        summary = VariableSummary(*array)
+        if name == "AnalyzedTrait":
+            header_dict["analyzed_trait"] = summary
+        else:
+            summaries[name] = summary
+
+    @classmethod
     def read_header(
+        cls,
         file_path: Path | str,
     ):
-        def parse_delim(value: str) -> tuple[str, npt.NDArray[np.float64]]:
-            name, values = value.split("\t", maxsplit=1)
-            return name, np.fromstring(values, sep="\t")
-
         header_dict: dict[str, Any] = dict(
             null_model_estimates=list(),
             covariate_summaries=list(),
@@ -114,61 +186,7 @@ class Scorefile:
         with CompressedTextReader(file_path) as file:
             for line in file:
                 if line.startswith("##"):
-                    value = line.removeprefix("##")
-                    if "=" in value:
-                        key, value = value.split("=", maxsplit=1)
-                        key = underscore(key)
-
-                        value = value.strip()
-                        if "," in value:
-                            header_dict[key] = value.split(",")
-                        elif "\t" in value:
-                            header_dict[key] = value.split("\t")
-                        else:
-                            if key in {"heritability"}:
-                                header_dict[key] = float(value)
-                            else:
-                                header_dict[key] = value
-                    elif value.startswith(" - "):
-                        value = value.removeprefix(" - ")
-                        if value.startswith("NullModelEstimates"):
-                            continue
-                        if value.startswith("Name\tBetaHat"):
-                            continue
-                        name, array = parse_delim(value)
-                        header_dict["null_model_estimates"].append(
-                            NullModelEstimate(
-                                name,
-                                beta_hat=array[::2],
-                                se_beta_hat=array[1::2],
-                            )
-                        )
-                    elif "\t" in value:
-                        # Set active summaries list.
-                        if value.startswith("CovariateSummaries"):
-                            summaries = header_dict["covariate_summaries"]
-                            continue
-                        elif value.startswith("TraitSummaries"):
-                            summaries = header_dict["trait_summaries"]
-                            continue
-
-                        name, array = parse_delim(value)
-                        if name == "Sigma_g2_Hat":
-                            header_dict["genetic_variance"] = array
-                            continue
-                        elif name == "Sigma_e2_Hat":
-                            header_dict["error_variance"] = array
-                            continue
-                        elif name == "Heritability":
-                            header_dict["heritability"] = array
-                            continue
-
-                        summary = VariableSummary(*array)
-                        if name == "AnalyzedTrait":
-                            header_dict["analyzed_trait"] = summary
-                        else:
-                            summaries[name] = summary
-
+                    cls.parse_header_line(line, header_dict, summaries)
                     continue
                 if line.startswith("#"):
                     continue
@@ -432,7 +450,7 @@ class Scorefile:
     ):
         alt_effsize = u_stat / v_stat
         chi2 = np.square(u_stat) / v_stat
-        pvalue = scipy.stats.chi2.sf(chi2, 1)
+        pvalue = scipy.stats.chi2.sf(chi2, 1)  # type: ignore
 
         stats = (
             u_stat,

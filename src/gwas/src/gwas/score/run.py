@@ -4,7 +4,7 @@ from queue import Empty
 
 import numpy as np
 
-from ..compression.arr import ArrayProxy
+from ..compression.arr.base import FileArray
 from ..eig import Eigendecomposition, EigendecompositionCollection
 from ..log import logger
 from ..mem.arr import SharedArray
@@ -17,28 +17,10 @@ def calc_score(
     eigendecompositions: list[Eigendecomposition],
     iv_arrays: list[SharedArray],
     ivsr_arrays: list[SharedArray],
-    array_proxy: ArrayProxy,
+    array_proxy: FileArray,
     phenotype_offset: int = 0,
     variant_offset: int = 0,
 ) -> None:
-    """Calculate the Chen and Abecasis (2007) score statistic for phenotypes with no
-    missing data.
-
-    Args:
-        vcf_file (VCFFile): An object containing the VCF-file header information and
-            which samples to read from it.
-        vc (VariableCollection): An object containing the phenotype and covariate data.
-        nm (NullModelCollection): An object containing the estimated variance
-            components.
-        eig (Eigendecomposition): An object containing the eigenvectors and eigenvalues
-            for the leave-one-chromosome-out kinship matrices.
-        sw (SharedWorkspace): The shared workspace from where we can allocate arrays in
-            shared memory.
-        output_directory (Path): The path to use for the output file.
-
-    Raises:
-        Exception: Any exception that is raised by the worker processes.
-    """
     # Merge the eigenvector arrays so that we can use a single reader process.
     job_count = len(eigendecompositions)
     ec = EigendecompositionCollection.from_eigendecompositions(

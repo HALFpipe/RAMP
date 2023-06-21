@@ -6,7 +6,7 @@ import blosc2
 import numpy as np
 import pytest
 
-from gwas.compression.arr import ArrayProxy, compression_methods
+from gwas.compression.arr.base import FileArray, compression_methods
 from gwas.log import logger
 from gwas.rmw import Scorefile
 
@@ -58,10 +58,11 @@ def test_compression(
         file_path = tmp_path / f"score.{name}.h5"
 
         start = time()
-        array_writer = ArrayProxy(
+        array_writer = FileArray.create(
             file_path,
             scores.shape,
             np.float64,
+            compression_method,
         )
         array_writer[:, :] = scores
         end = time()

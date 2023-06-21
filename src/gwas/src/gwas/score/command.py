@@ -8,7 +8,7 @@ from typing import Mapping, Sequence
 import numpy as np
 from tqdm.auto import tqdm
 
-from ..compression.arr import compression_methods
+from ..compression.arr.base import compression_methods
 from ..eig import Eigendecomposition
 from ..log import logger
 from ..mem.arr import SharedArray

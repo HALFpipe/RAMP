@@ -6,10 +6,11 @@ from pathlib import Path
 from typing import Callable, Literal, Self
 
 import numpy as np
+import pandas as pd
 import yaml
 from tqdm import tqdm
 
-from ..compression.arr import ArrayProxy, CompressionMethod
+from ..compression.arr.base import CompressionMethod, FileArray
 from ..compression.pipe import CompressedTextReader, CompressedTextWriter
 from ..eig import Eigendecomposition
 from ..log import logger
@@ -96,11 +97,11 @@ class JobSummary:
 
 @dataclass
 class SummaryCollection:
-    chunks: list[list[JobSummary]]
+    chunks: dict[str, list[JobSummary]]
 
     def validate(self, variable_collections: list[list[VariableCollection]]) -> None:
         for job_summary, vc in zip(
-            chain.from_iterable(self.chunks),
+            chain.from_iterable(self.chunks.values()),
             chain.from_iterable(variable_collections),
         ):
             job_phenotype_names = list(job_summary.phenotypes.keys())
@@ -125,14 +126,17 @@ class SummaryCollection:
         return instance
 
     @classmethod
-    def from_variable_collections(
-        cls, variable_collections: list[list[VariableCollection]]
+    def from_variable_collection_chunks(
+        cls, variable_collection_chunks: list[list[VariableCollection]]
     ) -> Self:
         return cls(
-            [
-                [JobSummary.from_variable_collection(vc) for vc in vcs]
-                for vcs in variable_collections
-            ]
+            {
+                f"chunk-{i + 1:d}": [
+                    JobSummary.from_variable_collection(vc)
+                    for vc in variable_collections
+                ]
+                for i, variable_collections in enumerate(variable_collection_chunks)
+            }
         )
 
 
@@ -147,30 +151,41 @@ class JobCollection:
     compression_method: CompressionMethod
     num_threads: int
 
-    variable_collections: list[list[VariableCollection]]
+    variable_collection_chunks: list[list[VariableCollection]]
     summary_collection: SummaryCollection = field(init=False)
-    array_proxy: ArrayProxy = field(init=False)
+    array_proxy: FileArray = field(init=False)
 
     sw: SharedWorkspace = field(init=False)
 
     def __post_init__(self) -> None:
-        if len(self.variable_collections) == 0:
+        if len(self.variable_collection_chunks) == 0:
             raise ValueError("No phenotypes to analyze")
-        self.sw = next(chain.from_iterable(self.variable_collections)).phenotypes.sw
+        self.sw = next(
+            chain.from_iterable(self.variable_collection_chunks)
+        ).phenotypes.sw
         # Create an array proxy.
-        self.array_proxy = ArrayProxy(
+        self.array_proxy = FileArray.create(
             self.file_path.with_suffix(self.compression_method.suffix),
-            (self.vcf_file.variant_count, self.phenotype_count, 2),
+            (self.vcf_file.variant_count, self.phenotype_count * 2),
             np.float64,
-            self.compression_method,
-            self.num_threads,
+            compression_method=self.compression_method,
+            num_threads=self.num_threads,
         )
+        # Set column names
+        phenotype_names = [
+            f"{phenotype_name}_stat-{stat}"
+            for variable_collections in self.variable_collection_chunks
+            for vc in variable_collections
+            for phenotype_name in vc.phenotype_names
+            for stat in ["u", "v"]
+        ]
+        self.array_proxy.set_axis_metadata(1, pd.Series(phenotype_names))
         # Try to load an existing summary collection.
         chunks_path = self.file_path.with_suffix(".yaml.gz")
         if chunks_path.is_file():
             try:
                 summary_collection = SummaryCollection.from_file(chunks_path)
-                summary_collection.validate(self.variable_collections)
+                summary_collection.validate(self.variable_collection_chunks)
                 self.summary_collection = summary_collection
                 return
             except ValueError as e:
@@ -179,34 +194,36 @@ class JobCollection:
                     exc_info=e,
                 )
         # Create a new summary collection.
-        self.summary_collection = SummaryCollection.from_variable_collections(
-            self.variable_collections
+        self.summary_collection = SummaryCollection.from_variable_collection_chunks(
+            self.variable_collection_chunks
         )
         self.dump()
 
     def dump(self) -> None:
         value = asdict(self.summary_collection)
         with CompressedTextWriter(
-            self.file_path.with_suffix(".yaml.gz")
+            self.file_path.with_suffix(".metadata.yaml.gz")
         ) as file_handle:
             yaml.dump(value, file_handle, sort_keys=False, width=np.inf)
 
     def run(self) -> None:
         sw = self.sw
-        for vcs, summaries in zip(
-            self.variable_collections, self.summary_collection.chunks
+        for variable_collections, summaries in zip(
+            self.variable_collection_chunks, self.summary_collection.chunks.values()
         ):
             eigendecompositions = [
                 self.get_eigendecomposition(self.chromosome, vc)
                 for vc in tqdm(
-                    vcs,
+                    variable_collections,
                     unit="eigendecompositions",
                     desc="decomposing kinship matrices",
                 )
             ]
             iv_arrays: list[SharedArray] = list()  # Inverse variance
             ivsr_arrays: list[SharedArray] = list()  # Inverse variance scaled residuals
-            for eig, vc, summary in zip(eigendecompositions, vcs, summaries):
+            for eig, vc, summary in zip(
+                eigendecompositions, variable_collections, summaries
+            ):
                 nm = NullModelCollection.from_eig(
                     eig,
                     vc,
@@ -244,6 +261,9 @@ class JobCollection:
                 ivsr_arrays,
                 self.array_proxy,
             )
+            for summary in summaries:
+                summary.status = "score_complete"
+            self.dump()
 
     @property
     def chromosome(self) -> int | str:
@@ -252,9 +272,10 @@ class JobCollection:
     @property
     def phenotype_count(self) -> int:
         return sum(
-            vc.phenotype_count for vc in chain.from_iterable(self.variable_collections)
+            vc.phenotype_count
+            for vc in chain.from_iterable(self.variable_collection_chunks)
         )
 
     @property
     def file_path(self) -> Path:
-        return self.output_directory / f"chr{self.chromosome}"
+        return self.output_directory / f"chr{self.chromosome}.score"

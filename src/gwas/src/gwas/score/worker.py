@@ -9,7 +9,7 @@ from multiprocessing.synchronize import Event
 
 import numpy as np
 
-from ..compression.arr import ArrayProxy
+from ..compression.arr.base import FileArray
 from ..log import logger
 from ..mem.arr import SharedArray
 from ..utils import Action, Process, SharedState
@@ -211,7 +211,7 @@ class ScoreWriter(Worker):
         self,
         t: TaskSyncCollection,
         stat_array: SharedArray,
-        array_proxy: ArrayProxy,
+        array_proxy: FileArray,
         phenotype_offset: int,
         variant_offset: int,
         *args,

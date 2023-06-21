@@ -1,88 +1,40 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import annotations
-
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from math import prod
 from multiprocessing import cpu_count
-from pathlib import Path
-from typing import Any, ClassVar, Generic, Mapping, Sequence, Type, TypeVar
+from types import TracebackType
+from typing import Any, Self, Sequence, Type
 
 import blosc2
 import numpy as np
+from numpy import typing as npt
 
-from ..log import logger
-
-
-@dataclass(frozen=True, kw_only=True)
-class CompressionMethod:
-    suffix: ClassVar[str] = ""
-
-
-@dataclass(frozen=True, kw_only=True)
-class Blosc2CompressionMethod(CompressionMethod):
-    codec: blosc2.Codec
-    clevel: int
-    filters: tuple[blosc2.Filter, ...] = field(default_factory=tuple)
-    use_dict: bool = False
-
-    suffix: ClassVar[str] = ".b2array"
-
-
-compression_methods: Mapping[str, CompressionMethod] = dict(
-    blosc2_zstd=Blosc2CompressionMethod(
-        codec=blosc2.Codec.ZSTD,
-        clevel=9,
-    ),
-    blosc2_zstd_shuffle=Blosc2CompressionMethod(
-        codec=blosc2.Codec.ZSTD,
-        clevel=9,
-        filters=(blosc2.Filter.SHUFFLE,),
-    ),
-    blosc2_zstd_bitshuffle=Blosc2CompressionMethod(
-        codec=blosc2.Codec.ZSTD,
-        clevel=9,
-        filters=(blosc2.Filter.BITSHUFFLE,),
-    ),
-    blosc2_zstd_bitshuffle_use_dict=Blosc2CompressionMethod(
-        codec=blosc2.Codec.ZSTD,
-        clevel=9,
-        filters=(blosc2.Filter.BITSHUFFLE,),
-        use_dict=True,
-    ),
-    blosc2_zstd_bytedelta=Blosc2CompressionMethod(
-        codec=blosc2.Codec.ZSTD,
-        clevel=9,
-        filters=(
-            blosc2.Filter.SHUFFLE,
-            blosc2.Filter.BYTEDELTA,
-        ),
-    ),
-)
-
-
-T = TypeVar("T", bound=np.generic)
+from ...log import logger
+from .base import Blosc2CompressionMethod, FileArray, T
 
 
 @dataclass
-class ArrayProxy(Generic[T]):
-    file_path: Path
-
-    shape: tuple[int, ...]
-    dtype: Type[T]
-
-    compression_method: CompressionMethod = compression_methods["blosc2_zstd_bytedelta"]
-    num_threads: int = cpu_count()
-
+class Blosc2FileArray(FileArray[T]):
     chunk_shape: tuple[int, ...] | None = None
 
-    def __setitem__(self, key: tuple[slice, ...], value: np.ndarray) -> None:
+    def __setitem__(self, key: tuple[slice, ...], value: npt.NDArray[T]) -> None:
         if isinstance(self.compression_method, Blosc2CompressionMethod):
             array = self.get_blosc2_ndarray()
+            array[key] = value
         else:
-            raise ValueError
+            raise NotImplementedError
 
-        array[key] = value
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Type[BaseException] | None,
+        value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        pass
 
     def reduce_shape(
         self,
@@ -125,7 +77,13 @@ class ArrayProxy(Generic[T]):
 
         blosc2.set_nthreads(cpu_count())
 
-        if not self.file_path.is_file():
+        file_path = self.file_path
+        file_path = (
+            file_path.parent / f"{file_path.name}{self.compression_method.suffix}"
+        )
+        self.file_paths.add(file_path)
+
+        if not file_path.is_file():
             kwargs: dict[str, Any] = dict()
             # Chunk size of 512 megabytes
             max_chunk_size = 2**29
@@ -141,7 +99,7 @@ class ArrayProxy(Generic[T]):
             logger.debug(f"Creating Blosc2 array with kwargs {kwargs}")
             array = blosc2.empty(
                 shape=self.shape,
-                urlpath=str(self.file_path),
+                urlpath=str(file_path),
                 dtype=self.dtype,  # type: ignore
                 cparams=dict(
                     codec=self.compression_method.codec,
@@ -157,7 +115,7 @@ class ArrayProxy(Generic[T]):
             )
         else:
             array = blosc2.open(
-                urlpath=str(self.file_path),
+                urlpath=str(file_path),
                 cparams=dict(
                     nthreads=self.num_threads,
                 ),
@@ -177,9 +135,3 @@ class ArrayProxy(Generic[T]):
             )
 
         return array
-
-    def __post_init__(self) -> None:
-        if not str(self.file_path).endswith(self.compression_method.suffix):
-            raise ValueError(
-                f"File path must have `{self.compression_method.suffix}` suffix"
-            )

@@ -10,7 +10,7 @@ import numpy as np
 def main() -> None:
     mp.set_start_method("spawn")
 
-    from gwas.compression.arr import compression_methods
+    from gwas.compression.arr.base import compression_methods
     from gwas.log import logger, setup_logging
     from gwas.mem.wkspace import SharedWorkspace
     from gwas.null_model.base import NullModelCollection
