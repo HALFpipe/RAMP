@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from functools import partial
 from multiprocessing import cpu_count
 from pathlib import Path
 from typing import ClassVar, NamedTuple, Self
@@ -271,24 +272,31 @@ class VCFFile(CompressedTextReader):
         return data_frame
 
 
+def load_vcf(cache_path: Path, vcf_path: Path) -> VCFFile:
+    stem = vcf_path.name.split(".")[0]
+    cache_key = f"{stem}.metadata"
+    vcf_file: VCFFile | None = load_from_cache(cache_path, cache_key)
+    if vcf_file is None:
+        vcf_file = VCFFile.from_path(vcf_path)
+        save_to_cache(cache_path, cache_key, vcf_file)
+    else:
+        logger.debug(f'Cached VCF file metadata for "{cache_key}"')
+    return vcf_file
+
+
 def calc_vcf(
     vcf_paths: list[Path],
     cache_path: Path,
 ) -> list[VCFFile]:
-    vcf_files: list[VCFFile] | None = load_from_cache(cache_path, "vcf_files")
-    if vcf_files is None:
-        processes = cpu_count() // 3
-        processes = min(processes, len(vcf_paths))
-        with Pool(processes=processes, maxtasksperchild=1) as pool:
-            vcf_files = list(
-                tqdm(
-                    pool.imap(VCFFile.from_path, vcf_paths),
-                    total=len(vcf_paths),
-                    unit="files",
-                    desc="loading vcf metadata",
-                )
+    processes = cpu_count() // 3
+    processes = min(processes, len(vcf_paths))
+    with Pool(processes=processes, maxtasksperchild=1) as pool:
+        vcf_files = list(
+            tqdm(
+                pool.imap(partial(load_vcf, cache_path), vcf_paths),
+                total=len(vcf_paths),
+                unit="files",
+                desc="loading vcf metadata",
             )
-        save_to_cache(cache_path, "vcf_files", vcf_files)
-    else:
-        logger.debug("Cached VCF file metadata")
+        )
     return vcf_files
