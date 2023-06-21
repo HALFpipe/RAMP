@@ -274,7 +274,7 @@ class VCFFile(CompressedTextReader):
 
 def load_vcf(cache_path: Path, vcf_path: Path) -> VCFFile:
     stem = vcf_path.name.split(".")[0]
-    cache_key = f"{stem}.metadata"
+    cache_key = f"{stem}.vcf-metadata"
     vcf_file: VCFFile | None = load_from_cache(cache_path, cache_key)
     if vcf_file is None:
         vcf_file = VCFFile.from_path(vcf_path)

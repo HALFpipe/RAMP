@@ -17,7 +17,7 @@ def calc_score(
     eigendecompositions: list[Eigendecomposition],
     iv_arrays: list[SharedArray],
     ivsr_arrays: list[SharedArray],
-    array_proxy: FileArray,
+    stat_file_array: FileArray,
     phenotype_offset: int = 0,
     variant_offset: int = 0,
 ) -> None:
@@ -67,7 +67,7 @@ def calc_score(
         stat_array,
     )
     writer_proc = ScoreWriter(
-        t, stat_array, array_proxy, phenotype_offset, variant_offset
+        t, stat_array, stat_file_array, phenotype_offset, variant_offset
     )
     # Start the loop.
     procs = [reader_proc, calc_proc, writer_proc]

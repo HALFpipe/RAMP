@@ -153,7 +153,7 @@ class JobCollection:
 
     variable_collection_chunks: list[list[VariableCollection]]
     summary_collection: SummaryCollection = field(init=False)
-    array_proxy: FileArray = field(init=False)
+    stat_file_array: FileArray = field(init=False)
 
     sw: SharedWorkspace = field(init=False)
 
@@ -164,7 +164,7 @@ class JobCollection:
             chain.from_iterable(self.variable_collection_chunks)
         ).phenotypes.sw
         # Create an array proxy.
-        self.array_proxy = FileArray.create(
+        self.stat_file_array = FileArray.create(
             self.file_path.with_suffix(self.compression_method.suffix),
             (self.vcf_file.variant_count, self.phenotype_count * 2),
             np.float64,
@@ -179,7 +179,11 @@ class JobCollection:
             for phenotype_name in vc.phenotype_names
             for stat in ["u", "v"]
         ]
-        self.array_proxy.set_axis_metadata(1, pd.Series(phenotype_names))
+        self.stat_file_array.set_axis_metadata(1, pd.Series(phenotype_names))
+        # Set row metadata
+        self.stat_file_array.set_axis_metadata(
+            0, self.vcf_file.vcf_variants.iloc[self.vcf_file.variant_indices]
+        )
         # Try to load an existing summary collection.
         chunks_path = self.file_path.with_suffix(".yaml.gz")
         if chunks_path.is_file():
@@ -259,7 +263,7 @@ class JobCollection:
                 eigendecompositions,
                 iv_arrays,
                 ivsr_arrays,
-                self.array_proxy,
+                self.stat_file_array,
             )
             for summary in summaries:
                 summary.status = "score_complete"

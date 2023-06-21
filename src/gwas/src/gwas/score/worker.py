@@ -211,14 +211,14 @@ class ScoreWriter(Worker):
         self,
         t: TaskSyncCollection,
         stat_array: SharedArray,
-        array_proxy: FileArray,
+        stat_file_array: FileArray,
         phenotype_offset: int,
         variant_offset: int,
         *args,
         **kwargs,
     ) -> None:
         self.stat_array = stat_array
-        self.array_proxy = array_proxy
+        self.stat_file_array = stat_file_array
 
         self.phenotype_offset = phenotype_offset
         self.variant_offset = variant_offset
@@ -229,42 +229,50 @@ class ScoreWriter(Worker):
         job_count = len(self.t.can_write)
         (_, phenotype_count, _) = self.stat_array.shape
         phenotype_slice = slice(
-            self.phenotype_offset, self.phenotype_offset + phenotype_count
+            2 * self.phenotype_offset, 2 * (self.phenotype_offset + phenotype_count)
         )
         variant_index = self.variant_offset
 
-        while True:
-            # Wait for the calculation to finish.
-            value = self.t.get(self.t.calc_count_queue)
-            if value is Action.EXIT:
-                break
-            elif not isinstance(value, int):
-                raise ValueError("Expected an integer.")
-            variant_count = value
-            if variant_count == 0:
-                # Exit the process.
-                break
-
-            logger.debug("Wait for the calculation to finish")
-            for i in range(job_count):
-                can_write = self.t.can_write[i]
-                action = self.t.wait(can_write)
-                if action is Action.EXIT:
+        with self.stat_file_array:
+            while True:
+                # Wait for the calculation to finish.
+                value = self.t.get(self.t.calc_count_queue)
+                if value is Action.EXIT:
                     break
-                can_write.clear()
+                elif not isinstance(value, int):
+                    raise ValueError("Expected an integer.")
+                variant_count = value
+                if variant_count == 0:
+                    # Exit the process.
+                    break
 
-            # Write the data.
-            variant_slice = slice(variant_index, variant_index + variant_count)
-            stat = self.stat_array.to_numpy(shape=(2, phenotype_count, variant_count))
-            logger.debug(
-                f"Writing variants {variant_slice} to {self.array_proxy} "
-                f"with shape {stat.transpose().shape}"
-            )
-            self.array_proxy[variant_slice, phenotype_slice, :] = stat.transpose()
+                logger.debug("Wait for the calculation to finish")
+                for i in range(job_count):
+                    can_write = self.t.can_write[i]
+                    action = self.t.wait(can_write)
+                    if action is Action.EXIT:
+                        break
+                    can_write.clear()
 
-            # Allow the calculation to continue.
-            for i in range(job_count):
-                can_calc = self.t.can_calc[i]
-                can_calc.set()
+                # Write the data.
+                variant_slice = slice(variant_index, variant_index + variant_count)
+                stat = self.stat_array.to_numpy(
+                    shape=(2, phenotype_count, variant_count)
+                )
+                logger.debug(
+                    f"Writing variants {variant_slice} to {self.stat_file_array} "
+                    f"with shape {stat.transpose().shape}"
+                )
+                two_dimensional_stat = stat.transpose().reshape(
+                    (variant_count, 2 * phenotype_count)
+                )
+                self.stat_file_array[
+                    variant_slice, phenotype_slice
+                ] = two_dimensional_stat
 
-            variant_index += variant_count
+                # Allow the calculation to continue.
+                for i in range(job_count):
+                    can_calc = self.t.can_calc[i]
+                    can_calc.set()
+
+                variant_index += variant_count
