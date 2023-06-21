@@ -17,6 +17,11 @@ from ..vcf.base import VCFFile
 from .calc import calc_u_stat, calc_v_stat
 
 
+@dataclass
+class TaskProgress:
+    variant_count: int
+
+
 @dataclass(kw_only=True)
 class TaskSyncCollection(SharedState):
     job_count: int
@@ -31,6 +36,9 @@ class TaskSyncCollection(SharedState):
     calc_count_queue: Queue[int] = field(default_factory=mp.Queue)
     # Indicates that calculation has finished and we can write out the results.
     can_write: list[Event] = field(init=False)
+
+    # Passes the current progress to the main process.
+    progress_queue: Queue[TaskProgress] = field(default_factory=mp.Queue)
 
     def __post_init__(self) -> None:
         self.can_calc = [mp.Event() for _ in range(self.job_count)]
@@ -260,7 +268,7 @@ class ScoreWriter(Worker):
                     shape=(2, phenotype_count, variant_count)
                 )
                 logger.debug(
-                    f"Writing variants {variant_slice} to {self.stat_file_array} "
+                    f"Writing variants {variant_slice} to {type(self.stat_file_array)} "
                     f"with shape {stat.transpose().shape}"
                 )
                 two_dimensional_stat = stat.transpose().reshape(
@@ -276,3 +284,4 @@ class ScoreWriter(Worker):
                     can_calc.set()
 
                 variant_index += variant_count
+                self.t.progress_queue.put_nowait(TaskProgress(variant_count))

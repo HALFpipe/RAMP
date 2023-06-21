@@ -3,13 +3,14 @@
 from queue import Empty
 
 import numpy as np
+from tqdm import tqdm
 
 from ..compression.arr.base import FileArray
 from ..eig import Eigendecomposition, EigendecompositionCollection
 from ..log import logger
 from ..mem.arr import SharedArray
 from ..vcf.base import VCFFile
-from .worker import Calc, GenotypeReader, ScoreWriter, TaskSyncCollection
+from .worker import Calc, GenotypeReader, ScoreWriter, TaskProgress, TaskSyncCollection
 
 
 def calc_score(
@@ -69,33 +70,48 @@ def calc_score(
     writer_proc = ScoreWriter(
         t, stat_array, stat_file_array, phenotype_offset, variant_offset
     )
+
     # Start the loop.
     procs = [reader_proc, calc_proc, writer_proc]
-    try:
-        for proc in procs:
-            proc.start()
-        # Allow use of genotype_array and stat_array.
-        t.can_read.set()
-        for can_calc in t.can_calc:
-            can_calc.set()
-        while True:
+    with tqdm(
+        total=variant_count, unit="variants", desc="calculating score statistics"
+    ) as progress_bar:
+
+        def update_progress_bar():
             try:
-                raise t.exception_queue.get_nowait()
+                task_progress: TaskProgress = t.progress_queue.get_nowait()
+                progress_bar.update(task_progress.variant_count)
             except Empty:
                 pass
+
+        try:
             for proc in procs:
+                proc.start()
+            # Allow use of genotype_array and stat_array.
+            t.can_read.set()
+            for can_calc in t.can_calc:
+                can_calc.set()
+            while True:
+                try:
+                    raise t.exception_queue.get_nowait()
+                except Empty:
+                    pass
+                update_progress_bar()
+                for proc in procs:
+                    proc.join(timeout=1)
+                if all(not proc.is_alive() for proc in procs):
+                    break
+            update_progress_bar()
+        finally:
+            t.should_exit.set()
+            for proc in procs:
+                proc.terminate()
                 proc.join(timeout=1)
-            if all(not proc.is_alive() for proc in procs):
-                break
-    finally:
-        t.should_exit.set()
-        for proc in procs:
-            proc.terminate()
-            proc.join(timeout=1)
-            if proc.is_alive():
-                proc.kill()
-            proc.join()
-            proc.close()
-        genotype_array.free()
-        rotated_genotype_array.free()
-        stat_array.free()
+                if proc.is_alive():
+                    proc.kill()
+                proc.join()
+                proc.close()
+            genotype_array.free()
+            rotated_genotype_array.free()
+            stat_array.free()
+            update_progress_bar()

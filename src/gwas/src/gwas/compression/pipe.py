@@ -197,9 +197,13 @@ class CompressedTextWriter(CompressedWriter):
         super().__init__(file_path, is_text=True, **kwargs)
 
 
+cache_suffix: str = ".pickle.zst"
+
+
 def load_from_cache(cache_path: Path, key: str) -> Any:
-    file_path = cache_path / f"{key}.zst"
+    file_path = cache_path / f"{key}{cache_suffix}"
     if not file_path.is_file():
+        logger.debug(f'Cache entry "{file_path}" not found')
         return None
     with CompressedBytesReader(file_path) as file_handle:
         try:
@@ -210,5 +214,5 @@ def load_from_cache(cache_path: Path, key: str) -> Any:
 
 
 def save_to_cache(cache_path: Path, key: str, value: Any) -> None:
-    with CompressedBytesWriter(cache_path / f"{key}.pickle.zst") as file_handle:
+    with CompressedBytesWriter(cache_path / f"{key}{cache_suffix}") as file_handle:
         pickle.dump(value, file_handle)

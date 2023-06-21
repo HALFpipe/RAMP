@@ -165,7 +165,7 @@ class JobCollection:
         ).phenotypes.sw
         # Create an array proxy.
         self.stat_file_array = FileArray.create(
-            self.file_path.with_suffix(self.compression_method.suffix),
+            self.file_path,
             (self.vcf_file.variant_count, self.phenotype_count * 2),
             np.float64,
             compression_method=self.compression_method,
