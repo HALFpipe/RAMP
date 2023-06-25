@@ -3,7 +3,7 @@ from argparse import Namespace
 from dataclasses import dataclass, field
 from pathlib import Path
 from pprint import pformat
-from typing import Mapping, Sequence
+from typing import Iterable, Mapping, Sequence
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -16,7 +16,7 @@ from ..mem.wkspace import SharedWorkspace
 from ..pheno import VariableCollection
 from ..score.job import JobCollection
 from ..tri import calc_tri
-from ..utils import chromosome_to_int
+from ..utils import chromosome_to_int, parse_chromosome
 from ..vcf.base import VCFFile, calc_vcf
 
 
@@ -182,7 +182,11 @@ class GwasCommand:
         self.variable_collections = self.split_by_missing_values()
 
     def run(self) -> None:
-        for chromosome in tqdm(self.chromosomes, desc="chromosomes"):
+        chromosomes: Iterable[int | str] = self.chromosomes
+        if self.arguments.chromosome is not None:
+            chromosomes = map(parse_chromosome, self.arguments.chromosome)
+        chromosomes = sorted(chromosomes, key=chromosome_to_int)
+        for chromosome in tqdm(chromosomes, desc="chromosomes"):
             vcf_file = self.vcf_by_chromosome[chromosome]
             vcf_file.set_variants_from_cutoffs(
                 minor_allele_frequency_cutoff=(

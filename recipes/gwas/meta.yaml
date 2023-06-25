@@ -22,6 +22,7 @@ requirements:
     - wheel
   run:
     - mkl
+    # Python dependencies
     - "python>=3.11"
     - "numpy>=1.22"
     - scipy
@@ -34,6 +35,15 @@ requirements:
     - threadpoolctl
     - tqdm
     - pyyaml
+    - more-itertools
+    - typing_extensions
+    # Compression tools
+    - zstd
+    - lrzip
+    - htslib
+    - xz
+    - bzip2
+    - lz4-c
 
 test:
   commands:

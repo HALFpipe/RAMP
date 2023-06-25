@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import multiprocessing as mp
+import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
@@ -9,11 +10,15 @@ import numpy as np
 
 def main() -> None:
     mp.set_start_method("spawn")
+    run(sys.argv[1:])
 
+
+def run(argv: list[str]) -> None:
     from gwas.compression.arr.base import compression_methods
     from gwas.log import logger, setup_logging
     from gwas.mem.wkspace import SharedWorkspace
     from gwas.null_model.base import NullModelCollection
+    from gwas.utils import chromosomes_set
 
     argument_parser = ArgumentParser()
 
@@ -27,6 +32,14 @@ def main() -> None:
     argument_parser.add_argument("--output-directory", required=True)
 
     # Data processing options
+    chromosomes_list = [str(c) for c in chromosomes_set()]
+    argument_parser.add_argument(
+        "--chromosome",
+        choices=chromosomes_list,
+        nargs="+",
+        required=False,
+        default=[*chromosomes_list],
+    )
     argument_parser.add_argument(
         "--kinship-minor-allele-frequency-cutoff",
         "--kin-maf",
@@ -59,7 +72,7 @@ def main() -> None:
         "--null-model-method",
         required=False,
         choices=NullModelCollection.methods,
-        default="ml",
+        default="fastlmm",
     )
     argument_parser.add_argument(
         "--compression-method",
@@ -88,7 +101,7 @@ def main() -> None:
     argument_parser.add_argument("--mem-gb", type=float)
     argument_parser.add_argument("--num-threads", type=int, default=mp.cpu_count())
 
-    arguments = argument_parser.parse_args()
+    arguments = argument_parser.parse_args(argv)
 
     setup_logging(level=arguments.log_level)
     output_directory = Path(arguments.output_directory)

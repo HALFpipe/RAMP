@@ -16,8 +16,8 @@ from .worker import Calc, GenotypeReader, ScoreWriter, TaskProgress, TaskSyncCol
 def calc_score(
     vcf_file: VCFFile,
     eigendecompositions: list[Eigendecomposition],
-    iv_arrays: list[SharedArray],
-    ivsr_arrays: list[SharedArray],
+    inverse_variance_arrays: list[SharedArray],
+    scaled_residuals_arrays: list[SharedArray],
     stat_file_array: FileArray,
     phenotype_offset: int = 0,
     variant_offset: int = 0,
@@ -39,7 +39,10 @@ def calc_score(
     # We re-use sample x genotype matrix across all jobs, so we need to use
     # the total number of samples.
     sample_count = vcf_file.sample_count
-    phenotype_count = sum(iv.shape[1] for iv in iv_arrays)
+    phenotype_count = sum(
+        inverse_variance_array.shape[1]
+        for inverse_variance_array in inverse_variance_arrays
+    )
     per_variant_size = np.float64().itemsize * 2 * (phenotype_count + sample_count)
     variant_count = sw.unallocated_size // per_variant_size
     variant_count = min(variant_count, vcf_file.variant_count)
@@ -63,8 +66,8 @@ def calc_score(
         genotype_array,
         ec.eigenvector_arrays,
         rotated_genotype_array,
-        iv_arrays,
-        ivsr_arrays,
+        inverse_variance_arrays,
+        scaled_residuals_arrays,
         stat_array,
     )
     writer_proc = ScoreWriter(

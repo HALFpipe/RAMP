@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 from pathlib import Path
-from typing import Mapping
+from typing import Literal, Mapping
 
 import pytest
 
@@ -13,7 +13,8 @@ from gwas.vcf.base import VCFFile, calc_vcf
 base_path: Path = Path(os.environ["DATA_PATH"])
 dataset: str = "opensnp"
 chromosomes = sorted(chromosomes_set(), key=chromosome_to_int)
-sample_sizes = dict(small=100, medium=500, large=3421)
+SampleSizeLabel = Literal["small", "medium", "large"]
+sample_sizes: Mapping[SampleSizeLabel, int] = dict(small=100, medium=500, large=3421)
 
 
 @pytest.fixture(scope="module")
@@ -45,17 +46,17 @@ def directory_factory() -> DirectoryFactory:
 
 
 @pytest.fixture(scope="session", params=sample_sizes.keys())
-def sample_size_label(request) -> str:
+def sample_size_label(request) -> SampleSizeLabel:
     return request.param
 
 
 @pytest.fixture(scope="session")
-def sample_size(sample_size_label: str) -> int:
+def sample_size(sample_size_label: SampleSizeLabel) -> int:
     return sample_sizes[sample_size_label]
 
 
 @pytest.fixture(scope="session")
-def vcf_paths_by_size_and_chromosome() -> dict[str, dict[int | str, Path]]:
+def vcf_paths_by_size_and_chromosome() -> dict[SampleSizeLabel, dict[int | str, Path]]:
     return {
         sample_size_label: {
             c: (base_path / dataset / str(sample_size) / f"chr{c}.dose.vcf.zst")
@@ -67,7 +68,7 @@ def vcf_paths_by_size_and_chromosome() -> dict[str, dict[int | str, Path]]:
 
 @pytest.fixture(scope="session")
 def vcf_files_by_size_and_chromosome(
-    vcf_paths_by_size_and_chromosome: Mapping[str, dict[int | str, Path]],
+    vcf_paths_by_size_and_chromosome: Mapping[SampleSizeLabel, dict[int | str, Path]],
 ) -> Mapping[str, dict[int | str, VCFFile]]:
     vcf_files_by_size_and_chromosome: dict[str, dict[int | str, VCFFile]] = {
         sample_size_label: dict() for sample_size_label in sample_sizes.keys()
@@ -122,9 +123,11 @@ def raw_path():
 
 @pytest.fixture(scope="module")
 def tri_paths_by_size_and_chromosome(
-    vcf_files_by_size_and_chromosome: Mapping[str, Mapping[int | str, VCFFile]],
+    vcf_files_by_size_and_chromosome: Mapping[
+        SampleSizeLabel, Mapping[int | str, VCFFile]
+    ],
     sw: SharedWorkspace,
-) -> Mapping[str, Mapping[str | int, Path]]:
+) -> Mapping[SampleSizeLabel, Mapping[str | int, Path]]:
     return {
         sample_size_label: calc_tri(
             chromosomes,

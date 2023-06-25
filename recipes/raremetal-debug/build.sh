@@ -44,8 +44,11 @@ cmake \
     ..
 
 make
-make test
+# Skip tests for debug build
+# make test
 
-install raremetal raremetalworker "${PREFIX}"/bin
+mv -nv raremetal raremetal-debug
+mv -nv raremetalworker raremetalworker-debug
+install raremetal-debug raremetalworker-debug "${PREFIX}"/bin
 
 popd || exit

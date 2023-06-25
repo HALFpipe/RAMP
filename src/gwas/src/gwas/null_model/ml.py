@@ -14,12 +14,12 @@ from threadpoolctl import threadpool_limits
 from tqdm.auto import tqdm
 
 from ..eig import Eigendecomposition
+from ..log import logger
 from ..pheno import VariableCollection
 from ..utils import Pool
 from .base import NullModelCollection, NullModelResult
 
-torch.set_default_tensor_type(torch.DoubleTensor)
-torch.set_default_dtype(torch.float64)
+minimum_variance: float = 1e-4
 
 
 class OptimizeInput(NamedTuple):
@@ -36,6 +36,7 @@ class OptimizeJob(NamedTuple):
 
 class OptimizeResult(NamedTuple):
     x: npt.NDArray
+    fun: float
 
 
 @dataclass
@@ -49,9 +50,9 @@ class ProfileMaximumLikelihood:
         var: float = o.rotated_phenotype.var().item()
         return [var / 2] * 2
 
-    @property
-    def bounds(self):
-        return [(1e-4, np.inf), (0, np.inf)]
+    def bounds(self, o: OptimizeInput) -> list[tuple[float, float]]:
+        variance = o.rotated_phenotype.var().item()
+        return [(minimum_variance, variance), (0, variance)]
 
     @cached_property
     def func(self):
@@ -75,7 +76,9 @@ class ProfileMaximumLikelihood:
         return func
 
     @staticmethod
-    def get_regression_weights(terms: torch.Tensor, o: OptimizeInput):
+    def get_regression_weights(
+        terms: torch.Tensor, o: OptimizeInput
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         terms = torch.where(
             torch.isfinite(terms),
             terms,
@@ -107,7 +110,9 @@ class ProfileMaximumLikelihood:
         )
 
     @classmethod
-    def get_standard_errors(cls, terms: torch.Tensor, o: OptimizeInput):
+    def get_standard_errors(
+        cls, terms: torch.Tensor, o: OptimizeInput
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         weights, residuals, variance, covariates, _ = cls.get_regression_weights(
             terms, o
         )
@@ -122,11 +127,13 @@ class ProfileMaximumLikelihood:
 
         return weights, standard_errors, residuals, variance
 
-    @classmethod
-    def minus_two_log_likelihood(cls, terms: torch.Tensor, o: OptimizeInput):
-        _, scaled_residuals, variance, _, _ = cls.get_regression_weights(terms, o)
+    def minus_two_log_likelihood(self, terms: torch.Tensor, o: OptimizeInput):
+        _, scaled_residuals, variance, _, _ = self.get_regression_weights(terms, o)
+        constant = torch.log(variance).sum()
         minus_two_log_likelihood = (
-            torch.square(scaled_residuals).sum() + torch.log(variance).sum()
+            constant
+            + self.sample_count
+            + self.sample_count * torch.log(torch.square(scaled_residuals).mean())
         )
         return torch.where(
             torch.isfinite(minus_two_log_likelihood),
@@ -147,24 +154,37 @@ class ProfileMaximumLikelihood:
         grad, value = self.func(terms, o)
         return value.item(), grad.detach().numpy()
 
-    def get_heritability(self, terms, _: npt.NDArray) -> tuple[float, float, float]:
+    @staticmethod
+    def get_heritability(terms) -> tuple[float, float, float]:
         genetic_variance = float(terms[1])
         error_variance = float(terms[0])
         heritability = float(genetic_variance / (genetic_variance + error_variance))
         return heritability, genetic_variance, error_variance
 
-    def optimize(self, o: OptimizeInput) -> OptimizeResult:
+    def optimize(self, o: OptimizeInput, scale: bool = False) -> OptimizeResult:
+        if scale:
+            scaling_factor: float = o.rotated_phenotype.std().item()
+            o = OptimizeInput(
+                o.eigenvalues,
+                o.rotated_covariates,
+                o.rotated_phenotype / scaling_factor,
+            )
+        else:
+            scaling_factor = 1
+
         func = self.wrapper
-        optimize_result = scipy.optimize.basinhopping(
+        optimize_result = scipy.optimize.basinhopping(  # type: ignore
             func,
             self.get_initial_terms(o),
             minimizer_kwargs=dict(
-                method="L-BFGS-B", jac=True, bounds=self.bounds, args=(o,)
+                method="L-BFGS-B", jac=True, bounds=self.bounds(o), args=(o,)
             ),
             niter=2**10,
-            interval=2**5,
-            niter_success=2**7,
         )
+
+        optimize_result.x[:2] *= np.square(scaling_factor)
+        optimize_result.x[2:] *= scaling_factor
+
         return optimize_result
 
     def apply(self, optimize_job: OptimizeJob) -> tuple[int, NullModelResult]:
@@ -176,12 +196,11 @@ class ProfileMaximumLikelihood:
                 terms,
                 o,
             )
-            resid_numpy = residuals.detach().numpy()
             return phenotype_index, NullModelResult(
-                *self.get_heritability(terms, resid_numpy),
+                *self.get_heritability(terms),
                 weights.detach().numpy(),
                 errors.detach().numpy(),
-                resid_numpy,
+                residuals.detach().numpy(),
                 variance.detach().numpy(),
             )
 
@@ -287,9 +306,8 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
         regression_weights = list(regression_weights.detach().numpy().ravel())
         return super().get_initial_terms(o) + regression_weights
 
-    @property
-    def bounds(self):
-        return super().bounds + [(-np.inf, np.inf)] * self.covariate_count
+    def bounds(self, o: OptimizeInput) -> list[tuple[float, float]]:
+        return super().bounds(o) + [(-np.inf, np.inf)] * self.covariate_count
 
     @staticmethod
     def get_regression_weights(terms: torch.Tensor, o: OptimizeInput):
@@ -342,47 +360,51 @@ class FaST_LMM(ProfileMaximumLikelihood):
             dtype=torch.float64,
         )
 
-    def get_heritability(
-        self, terms, scaled_residuals: npt.NDArray
-    ) -> tuple[float, float, float]:
-        variance_ratio = terms[0]
-        genetic_variance = float(np.square(scaled_residuals).mean())
-        error_variance = float(variance_ratio * genetic_variance)
-        heritability = float(np.reciprocal(1 + variance_ratio))
-        return heritability, genetic_variance, error_variance
-
     def wrapper(self, log_variance_ratio: npt.NDArray, o: OptimizeInput):
         variance_ratio = np.power(10, log_variance_ratio)
-        terms = torch.tensor(
-            [variance_ratio, 1],
-            dtype=torch.float64,
-        )
+        terms = torch.tensor([variance_ratio, 1], dtype=torch.float64)
         return self.func(terms, o).item()
 
-    def optimize(self, o: OptimizeInput) -> OptimizeResult:
+    def optimize(self, o: OptimizeInput, scale: bool = False) -> OptimizeResult:
         func = self.wrapper
 
-        xa = np.arange(-10, 10, step=self.step)
+        upper_bound = float(np.log10(o.rotated_phenotype.var()))
+        lower_bound = float(np.log10(minimum_variance) - upper_bound)
+        xa = np.arange(lower_bound, upper_bound, step=self.step)
+        logger.debug(
+            f"FaST_LMM will optimize between {lower_bound} to {upper_bound} "
+            f"in {xa.size} steps of size {self.step}"
+        )
 
         fmin = np.inf
-        log_variance_ratio: float | None = None
+        best_optimize_result: OptimizeResult | None = None
         with np.errstate(all="ignore"):
-            for brack in zip(xa, xa + self.step):
+            for bounds in zip(xa, xa + self.step):
                 try:
-                    x, fval, _, _ = scipy.optimize.brent(
+                    optimize_result = scipy.optimize.minimize_scalar(  # type: ignore
                         func,
                         args=(o,),
-                        brack=brack,
-                        full_output=True,
+                        bounds=bounds,
                     )
-                    if fval < fmin:
-                        fmin = fval
-                        log_variance_ratio = x
+                    if optimize_result.fun < fmin:
+                        fmin = optimize_result.fun
+                        best_optimize_result = optimize_result
                 except FloatingPointError:
                     pass
 
-        if log_variance_ratio is None:
+        if best_optimize_result is None:
             raise RuntimeError
 
+        log_variance_ratio = best_optimize_result.x
         variance_ratio = np.power(10, log_variance_ratio)
-        return OptimizeResult(x=np.array([variance_ratio, 1]))
+
+        # Scale by genetic variance
+        terms = torch.Tensor([variance_ratio, 1])
+        _, _, residuals, _ = self.get_standard_errors(terms, o)
+        genetic_variance = float(np.square(residuals).mean())
+        terms *= genetic_variance
+
+        return OptimizeResult(
+            x=terms.numpy(),
+            fun=fmin,
+        )

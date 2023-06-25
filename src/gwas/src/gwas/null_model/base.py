@@ -19,7 +19,7 @@ class NullModelResult:
     regression_weights: float | npt.NDArray[np.float64]
     standard_errors: float | npt.NDArray[np.float64]
 
-    scaled_residuals: float | npt.NDArray[np.float64]
+    half_scaled_residuals: float | npt.NDArray[np.float64]
     variance: float | npt.NDArray[np.float64]
 
     @classmethod
@@ -37,7 +37,7 @@ class NullModelCollection:
 
     regression_weights: SharedArray
     standard_errors: SharedArray
-    scaled_residuals: SharedArray
+    half_scaled_residuals: SharedArray
     variance: SharedArray
 
     methods: ClassVar[list[str]] = ["fastlmm", "ml", "pml", "rml"]
@@ -48,7 +48,7 @@ class NullModelCollection:
 
     @property
     def sample_count(self) -> int:
-        return self.scaled_residuals.shape[1]
+        return self.half_scaled_residuals.shape[1]
 
     def put(self, phenotype_index: int, r: NullModelResult) -> None:
         self.heritability[phenotype_index] = r.heritability
@@ -57,19 +57,19 @@ class NullModelCollection:
 
         weights = self.regression_weights.to_numpy()
         errors = self.standard_errors.to_numpy()
-        residuals = self.scaled_residuals.to_numpy()
+        residuals = self.half_scaled_residuals.to_numpy()
         variance = self.variance.to_numpy()
 
         weights[phenotype_index, :] = np.ravel(r.regression_weights)
         errors[phenotype_index, :] = np.ravel(r.standard_errors)
 
-        residuals[:, phenotype_index] = np.ravel(r.scaled_residuals)
+        residuals[:, phenotype_index] = np.ravel(r.half_scaled_residuals)
         variance[:, phenotype_index] = np.ravel(r.variance)
 
     def free(self) -> None:
         self.regression_weights.free()
         self.standard_errors.free()
-        self.scaled_residuals.free()
+        self.half_scaled_residuals.free()
         self.variance.free()
 
     @classmethod
@@ -77,7 +77,7 @@ class NullModelCollection:
         cls,
         eig: Eigendecomposition,
         vc: VariableCollection,
-        method: str | None = "ml",
+        method: str | None = "fastlmm",
         **kwargs,
     ) -> Self:
         from .ml import (
@@ -98,7 +98,7 @@ class NullModelCollection:
         name = SharedArray.get_name(sw, "variance")
         shape = list(vc.phenotypes.shape)
         variance = sw.alloc(name, *shape)
-        name = SharedArray.get_name(sw, "scaled-residuals")
+        name = SharedArray.get_name(sw, "half-scaled-residuals")
         scaled_residuals = sw.alloc(name, *shape)
 
         nm = cls(

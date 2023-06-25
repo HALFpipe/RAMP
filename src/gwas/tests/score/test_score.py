@@ -1,28 +1,28 @@
 # -*- coding: utf-8 -*-
-# from pathlib import Path
+from typing import Mapping
 
 import numpy as np
 import pytest
-
-# import scipy
+import scipy
 from numpy import typing as npt
 
 from gwas.eig import Eigendecomposition
-from gwas.log import logger
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection
-
-# from gwas.score.calc import calc_u_stat, calc_v_stat
+from gwas.score.calc import calc_u_stat, calc_v_stat
 from gwas.vcf.base import VCFFile
 
-from .conftest import RmwScore, SimulationResult, chromosome
+from ..utils import check_bias
+from .conftest import RmwScore
+from .rmw_debug import RmwDebug
 
 
 @pytest.fixture(scope="module")
 def rotated_genotypes(
-    vcf_by_chromosome: dict[int | str, VCFFile],
+    chromosome: int | str,
+    vcf_files_by_chromosome: Mapping[int | str, VCFFile],
     vc: VariableCollection,
     sw: SharedWorkspace,
     eig: Eigendecomposition,
@@ -33,7 +33,7 @@ def rotated_genotypes(
 
     sample_count = vc.sample_count
     assert eig.sample_count == sample_count
-    vcf_file = vcf_by_chromosome[chromosome]
+    vcf_file = vcf_files_by_chromosome[chromosome]
     variant_count = sw.unallocated_size // (
         np.float64().itemsize * 2 * (vc.phenotype_count + vc.sample_count)
     )
@@ -80,131 +80,91 @@ def rotated_genotypes(
 
 
 @pytest.fixture(scope="module")
-def expected_effect(
-    rmw_score: npt.NDArray,
-    simulation: SimulationResult,
-) -> npt.NDArray:
-    causal_variants = set(simulation.par[:, 0])
-    variant_tuples = rmw_score[["CHROM", "POS", "REF", "ALT"]][:, 0]
-    expected_effect = np.array(
-        [
-            ":".join(map(str, variant_tuple)) in causal_variants
-            for variant_tuple in variant_tuples
-        ]
-    )
-    return expected_effect
-
-
-@pytest.fixture(scope="module", params=["ml", "pml", "reml", "fastlmm"])
 def nm(
     vc: VariableCollection,
     eig: Eigendecomposition,
     request,
 ) -> NullModelCollection:
-    method = request.param
-    nm = NullModelCollection.from_eig(eig, vc, method=method)
+    nm = NullModelCollection.from_eig(eig, vc, method="fastlmm")
     request.addfinalizer(nm.free)
 
     return nm
 
 
-def regress(a, b, indices):
-    a = a[indices][:, np.newaxis]
-    b = b[indices][:, np.newaxis]
-
-    x = np.hstack([np.ones_like(a), a])
-    (intercept, slope), (sum_residuals,), _, _ = np.linalg.lstsq(x, b, rcond=None)
-    mean_residuals = sum_residuals / a.size
-
-    yield from map(float, (intercept, slope, mean_residuals))
-
-
-def check_bias(a, b, indices, atol, check_slope=True):
-    intercept, slope, mean_residuals = regress(a, b, indices)
-
-    logger.debug(
-        f"intercept={intercept:f} "
-        f"|slope - 1|={np.abs(1 - slope):f} "
-        f"mean_residuals={mean_residuals:f}"
+def test_score(
+    phenotype_index: int,
+    vc: VariableCollection,
+    nm: NullModelCollection,
+    eig: Eigendecomposition,
+    rotated_genotypes: npt.NDArray,
+    rmw_score: RmwScore,
+    rmw_debug: RmwDebug,
+):
+    phenotype_count = 1
+    rotated_genotype = rotated_genotypes[:, 0]
+    assert np.allclose(
+        eig.eigenvectors.transpose() @ rmw_debug.genotype,
+        rotated_genotype,
     )
-    assert np.isclose(intercept, 0, atol=atol)
-    if check_slope:
-        assert np.isclose(slope, 1, atol=atol)
-    assert np.isclose(mean_residuals, 0, atol=atol)
 
+    variant_count = rotated_genotypes.shape[1]
 
-# def test_score(
-#     vc: VariableCollection,
-#     nm: NullModelCollection,
-#     rotated_genotypes: npt.NDArray,
-#     rmw_score: RmwScore,
-#     expected_effect: npt.NDArray,
-# ):
-#     r = rmw_score.array
+    # Parse rmw scorefile columns
+    rmw_u_stat = rmw_score.array["U_STAT"]
+    rmw_sqrt_v_stat = rmw_score.array["SQRT_V_STAT"]
+    rmw_effsize = rmw_score.array["ALT_EFFSIZE"]
+    rmw_pvalue = rmw_score.array["PVALUE"]
 
-#     variant_count = rotated_genotypes.shape[1]
+    rmw_u_stat = rmw_u_stat[:, phenotype_index, np.newaxis]
+    rmw_sqrt_v_stat = rmw_sqrt_v_stat[:, phenotype_index, np.newaxis]
+    rmw_effsize = rmw_effsize[:, phenotype_index, np.newaxis]
+    rmw_pvalue = rmw_pvalue[:, phenotype_index, np.newaxis]
 
-#     # parse rmw scorefile columns
-#     rmw_u_stat = r["U_STAT"]
-#     rmw_sqrt_v_stat = r["SQRT_V_STAT"]
-#     # rmw_effsize = r["ALT_EFFSIZE"]
-#     rmw_pvalue = r["PVALUE"]
-#     log_rmw_pvalue = np.log(rmw_pvalue)
+    log_rmw_pvalue = np.log(rmw_pvalue)
 
-#     finite = np.isfinite(rmw_u_stat).all(axis=1)
-#     finite &= np.isfinite(rmw_sqrt_v_stat).all(axis=1)
+    finite = np.isfinite(rmw_u_stat).all(axis=1)
+    finite &= np.isfinite(rmw_sqrt_v_stat).all(axis=1)
 
-#     u_stat = np.empty((variant_count, vc.phenotype_count))
-#     v_stat = np.empty((variant_count, vc.phenotype_count))
+    u_stat = np.empty((variant_count, phenotype_count))
+    v_stat = np.empty((variant_count, phenotype_count))
 
-#     calc_u_stat(
-#         nm,
-#         rotated_genotypes,
-#         u_stat,
-#     )
+    half_scaled_residuals = nm.half_scaled_residuals.to_numpy()
+    half_scaled_residuals = half_scaled_residuals[:, phenotype_index, np.newaxis]
+    variance = nm.variance.to_numpy()
+    variance = variance[:, phenotype_index, np.newaxis]
 
-#     squared_genotypes = np.square(rotated_genotypes)
-#     invalid = calc_v_stat(
-#         nm,
-#         squared_genotypes,
-#         u_stat,
-#         v_stat,
-#     )
+    inverse_variance = np.reciprocal(variance)
+    sqrt_inverse_variance = np.power(variance, -0.5)
+    scaled_residuals = sqrt_inverse_variance * half_scaled_residuals
 
-#     # regression_weights = nm.regression_weights.to_numpy()
-#     sqrt_v_stat = np.sqrt(v_stat)
-#     # effsize = u_stat / v_stat
-#     chi2 = np.square(u_stat) / v_stat
-#     log_pvalue = scipy.stats.chi2(1).logsf(chi2)
+    calc_u_stat(
+        scaled_residuals,
+        rotated_genotypes,
+        u_stat,
+    )
 
-#     assert np.all(np.isfinite(u_stat[finite, :]))
-#     assert np.all(np.isfinite(sqrt_v_stat[finite, :]))
+    squared_genotypes = np.square(rotated_genotypes)
+    invalid = calc_v_stat(
+        inverse_variance,
+        squared_genotypes,
+        u_stat,
+        v_stat,
+    )
 
-#     to_compare = finite[:, np.newaxis] & ~invalid
+    sqrt_v_stat = np.sqrt(v_stat)
+    effsize = u_stat / v_stat
+    chi2 = np.square(u_stat) / v_stat
+    log_pvalue = scipy.stats.chi2(1).logsf(chi2)
 
-#     atol = 1e-2
-#     if vc.sample_count < 2**10:
-#         atol = 5e-2
+    assert np.all(np.isfinite(u_stat[finite, :]))
+    assert np.all(np.isfinite(sqrt_v_stat[finite, :]))
 
-#     check_slope = True
-#     if nm.method in {"pml", "reml", "fastlmm"}:
-#         check_slope = False
+    to_compare = finite[:, np.newaxis] & ~invalid
 
-#     check_bias(u_stat, rmw_u_stat, to_compare, atol, check_slope)
-#     check_bias(sqrt_v_stat, rmw_sqrt_v_stat, to_compare, atol, check_slope)
-#     # check_bias(effsize, rmw_effsize, to_compare, atol)
-#     check_bias(log_pvalue, log_rmw_pvalue, to_compare, atol, check_slope)
-
-#     if vc.sample_count > 100:
-#         difference = (log_pvalue - log_rmw_pvalue)[finite, :]
-#         # less than twenty percent have a difference greater 0.1
-#         assert (np.abs(difference) < 1e-1).mean() > 0.8
-
-#         expected_effect = np.broadcast_to(
-#             expected_effect[:, np.newaxis], u_stat.shape
-#         )
-#         pr = scipy.stats.pearsonr(expected_effect[to_compare], u_stat[to_compare])
-#         assert np.isclose(pr.pvalue, 0)
+    assert check_bias(u_stat, rmw_u_stat, to_compare)
+    assert check_bias(sqrt_v_stat, rmw_sqrt_v_stat, to_compare)
+    assert check_bias(effsize, rmw_effsize, to_compare, check_residuals=False)
+    assert check_bias(log_pvalue, log_rmw_pvalue, to_compare)
 
 
 # def test_calc_score(

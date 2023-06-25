@@ -16,6 +16,8 @@ dependencies = [
   "threadpoolctl",
   "tqdm",
   "pyyaml",
+  "more-itertools",
+  "typing_extensions",
 ]
 
 [project.scripts]

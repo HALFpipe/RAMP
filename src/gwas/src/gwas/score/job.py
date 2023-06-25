@@ -223,8 +223,8 @@ class JobCollection:
                     desc="decomposing kinship matrices",
                 )
             ]
-            iv_arrays: list[SharedArray] = list()  # Inverse variance
-            ivsr_arrays: list[SharedArray] = list()  # Inverse variance scaled residuals
+            inverse_variance_arrays: list[SharedArray] = list()
+            scaled_residuals_arrays: list[SharedArray] = list()
             for eig, vc, summary in zip(
                 eigendecompositions, variable_collections, summaries
             ):
@@ -238,31 +238,31 @@ class JobCollection:
                 # Extract the matrices we actually need from the nm.
                 variance = nm.variance.to_numpy()
                 (sample_count, phenotype_count) = variance.shape
-                scaled_residuals = nm.scaled_residuals.to_numpy()
+                half_scaled_residuals = nm.half_scaled_residuals.to_numpy()
                 # Pre-compute the inverse variance.
-                iv = sw.alloc(
+                inverse_variance_array = sw.alloc(
                     SharedArray.get_name(sw, "inverse-variance"),
                     sample_count,
                     phenotype_count,
                 )
-                iv[:] = np.power(variance, -0.5)
-                iv_arrays.append(iv)
+                inverse_variance_array[:] = np.reciprocal(variance)
+                inverse_variance_arrays.append(inverse_variance_array)
                 # Pre-compute the inverse variance scaled residuals.
-                ivsr = sw.alloc(
-                    SharedArray.get_name(sw, "inverse-variance-scaled-residuals"),
+                scaled_residuals_array = sw.alloc(
+                    SharedArray.get_name(sw, "scaled-residuals"),
                     sample_count,
                     phenotype_count,
                 )
-                ivsr[:] = scaled_residuals * iv.to_numpy()
-                ivsr_arrays.append(ivsr)
+                scaled_residuals_array[:] = half_scaled_residuals / np.sqrt(variance)
+                scaled_residuals_arrays.append(scaled_residuals_array)
                 # Free the nm.
                 nm.free()
             self.dump()
             calc_score(
                 self.vcf_file,
                 eigendecompositions,
-                iv_arrays,
-                ivsr_arrays,
+                inverse_variance_arrays,
+                scaled_residuals_arrays,
                 self.stat_file_array,
             )
             for summary in summaries:

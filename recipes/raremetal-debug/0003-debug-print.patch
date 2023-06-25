@@ -1,0 +1,204 @@
+diff --git a/raremetalworker/src/FastFit.cpp b/raremetalworker/src/FastFit.cpp
+index d6029fc..40aae1a 100755
+--- a/raremetalworker/src/FastFit.cpp
++++ b/raremetalworker/src/FastFit.cpp
+@@ -54,7 +54,7 @@ void FastFit::OptimizeDelta(double tol, FastTransform &trans)
+             logLikelihood = ll;
+             deltaHat = min;
+         }
+-        //printf("logLikelihood is:%g,deltaHat is:%g\n",logLikelihood,deltaHat);
++        printf("logLikelihood is:%g,deltaHat is:%g\n",logLikelihood,deltaHat);
+     }
+ }
+ 
+@@ -105,16 +105,24 @@ void FastFit::GetBeta(double delta, FastTransform &trans)
+         B.Add(tmpAddToA);
+     }
+     beta.Product(A, B);
++
++    printf("beta is:\n");
++    for(int i=0;i<beta.Length();i++)
++    printf("%g\n",beta[i]);
++    printf("\n");
+ }
+ 
+ double FastFit::GetSigma_g(double delta, Vector &beta, FastTransform &trans)
+ {
+     double sigma = 0.0;
++    printf("factor is:\n");
+     for (int i = 0; i < trans.persons; i++)
+     {
+         double factor = trans.UY[i] - trans.UX[i].InnerProduct(beta);
++        printf("%g ",factor);
+         sigma += factor * factor / (trans.D[i] + delta);
+     }
++    printf("\n");
+     sigma /= trans.persons;
+     return sigma;
+ }
+@@ -136,6 +144,8 @@ double FastFit::Evaluate(double delta, FastTransform &trans, bool full)
+         logLikelihood = -0.5 * (trans.persons * log(2 * M_PI) + constant + trans.persons + trans.persons * log(sigma));
+     } else
+     { logLikelihood = -0.5 * (constant + trans.persons + trans.persons * log(sigma)); }
++    printf("sigma is %g, delta is %g, constant is %g, logLikelihood is %g\n", 
++           sigma, delta, constant, logLikelihood);
+     return logLikelihood;
+ }
+ 
+@@ -339,6 +349,14 @@ void FastFit::FitModels(IFILE SCOREoutput, IFILE SCOREoutput_rec, IFILE SCOREout
+ 
+     PreFit(SCOREoutput, SCOREoutput_rec, SCOREoutput_dom, ped, tol, trans, log);
+ 
++    printf("\nX size = %d,%d\n", trans.X.rows, trans.X.cols);
++    printf("X: \n");
++    for(int i=0; i<trans.X.rows; i++) {
++       for(int j=0; j<trans.X.cols; j++)
++          printf("%g\t", trans.X[i][j]);
++       printf("\n");
++    }
++
+     if (unrelated)
+     {
+         printf("  Start fitting linear model ... ");
+@@ -502,10 +520,7 @@ void FastFit::FastFitPolyGenicModels(Pedigree &ped, double tol, FastTransform &t
+     }
+     trans.Prepare(ped, traitNum, useCovariates, log, true);
+ 
+-    /*
+     //TS
+-    if(forX)
+-    {
+     printf("Y's are:\n");
+     for(int i=0;i<trans.persons;i++)
+     printf("%g\t",trans.Y[i]);
+@@ -517,8 +532,6 @@ void FastFit::FastFitPolyGenicModels(Pedigree &ped, double tol, FastTransform &t
+     printf("%g\t",trans.X[i][j]);
+     }
+     printf("\n");
+-    }
+-    */
+ 
+     if (FastTransform::pedKin)
+     {
+@@ -581,15 +594,15 @@ void FastFit::FastFitPolyGenicModels(Pedigree &ped, double tol, FastTransform &t
+             kin_emp.CleanUpAuto();
+         }
+     }
+-    /*
++
+     //TS:
+     printf("betaHat is:\n");
+     for(int i=0;i<betaHat.Length();i++)
+     printf("%g ",betaHat[i]);
+     printf("\n");
+     //TS
+-     */
+-    //printf("sigma_g2Hat,sigma_e2Hat,sigma_gXHat,sigma_s2Hat are: %g, %g, %g, %g\n",sigma_g2Hat,sigma_e2Hat,sigma_gXHat,sigma_s2Hat);
++
++    printf("sigma_g2Hat,sigma_e2Hat,sigma_gXHat,sigma_s2Hat are: %g, %g, %g, %g\n",sigma_g2Hat,sigma_e2Hat,sigma_gXHat,sigma_s2Hat);
+ }
+ 
+ void FastFit::AutoFitLinearMixModels2(Pedigree &ped, double tol, FastTransform &trans, KinshipEmp &kin_emp, FILE *log,
+diff --git a/raremetalworker/src/PreMeta.cpp b/raremetalworker/src/PreMeta.cpp
+index 993f983..916459c 100644
+--- a/raremetalworker/src/PreMeta.cpp
++++ b/raremetalworker/src/PreMeta.cpp
+@@ -179,23 +179,16 @@ PreMeta::CalculateAssocStats(double &effSize, double &pvalue, double &numerator,
+         effSize = _NAN_;
+         return;
+     }
+-    /*
++
+     printf("numerator and denominator are: %g,%g.\n",numerator,denominator);
+-    printf("residuals are:\n");
+-    for(int i=0;i<trans.persons;i++)
+-    printf("%g\n",trans.Y[i]-trans.X[i].InnerProduct(engine.betaHat));
+ 
++    printf("genotype is:\n");
++    for(int i=0;i<trans.persons;i++)
++    printf("%g\n",genotype[i]);
+     printf("transGeno is:\n");
+     for(int i=0;i<trans.persons;i++)
+     printf("%g\n",transGeno[i]);
+-    printf("transUY is:\n");
+-    for(int i=0;i<trans.persons;i++)
+-    printf("%g\n",trans.UY[i]);
+-    printf("sigma2 is:\n");
+-    for(int i=0;i<trans.persons;i++)
+-    printf("%g\n",sigma2[i]);
+-    printf("\n");
+-  */
++
+     chisq = numerator * numerator / denominator;
+     pvalue = pchisq(chisq, 1, 0, 0);
+     effSize = numerator / denominator;
+@@ -754,6 +747,22 @@ void PreMeta::Run(String &pedname, Pedigree &ped, FastTransform &trans, FastFit
+             sigma2[i] = engine.sigma2Hat;
+         }
+     }
++    printf("transUX are:\n");
++    for(int i=0;i<trans.persons;i++) {
++        for(int j=0;j<trans.fixedEffects;j++)
++            printf("%g\t",trans.UX[i][j]);
++        printf("\n");
++    }
++    printf("transUY is:\n");
++    for(int i=0;i<trans.persons;i++)
++    printf("%g\n",trans.UY[i]);
++    printf("sigma2 is:\n");
++    for(int i=0;i<trans.persons;i++)
++    printf("%g\n",sigma2[i]);
++    printf("\n");
++    printf("residuals are:\n");
++    for(int i=0;i<trans.persons;i++)
++    printf("%g\n",residuals[i]);
+ 
+     if (FastFit::useCovariates)
+     {
+diff --git a/raremetalworker/src/TransformResiduals.cpp b/raremetalworker/src/TransformResiduals.cpp
+index dc0f1ba..e68586e 100755
+--- a/raremetalworker/src/TransformResiduals.cpp
++++ b/raremetalworker/src/TransformResiduals.cpp
+@@ -876,6 +876,14 @@ void FastTransform::TransformEmpkin(Pedigree &ped, int traitNum, bool useCovaria
+         fprintf(log, "done.\n");
+     }
+ 
++    printf("\nallPairs size = %d,%d\n", allPairs.rows, allPairs.cols);
++    printf("allPairs: \n");
++    for(int i=0; i<allPairs.rows; i++) {
++       for(int j=0; j<allPairs.cols; j++)
++          printf("%g\t", allPairs[i][j]);
++       printf("\n");
++    }
++
+     printf("    Decomposing empirical kinship matrix ... ");
+     fprintf(log, "    Decomposing empirical kinship matrix ... ");
+     fflush(stdout);
+@@ -890,6 +898,19 @@ void FastTransform::TransformEmpkin(Pedigree &ped, int traitNum, bool useCovaria
+     {
+         UY[r] = transU_del[r].InnerProduct(Y);
+     }
++
++    printf("\ntransU_del size = %d,%d\n", transU_del.rows, transU_del.cols);
++    printf("transU_del: \n");
++    for(int i=0; i<transU_del.rows; i++) {
++       for(int j=0; j<transU_del.cols; j++)
++          printf("%g\t", transU_del[i][j]);
++       printf("\n");
++    }
++    printf("\nD size = %d\n", D.Length());
++    printf("D: \n");
++    for(int i=0; i<D.Length(); i++)
++        printf("%g\n", D[i]);
++
+     FinalizeProducts();
+ }
+ 
+@@ -1015,6 +1036,7 @@ bool FastTransform::FinalizeProducts()
+     {
+         return false;
+     }
++
+     transU.resize(persons, persons);
+     //copy transU_del to transU and delete transU_del
+     for (int i = 0; i < transU_del.rows; i++)

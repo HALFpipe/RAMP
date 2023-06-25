@@ -113,8 +113,8 @@ class Calc(Worker):
         genotypes_array: SharedArray,
         eigenvector_arrays: list[SharedArray],
         rotated_genotypes_array: SharedArray,
-        iv_arrays: list[SharedArray],
-        ivsr_arrays: list[SharedArray],
+        inverse_variance_arrays: list[SharedArray],
+        scaled_residuals_arrays: list[SharedArray],
         stat_array: SharedArray,
         *args,
         **kwargs,
@@ -122,19 +122,31 @@ class Calc(Worker):
         self.genotypes_array = genotypes_array
         self.rotated_genotypes_array = rotated_genotypes_array
         self.eigenvector_arrays = eigenvector_arrays
-        self.iv_arrays = iv_arrays
-        self.ivsr_arrays = ivsr_arrays
+        self.inverse_variance_arrays = inverse_variance_arrays
+        self.scaled_residuals_arrays = scaled_residuals_arrays
         self.stat_array = stat_array
 
         super().__init__(t, *args, **kwargs)
 
     def func(self) -> None:
-        eigenvector_arrays = [eig.to_numpy() for eig in self.eigenvector_arrays]
-        iv_arrays = [iv.to_numpy() for iv in self.iv_arrays]
-        ivsr_arrays = [ivsr.to_numpy() for ivsr in self.ivsr_arrays]
+        eigenvector_matrices = [
+            eigenvector_array.to_numpy()
+            for eigenvector_array in self.eigenvector_arrays
+        ]
+        inverse_variance_matrices = [
+            inverse_variance_array.to_numpy()
+            for inverse_variance_array in self.inverse_variance_arrays
+        ]
+        scaled_residuals_matrices = [
+            scaled_residuals_array.to_numpy()
+            for scaled_residuals_array in self.scaled_residuals_arrays
+        ]
 
         phenotype_counts = np.fromiter(
-            (iv.shape[1] for iv in iv_arrays),
+            (
+                inverse_variance_matrix.shape[1]
+                for inverse_variance_matrix in inverse_variance_matrices
+            ),
             dtype=int,
         )
         phenotype_indices = np.cumsum(phenotype_counts)
@@ -173,18 +185,18 @@ class Calc(Worker):
 
             for i in range(job_count):
                 can_calc = self.t.can_calc[i]
-                eigenvectors = eigenvector_arrays[i]
-                iv = iv_arrays[i]
-                ivsr = ivsr_arrays[i]
+                eigenvector_matrix = eigenvector_matrices[i]
+                inverse_variance_matrix = inverse_variance_matrices[i]
+                scaled_residuals_matrix = scaled_residuals_matrices[i]
                 phenotype_slice = phenotype_slices[i]
                 can_write = self.t.can_write[i]
 
                 logger.debug("Multiply the genotypes with the eigenvectors")
-                (sample_count, _) = ivsr.shape
+                (sample_count, _) = scaled_residuals_matrix.shape
                 rotated_genotypes = self.rotated_genotypes_array.to_numpy(
                     shape=(sample_count, variant_count)
                 )
-                rotated_genotypes[:] = eigenvectors.transpose() @ genotypes
+                rotated_genotypes[:] = eigenvector_matrix.transpose() @ genotypes
 
                 if i == job_count - 1:
                     logger.debug("Allow the reader to read the next batch of variants")
@@ -205,11 +217,11 @@ class Calc(Worker):
                 logger.debug(
                     f"Calculating U statistic for phenotypes {phenotype_slice}"
                 )
-                calc_u_stat(ivsr, rotated_genotypes, u_stat)
+                calc_u_stat(scaled_residuals_matrix, rotated_genotypes, u_stat)
                 logger.debug("Squaring genotypes")
                 rotated_genotypes[:] = np.square(rotated_genotypes)
                 logger.debug("Calculating V statistic")
-                calc_v_stat(iv, rotated_genotypes, u_stat, v_stat)
+                calc_v_stat(inverse_variance_matrix, rotated_genotypes, u_stat, v_stat)
                 # Signal that calculation has finished.
                 can_write.set()
 

@@ -20,6 +20,22 @@ from numpy import typing as npt
 
 from gwas.log import logger, setup_logging
 
+try:
+    from pytest_cov.embed import cleanup_on_sigterm  # type: ignore
+except ImportError:
+    pass
+else:
+    cleanup_on_sigterm()
+
+
+def parse_chromosome(chromosome: str) -> int | str:
+    if chromosome == "X":
+        return chromosome
+    elif chromosome.isdigit():
+        return int(chromosome)
+    else:
+        raise ValueError(f'Unknown chromosome "{chromosome}"')
+
 
 def chromosome_to_int(chromosome: int | str) -> int:
     if chromosome == "X":
