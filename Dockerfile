@@ -108,6 +108,7 @@ FROM conda as install
 COPY --from=merge /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
 RUN mamba install --yes --use-local \
     "python>=3.11" \
+    "pytorch=*=cpu*" \
         "bcftools>=1.17" \
     "gemma" \
         "plink" \
@@ -144,7 +145,8 @@ COPY --from=install /usr/local/mambaforge /usr/local/mambaforge
 # mamba create --name "gwas" \
 #   "python>=3.11" "mamba" \
 #   "jupyterlab" "ipywidgets" \
-#   "numpy" "scipy" "matplotlib" "networkx" "pandas" "pytorch<2" \
+#   "numpy" "scipy" "pandas" "pytorch<2" "networkx" \
+#   "matplotlib" "seaborn" \
 #   "bzip2" "p7zip>=15.09" \
 #   "bcftools>=1.17" "plink" "plink2" "tabix" \
 #   "cython>=3b1" "mkl-include" "mypy" "pytest-benchmark" "threadpoolctl"
