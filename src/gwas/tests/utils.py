@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from multiprocessing import cpu_count
 from pathlib import Path
 from subprocess import check_call
 
@@ -24,7 +25,8 @@ def to_bgzip(base_path: Path, zstd_path: Path) -> Path:
             [
                 "bash",
                 "-c",
-                f"zstd -c -d --long=31 {zstd_path} | bgzip > {gz_path}",
+                f"zstd -c -d --long=31 {zstd_path} | "
+                f"bgzip --threads {cpu_count()} > {gz_path}",
             ]
         )
 

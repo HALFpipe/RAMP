@@ -17,6 +17,11 @@ SampleSizeLabel = Literal["small", "medium", "large"]
 sample_sizes: Mapping[SampleSizeLabel, int] = dict(small=100, medium=500, large=3421)
 
 
+@pytest.fixture(scope="module", params=[22, "X"], autouse=True)
+def chromosome(request) -> str | int:
+    return request.param
+
+
 @pytest.fixture(scope="module")
 def sw(request) -> SharedWorkspace:
     sw = SharedWorkspace.create()

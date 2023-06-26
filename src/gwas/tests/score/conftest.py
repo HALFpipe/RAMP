@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import gzip
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from subprocess import check_call
 
@@ -32,19 +33,14 @@ from .simulation import (
 pytest_fixtures = [bfile_path, pfile_paths, simulation, variants, rmw_debug]
 
 
-@pytest.fixture(scope="module", params=list(range(simulation_count)))
-def phenotype_index(request) -> int:
-    return request.param
-
-
-@pytest.fixture(scope="module", params=[22, "X"])
-def chromosome(request) -> str | int:
-    return request.param
-
-
 @pytest.fixture(scope="module")
 def other_chromosomes(chromosome: int | str) -> list[str | int]:
     return sorted(chromosomes_set() - {chromosome, "X"}, key=chromosome_to_int)
+
+
+@pytest.fixture(scope="module", params=list(range(simulation_count)))
+def phenotype_index(request) -> int:
+    return request.param
 
 
 @pytest.fixture(scope="module")
@@ -101,9 +97,9 @@ def rmw_commands(
     vc: VariableCollection,
     eig: Eigendecomposition,
 ) -> list[tuple[Path, list[str]]]:
+    vcf_path = vcf_files_by_chromosome[chromosome].file_path
     rmw_path = Path(directory_factory.get("rmw", sample_size))
 
-    vcf_path = vcf_files_by_chromosome[chromosome].file_path
     if vcf_path.suffix != ".gz":
         vcf_gz_path = to_bgzip(rmw_path, vcf_path)
     else:
@@ -209,16 +205,22 @@ class RmwScore:
     array: npt.NDArray
 
 
+@cache
+def read_scorefile(path: Path) -> tuple[ScorefileHeader, npt.NDArray]:
+    header, array = Scorefile.read(path)
+    return header, array
+
+
 @pytest.fixture(scope="module")
 def rmw_score(
     rmw_scorefile_paths: list[Path],
 ) -> RmwScore:
     headers = list()
     arrays = list()
-    for path in rmw_scorefile_paths:
-        header, array = Scorefile.read(path)
-        headers.append(header)
-        arrays.append(array)
+    with Pool() as pool:
+        for header, array in pool.imap(read_scorefile, rmw_scorefile_paths):
+            headers.append(header)
+            arrays.append(array)
 
     return RmwScore(
         headers,
