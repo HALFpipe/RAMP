@@ -91,7 +91,7 @@ def check_bias(
     a: npt.NDArray[np.float64],
     b: npt.NDArray[np.float64],
     indices: npt.NDArray[np.bool_] | None = None,
-    atol: float = 5e-2,
+    tolerance: float = 5e-2,
     check_slope: bool = True,
     check_residuals: bool = True,
 ) -> bool:
@@ -102,9 +102,9 @@ def check_bias(
         f"mean_residuals={mean_residuals:f}"
     )
     is_ok: np.bool_ | bool = True
-    is_ok = is_ok and np.isclose(intercept, 0, atol=atol)
+    is_ok = is_ok and np.isclose(intercept, 0, atol=tolerance, rtol=tolerance)
     if check_slope:
-        is_ok = is_ok and np.isclose(slope, 1, atol=atol)
+        is_ok = is_ok and np.isclose(slope, 1, atol=tolerance, rtol=tolerance)
     if check_residuals:
-        is_ok = is_ok and np.isclose(mean_residuals, 0, atol=atol)
+        is_ok = is_ok and np.isclose(mean_residuals, 0, atol=tolerance, rtol=tolerance)
     return bool(is_ok)

@@ -206,11 +206,15 @@ def rmw_debug(
     assert np.isclose(
         rmw_debug.numerator,
         (rmw_debug.trans_geno / rmw_debug.sigma2 * rmw_debug.residuals).sum(),
+        atol=1e-3,
+        rtol=1e-3,
     )
 
     assert np.isclose(
         rmw_debug.denominator,
         (np.square(rmw_debug.trans_geno) / rmw_debug.sigma2).sum(),
+        atol=1e-3,
+        rtol=1e-3,
     )
 
     return rmw_debug

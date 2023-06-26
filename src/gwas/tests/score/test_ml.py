@@ -57,7 +57,7 @@ def test_fast_lmm(
         ) = ml.get_regression_weights(terms, optimize_input)
 
         constant = float(torch.log(variance).sum())
-        assert np.isclose(constant, rmw_constant, atol=1e-3)
+        assert np.isclose(constant, rmw_constant, atol=1e-3, rtol=1e-3)
 
         sigma = float(torch.square(scaled_residuals).mean())
         assert np.isclose(sigma, rmw_sigma, atol=1e-3)

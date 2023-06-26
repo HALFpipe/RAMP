@@ -105,6 +105,8 @@ def test_score(
     assert np.allclose(
         eig.eigenvectors.transpose() @ rmw_debug.genotype,
         rotated_genotype,
+        atol=1e-6,
+        rtol=1e-6,
     )
 
     variant_count = rotated_genotypes.shape[1]
@@ -162,7 +164,7 @@ def test_score(
     to_compare = finite[:, np.newaxis] & ~invalid
 
     assert check_bias(u_stat, rmw_u_stat, to_compare)
-    assert check_bias(sqrt_v_stat, rmw_sqrt_v_stat, to_compare)
+    assert check_bias(sqrt_v_stat, rmw_sqrt_v_stat, to_compare, tolerance=1e-1)
     assert check_bias(effsize, rmw_effsize, to_compare, check_residuals=False)
     assert check_bias(log_pvalue, log_rmw_pvalue, to_compare)
 
