@@ -390,7 +390,10 @@ def get_tri_tasks(
             continue
         # Generate default path.
         tri_path = output_directory / Triangular.get_file_name(chromosome)
-        if check_tri_path(tri_path, vcf_by_chromosome) is not None:
+        result = check_tri_path(tri_path, vcf_by_chromosome)
+        if result is not None:
+            chromosome, tri_path = result
+            tri_paths_by_chromosome[chromosome] = tri_path
             continue
 
         vcf_file = vcf_by_chromosome[chromosome]
