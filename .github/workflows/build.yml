@@ -64,7 +64,6 @@ jobs:
         with:
           context: "."
           file: "./Dockerfile"
-          push: true
           platforms: linux/amd64
           cache-from: type=registry,ref=${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.repo }}:buildcache
           cache-to: type=registry,ref=${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.repo }}:buildcache,compression=zstd,mode=max
