@@ -66,8 +66,6 @@ class TextFileArray(FileArray[T]):
         value: npt.NDArray[T],
         row_start: int,
         row_stop: int,
-        column_start: int,
-        column_stop: int,
     ):
         if self.file_handle is None:
             raise RuntimeError("File is not open for writing")
@@ -162,7 +160,7 @@ class TextFileArray(FileArray[T]):
             raise RuntimeError("File is not open for writing")
 
         # Write data
-        self.write_values(value, row_start, row_stop, column_start, column_stop)
+        self.write_values(value, row_start, row_stop)
 
         # Prepare for next part
         if self.has_multiple_parts:

@@ -130,12 +130,18 @@ class VCFFile(CompressedTextReader):
 
     vcf_variants: pd.DataFrame
     variant_indices: npt.NDArray[np.uint32]
+    allele_frequency_columns: list[str]
 
     minor_allele_frequency_cutoff: float
     r_squared_cutoff: float
 
     def __init__(self, file_path: Path | str) -> None:
         super().__init__(file_path)
+
+        self.allele_frequency_columns = [
+            "minor_allele_frequency",
+            "alternate_allele_frequency",
+        ]
 
         self.minor_allele_frequency_cutoff = -np.inf
         self.r_squared_cutoff = -np.inf
@@ -189,6 +195,9 @@ class VCFFile(CompressedTextReader):
     def variants(self) -> pd.DataFrame:
         return self.vcf_variants.iloc[self.variant_indices, :]
 
+    def reset_variants(self) -> None:
+        self.set_variants_from_cutoffs()
+
     def set_variants_from_cutoffs(
         self,
         minor_allele_frequency_cutoff: float = -np.inf,
@@ -198,13 +207,15 @@ class VCFFile(CompressedTextReader):
             value = np.asanyarray(series.values)
             return (value >= cutoff) | np.isclose(value, cutoff)
 
+        allele_frequency_frame = self.vcf_variants[self.allele_frequency_columns].copy()
+        is_major = allele_frequency_frame.values > 0.5
+        allele_frequency_frame.values[is_major] = (
+            1 - allele_frequency_frame.values[is_major]
+        )
+        allele_frequency = allele_frequency_frame.max(axis="columns")
         self.variant_indices = np.flatnonzero(
             greater_or_close(
-                self.vcf_variants.minor_allele_frequency,
-                minor_allele_frequency_cutoff,
-            )
-            & greater_or_close(
-                1 - self.vcf_variants.minor_allele_frequency,
+                allele_frequency,
                 minor_allele_frequency_cutoff,
             )
             & greater_or_close(self.vcf_variants.r_squared, r_squared_cutoff)
@@ -226,12 +237,25 @@ class VCFFile(CompressedTextReader):
         )
         self.samples = [sample for sample in self.vcf_samples if sample in samples]
 
+    def save_to_cache(self, cache_path: Path) -> None:
+        save_to_cache(cache_path, self.cache_key(self.file_path), self)
+
     @abstractmethod
     def read(
         self,
         dosages: npt.NDArray,
     ) -> None:
         ...
+
+    @staticmethod
+    def cache_key(vcf_path: Path) -> str:
+        stem = vcf_path.name.split(".")[0]
+        cache_key = f"{stem}.vcf-metadata"
+        return cache_key
+
+    @classmethod
+    def load_from_cache(cls, cache_path: Path, vcf_path: Path) -> VCFFile:
+        return load_from_cache(cache_path, cls.cache_key(vcf_path))
 
     @staticmethod
     def from_path(
@@ -272,15 +296,16 @@ class VCFFile(CompressedTextReader):
         return data_frame
 
 
-def load_vcf(cache_path: Path, vcf_path: Path) -> VCFFile:
-    stem = vcf_path.name.split(".")[0]
-    cache_key = f"{stem}.vcf-metadata"
-    vcf_file: VCFFile | None = load_from_cache(cache_path, cache_key)
+def load_vcf(
+    cache_path: Path,
+    vcf_path: Path,
+) -> VCFFile:
+    vcf_file: VCFFile | None = VCFFile.load_from_cache(cache_path, vcf_path)
     if vcf_file is None:
         vcf_file = VCFFile.from_path(vcf_path)
-        save_to_cache(cache_path, cache_key, vcf_file)
+        vcf_file.save_to_cache(cache_path)
     else:
-        logger.debug(f'Cached VCF file metadata for "{cache_key}"')
+        logger.debug(f'Cached VCF file metadata for "{VCFFile.cache_key(vcf_path)}"')
     return vcf_file
 
 

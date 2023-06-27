@@ -41,6 +41,8 @@ class VariableCollection:
     covariate_names: list[str]
     covariates: SharedArray
 
+    name: str | None = None
+
     @property
     def sample_count(self) -> int:
         sample_count = self.covariates.shape[0]
@@ -57,6 +59,10 @@ class VariableCollection:
     @property
     def phenotype_count(self) -> int:
         return self.phenotypes.shape[1]
+
+    @property
+    def sw(self) -> SharedWorkspace:
+        return self.phenotypes.sw
 
     @property
     def is_finite(self) -> bool:

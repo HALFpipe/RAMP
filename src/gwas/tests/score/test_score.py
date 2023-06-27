@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 import scipy
 import seaborn as sns
 from matplotlib import pyplot as plt
@@ -10,12 +11,12 @@ from numpy import typing as npt
 
 from gwas.eig import Eigendecomposition
 from gwas.log import logger
+from gwas.mem.arr import SharedArray
 from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection
 from gwas.score.calc import calc_u_stat, calc_v_stat
 from gwas.vcf.base import VCFFile
 
-from ...src.gwas.mem.arr import SharedArray
 from ..utils import check_bias
 from .conftest import RmwScore
 from .rmw_debug import RmwDebug
@@ -69,15 +70,17 @@ def plot_stat(
     plt.close(figure)
 
 
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 def test_rotate_demeaned_genotypes(
-    genotype_array: SharedArray,
+    genotypes_array: SharedArray,
     eig: Eigendecomposition,
     rotated_genotypes_array: SharedArray,
 ) -> None:
-    genotypes = genotype_array.to_numpy()
+    genotypes = genotypes_array.to_numpy()
     rotated_genotypes = rotated_genotypes_array.to_numpy()
 
-    mean = genotypes.sum(axis=0)
+    mean = genotypes.mean(axis=0)
 
     rotated_with_mean = np.asfortranarray(eig.eigenvectors.transpose() @ genotypes)
     scipy.linalg.blas.dger(
@@ -91,14 +94,16 @@ def test_rotate_demeaned_genotypes(
     assert np.allclose(rotated_with_mean, rotated_genotypes)
 
 
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 def test_genotypes_array(
     vcf_file: VCFFile,
-    genotype_array: SharedArray,
+    genotypes_array: SharedArray,
     vc: VariableCollection,
     rmw_score: RmwScore,
 ) -> None:
     r = rmw_score.array
-    genotypes = genotype_array.to_numpy()
+    genotypes = genotypes_array.to_numpy()
 
     sample_count, variant_count = genotypes.shape
     positions = np.asanyarray(vcf_file.variants.position)
@@ -122,6 +127,7 @@ def test_score(
     phenotype_index: int,
     nm: NullModelCollection,
     eig: Eigendecomposition,
+    genotypes_array: SharedArray,
     rotated_genotypes_array: SharedArray,
     rmw_score: RmwScore,
     rmw_debug: RmwDebug,

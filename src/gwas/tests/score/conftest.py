@@ -254,15 +254,15 @@ def genotypes_array(
     vcf_file: VCFFile,
     vc: VariableCollection,
     sw: SharedWorkspace,
-    eig: Eigendecomposition,
     request,
 ) -> SharedArray:
     sample_count = vc.sample_count
-    assert eig.sample_count == sample_count
     variant_count = sw.unallocated_size // (
         np.float64().itemsize * 2 * (vc.phenotype_count + vc.sample_count)
     )
     variant_count = min(variant_count, vcf_file.variant_count)
+
+    vcf_file.variant_indices = vcf_file.variant_indices[:variant_count]
 
     name = SharedArray.get_name(sw, "genotypes")
     genotypes_array = sw.alloc(name, sample_count, variant_count)
@@ -277,18 +277,20 @@ def genotypes_array(
 
 @pytest.fixture(scope="module")
 def rotated_genotypes_array(
-    genotype_array: SharedArray,
+    genotypes_array: SharedArray,
+    eig: Eigendecomposition,
     sw: SharedWorkspace,
     request,
 ) -> SharedArray:
-    genotypes = genotype_array.to_numpy()
+    genotypes = genotypes_array.to_numpy()
     sample_count, variant_count = genotypes.shape
+    assert eig.sample_count == sample_count
 
     name = SharedArray.get_name(sw, "rotated-genotypes")
     rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
     request.addfinalizer(rotated_genotypes_array.free)
 
-    mean = genotypes.sum(axis=0)
+    mean = genotypes.mean(axis=0)
     demeaned_genotypes = genotypes - mean
 
     rotated_genotypes = rotated_genotypes_array.to_numpy()

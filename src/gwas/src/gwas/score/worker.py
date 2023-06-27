@@ -243,9 +243,9 @@ class Calc(Worker):
                 )
 
                 calc_u_stat(scaled_residuals_matrix, rotated_genotypes, u_stat)
-                np.set_printoptions(linewidth=1000)
-                print(scaled_residuals_matrix)
-                print(rotated_genotypes)
+                # np.set_printoptions(linewidth=1000)
+                # print(scaled_residuals_matrix)
+                # print(rotated_genotypes)
 
                 logger.debug("Squaring genotypes")
                 np.square(rotated_genotypes, out=rotated_genotypes)
@@ -253,10 +253,10 @@ class Calc(Worker):
                 logger.debug("Calculating V statistic")
 
                 calc_v_stat(inverse_variance_matrix, rotated_genotypes, u_stat, v_stat)
-                np.set_printoptions(linewidth=1000)
-                print(inverse_variance_matrix)
-                print(rotated_genotypes)
-                print(v_stat)
+                # np.set_printoptions(linewidth=1000)
+                # print(inverse_variance_matrix)
+                # print(rotated_genotypes)
+                # print(v_stat)
 
                 # Signal that calculation has finished
                 can_write.set()

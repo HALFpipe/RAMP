@@ -55,7 +55,7 @@ class PhenotypeSummary(VariableSummary):
 
 
 @dataclass
-class JobSummary:
+class VariableCollectionSummary:
     status: Literal["pending", "null_model_complete", "score_complete"]
 
     sample_count: int
@@ -101,24 +101,24 @@ class JobSummary:
 
 @dataclass
 class SummaryCollection:
-    chunks: dict[str, list[JobSummary]]
+    chunks: dict[str, dict[str, VariableCollectionSummary]]
 
     def validate(self, variable_collections: list[list[VariableCollection]]) -> None:
-        for job_summary, vc in zip(
-            chain.from_iterable(self.chunks.values()),
+        for summary, vc in zip(
+            chain.from_iterable(chunk.values() for chunk in self.chunks.values()),
             chain.from_iterable(variable_collections),
         ):
-            job_phenotype_names = list(job_summary.phenotypes.keys())
-            if job_phenotype_names != vc.phenotype_names:
+            phenotype_names = list(summary.phenotypes.keys())
+            if phenotype_names != vc.phenotype_names:
                 raise ValueError(
                     "Phenotype names do not match"
-                    f"{job_phenotype_names} != {vc.phenotype_names}"
+                    f"{phenotype_names} != {vc.phenotype_names}"
                 )
-            job_covariate_names = list(job_summary.covariates.keys())
-            if job_covariate_names != vc.covariate_names:
+            covariate_names = list(summary.covariates.keys())
+            if covariate_names != vc.covariate_names:
                 raise ValueError(
                     "Covariate names do not match, "
-                    f"{job_covariate_names} != {vc.covariate_names}"
+                    f"{covariate_names} != {vc.covariate_names}"
                 )
 
     @classmethod
@@ -133,15 +133,15 @@ class SummaryCollection:
     def from_variable_collection_chunks(
         cls, variable_collection_chunks: list[list[VariableCollection]]
     ) -> Self:
-        return cls(
-            {
-                f"chunk-{i + 1:d}": [
-                    JobSummary.from_variable_collection(vc)
-                    for vc in variable_collections
-                ]
-                for i, variable_collections in enumerate(variable_collection_chunks)
-            }
-        )
+        chunks: dict[str, dict[str, VariableCollectionSummary]] = dict()
+        for i, variable_collections in enumerate(variable_collection_chunks):
+            chunk: dict[str, VariableCollectionSummary] = dict()
+            for vc in variable_collections:
+                if vc.name is None:
+                    raise ValueError("VariableCollection must have a name")
+                chunk[vc.name] = VariableCollectionSummary.from_variable_collection(vc)
+            chunks[f"chunk-{i + 1:d}"] = chunk
+        return cls(chunks)
 
 
 @dataclass
@@ -230,7 +230,7 @@ class JobCollection:
             inverse_variance_arrays: list[SharedArray] = list()
             scaled_residuals_arrays: list[SharedArray] = list()
             for eig, vc, summary in zip(
-                eigendecompositions, variable_collections, summaries
+                eigendecompositions, variable_collections, summaries.values()
             ):
                 nm = NullModelCollection.from_eig(
                     eig,
@@ -257,7 +257,7 @@ class JobCollection:
                 self.stat_file_array,
                 phenotype_offset,
             )
-            for summary in summaries:
+            for summary in summaries.values():
                 summary.status = "score_complete"
             self.dump()
             phenotype_offset += sum(vc.phenotype_count for vc in variable_collections)

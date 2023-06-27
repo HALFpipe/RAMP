@@ -11,7 +11,7 @@ from ._matrix_functions import dgesvdq
 from .mem.arr import SharedArray
 from .mem.wkspace import SharedWorkspace
 from .tri import Triangular
-from .utils import chromosomes_set
+from .utils import chromosomes_set, make_sample_boolean_vectors
 from .vcf.base import VCFFile
 
 
@@ -222,14 +222,13 @@ class EigendecompositionCollection:
         ]
         base_sample_count = len(base_samples)
 
-        sample_boolean_vectors: list[npt.NDArray[np.bool_]] = list()
+        sample_boolean_vectors = make_sample_boolean_vectors(
+            base_samples, (eig.samples for eig in eigs)
+        )
         eigenvector_arrays: list[SharedArray] = list()
-        for eig in eigs:
-            sample_count = len(eig.samples)
 
-            sample_boolean_vector = np.fromiter(
-                (sample in eig.samples for sample in base_samples), dtype=np.bool_
-            )
+        for eig, sample_boolean_vector in zip(eigs, sample_boolean_vectors):
+            sample_count = len(eig.samples)
 
             name = f"expanded-{eig.name}"
             array = sw.alloc(name, base_sample_count, sample_count)
@@ -238,7 +237,6 @@ class EigendecompositionCollection:
             matrix[:] = 0
             matrix[sample_boolean_vector, :] = eig.eigenvectors
 
-            sample_boolean_vectors.append(sample_boolean_vector)
             eigenvector_arrays.append(array)
 
         return cls(

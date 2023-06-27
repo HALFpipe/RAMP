@@ -64,7 +64,7 @@ def test_run(
 
     sc = SummaryCollection.from_file(tmp_path / f"chr{chromosome}.metadata.yaml.gz")
     for summaries in sc.chunks.values():
-        for summary in summaries:
+        for summary in summaries.values():
             assert summary.sample_count == vc.sample_count
             for i, phenotype_name in enumerate(vc.phenotype_names):
                 phenotype_summary = summary.phenotypes[phenotype_name]

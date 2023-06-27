@@ -149,4 +149,6 @@ def tri_paths_by_chromosome(
     sample_size_label: str,
     tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
 ) -> Mapping[str | int, Path]:
-    return tri_paths_by_size_and_chromosome[sample_size_label]
+    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sample_size_label]
+    assert len(tri_paths_by_chromosome) > 0
+    return tri_paths_by_chromosome

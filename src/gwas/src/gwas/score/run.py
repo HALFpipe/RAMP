@@ -55,19 +55,19 @@ def calc_score(
     )
     # Allocate the arrays in shared memory.
     name = SharedArray.get_name(sw, "genotypes")
-    genotype_array = sw.alloc(name, sample_count, variant_count)
+    genotypes_array = sw.alloc(name, sample_count, variant_count)
     name = SharedArray.get_name(sw, "rotated-genotypes")
-    rotated_genotype_array = sw.alloc(name, sample_count, variant_count)
+    rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
     name = SharedArray.get_name(sw, "stat")
     stat_array: SharedArray = sw.alloc(name, 2, phenotype_count, variant_count)
     # Create the worker processes.
     t = TaskSyncCollection(job_count=job_count)
-    reader_proc = GenotypeReader(t, vcf_file, genotype_array)
+    reader_proc = GenotypeReader(t, vcf_file, genotypes_array)
     calc_proc = Calc(
         t,
-        genotype_array,
+        genotypes_array,
         ec,
-        rotated_genotype_array,
+        rotated_genotypes_array,
         inverse_variance_arrays,
         scaled_residuals_arrays,
         stat_array,
@@ -92,7 +92,7 @@ def calc_score(
         try:
             for proc in procs:
                 proc.start()
-            # Allow use of genotype_array and stat_array.
+            # Allow use of genotypes_array and stat_array.
             t.can_read.set()
             for can_calc in t.can_calc:
                 can_calc.set()
@@ -116,7 +116,7 @@ def calc_score(
                     proc.kill()
                 proc.join()
                 proc.close()
-            genotype_array.free()
-            rotated_genotype_array.free()
+            genotypes_array.free()
+            rotated_genotypes_array.free()
             stat_array.free()
             update_progress_bar()

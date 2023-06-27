@@ -11,6 +11,7 @@ from tqdm.auto import tqdm
 from ..compression.arr.base import compression_methods
 from ..eig import Eigendecomposition
 from ..log import logger
+from ..mean import calc_mean
 from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..pheno import VariableCollection
@@ -107,7 +108,6 @@ class GwasCommand:
                 raise RuntimeError(
                     f"No phenotypes in chunk {i}. This should not happen"
                 )
-                continue
 
             vc = self.get_variable_collection()
             vc.subset_phenotypes(pattern_phenotypes)
@@ -119,13 +119,13 @@ class GwasCommand:
                 )
 
             if self.arguments.add_principal_components > 0:
-                eig = self.get_eigendecomposition("X", vc)  # All autosomes.
+                eig = self.get_eigendecomposition("X", vc)  # All autosomes
 
                 k = self.arguments.add_principal_components
                 pc_array = eig.eigenvectors[:, :k]
                 pc_names = [f"principal_component_{i + 1:02d}" for i in range(k)]
 
-                # Merge the existing array with the principal components.
+                # Merge the existing array with the principal components
                 covariates = np.hstack([vc.covariates.to_numpy(), pc_array])
 
                 # Clean up.
@@ -140,33 +140,36 @@ class GwasCommand:
 
             variable_collections.append(vc)
 
-        # Sort by number of phenotypes.
+        # Sort by number of phenotypes
         variable_collections.sort(key=lambda vc: -vc.phenotype_count)
+
+        # Set names
+        for i, vc in enumerate(variable_collections):
+            vc.name = f"variableCollection-{i + 1:02d}"
+
         return variable_collections
 
     def __post_init__(self) -> None:
         logger.debug("Arguments are %s", pformat(vars(self.arguments)))
 
-        # Convert command line arguments to `Path` objects.
+        # Convert command line arguments to `Path` objects
         vcf_paths: list[Path] = [Path(p) for p in self.arguments.vcf]
         tri_paths: list[Path] = [Path(p) for p in self.arguments.tri]
         self.phenotype_paths: list[Path] = [Path(p) for p in self.arguments.phenotypes]
         self.covariate_paths: list[Path] = [Path(p) for p in self.arguments.covariates]
 
-        # Load VCF file metadata and cache it.
+        # Load VCF file metadata and cache it
         vcf_files = calc_vcf(vcf_paths, self.output_directory)
-        self.vcf_by_chromosome = {
-            vcf_file.chromosome: vcf_file for vcf_file in vcf_files
-        }
-        # Update samples to only include those that are in all VCF files.
+        self.set_vcf_files(vcf_files)
+        # Update samples to only include those that are in all VCF files
         vcf_sample_set: set[str] = set.intersection(
             *(set(vcf_file.samples) for vcf_file in vcf_files)
         )
         for vcf_file in vcf_files:
             vcf_file.set_samples(vcf_sample_set)
-        # Ensure that we have the samples in the correct order.
+        # Ensure that we have the samples in the correct order
         self.vcf_samples = vcf_files[0].samples
-        # Load or calculate triangularized genotype data.
+        # Load or calculate triangularized genotype data
         self.tri_paths_by_chromosome = calc_tri(
             self.chromosomes,
             self.vcf_by_chromosome,
@@ -176,8 +179,14 @@ class GwasCommand:
             self.arguments.kinship_minor_allele_frequency_cutoff,
             self.arguments.kinship_r_squared_cutoff,
         )
-        # Split into missing value chunks.
+        # Split into missing value chunks
         self.variable_collections = self.split_by_missing_values()
+        self.set_vcf_files(vcf_files)
+
+    def set_vcf_files(self, vcf_files: list[VCFFile]) -> None:
+        self.vcf_by_chromosome = {
+            vcf_file.chromosome: vcf_file for vcf_file in vcf_files
+        }
 
     def run(self) -> None:
         chromosomes: Iterable[int | str] = self.chromosomes
@@ -186,6 +195,12 @@ class GwasCommand:
         chromosomes = sorted(chromosomes, key=chromosome_to_int)
         for chromosome in tqdm(chromosomes, desc="chromosomes"):
             vcf_file = self.vcf_by_chromosome[chromosome]
+            # Update the VCF file allele frequencies based on variable collections
+            if calc_mean(
+                vcf_file,
+                self.variable_collections,
+            ):
+                vcf_file.save_to_cache(self.output_directory)
             vcf_file.set_variants_from_cutoffs(
                 minor_allele_frequency_cutoff=(
                     self.arguments.score_minor_allele_frequency_cutoff
@@ -195,23 +210,23 @@ class GwasCommand:
             # We need to run the score calculation for each variable collection.
             variable_collections = self.variable_collections.copy()
             # Split the variable collections into chunks that fit efficiently
-            # into memory.
+            # into memory
             chunks: list[list[VariableCollection]] = list()
-            # Get available memory.
+            # Get available memory
             itemsize = np.float64().itemsize
             available_size = self.sw.unallocated_size // itemsize
-            # Loop over the variable collections.
+            # Loop over the variable collections
             chunk_size: int = 0
             current_chunk: list[VariableCollection] = list()
             while len(variable_collections) > 0:
                 vc = variable_collections.pop()
                 current_chunk.append(vc)
-                # Predict memory usage.
+                # Predict memory usage
                 chunk_size += len(self.vcf_samples) * vc.sample_count
                 chunk_size += 2 * vc.sample_count * vc.phenotype_count
                 if chunk_size / available_size > 0.5:
                     # We are using more than half of the available memory
-                    # for just the model data. We need to split the chunk.
+                    # for just the model data. We need to split the chunk
                     chunks.append(current_chunk)
                     current_chunk = list()
             chunks.append(current_chunk)

@@ -12,7 +12,7 @@ from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event
 from queue import Empty
 from shutil import which
-from typing import Any, Type, TypeVar, get_args, get_origin
+from typing import Any, Iterable, Type, TypeVar, get_args, get_origin
 
 import numpy as np
 import torch.multiprocessing as mp
@@ -216,3 +216,13 @@ def parse_obj_as(cls: Type[T], data: Any) -> T:
         }  # type: ignore
 
     return data
+
+
+def make_sample_boolean_vectors(
+    base_samples: list[str],
+    samples_iterable: Iterable[list[str]],
+) -> list[npt.NDArray[np.bool_]]:
+    return [
+        np.fromiter((sample in samples for sample in base_samples), dtype=np.bool_)
+        for samples in samples_iterable
+    ]
