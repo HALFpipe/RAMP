@@ -4,6 +4,7 @@ import multiprocessing as mp
 import sys
 from argparse import ArgumentParser
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 
@@ -13,7 +14,7 @@ def main() -> None:
     run(sys.argv[1:])
 
 
-def run(argv: list[str]) -> None:
+def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") -> None:
     from gwas.compression.arr.base import compression_methods
     from gwas.log import logger, setup_logging
     from gwas.mem.wkspace import SharedWorkspace
@@ -122,3 +123,5 @@ def run(argv: list[str]) -> None:
                 import pdb
 
                 pdb.post_mortem()
+            if error_action == "raise":
+                raise e

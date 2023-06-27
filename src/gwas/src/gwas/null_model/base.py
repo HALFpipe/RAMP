@@ -7,11 +7,13 @@ from numpy import typing as npt
 
 from gwas.eig import Eigendecomposition
 from gwas.mem.arr import SharedArray
+from gwas.mem.wkspace import SharedWorkspace
 from gwas.pheno import VariableCollection
 
 
 @dataclass
 class NullModelResult:
+    log_likelihood: float
     heritability: float
     genetic_variance: float
     error_variance: float
@@ -24,13 +26,14 @@ class NullModelResult:
 
     @classmethod
     def null(cls) -> Self:
-        return cls(np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan)
+        return cls(np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan)
 
 
 @dataclass
 class NullModelCollection:
     method: str | None
 
+    log_likelihood: npt.NDArray[np.float64]
     heritability: npt.NDArray[np.float64]
     genetic_variance: npt.NDArray[np.float64]
     error_variance: npt.NDArray[np.float64]
@@ -50,7 +53,12 @@ class NullModelCollection:
     def sample_count(self) -> int:
         return self.half_scaled_residuals.shape[1]
 
+    @property
+    def sw(self) -> SharedWorkspace:
+        return self.regression_weights.sw
+
     def put(self, phenotype_index: int, r: NullModelResult) -> None:
+        self.log_likelihood[phenotype_index] = r.log_likelihood
         self.heritability[phenotype_index] = r.heritability
         self.genetic_variance[phenotype_index] = r.genetic_variance
         self.error_variance[phenotype_index] = r.error_variance
@@ -65,6 +73,32 @@ class NullModelCollection:
 
         residuals[:, phenotype_index] = np.ravel(r.half_scaled_residuals)
         variance[:, phenotype_index] = np.ravel(r.variance)
+
+    def get_arrays_for_score_calc(self) -> tuple[SharedArray, SharedArray]:
+        variance = self.variance.to_numpy()
+        (sample_count, phenotype_count) = variance.shape
+        half_scaled_residuals = self.half_scaled_residuals.to_numpy()
+        # Pre-compute the inverse variance.
+        inverse_variance_array = self.sw.alloc(
+            SharedArray.get_name(self.sw, "inverse-variance"),
+            sample_count,
+            phenotype_count,
+        )
+        inverse_variance_matrix = inverse_variance_array.to_numpy()
+        np.reciprocal(variance, out=inverse_variance_matrix)
+        # Pre-compute the inverse variance scaled residuals.
+        scaled_residuals_array = self.sw.alloc(
+            SharedArray.get_name(self.sw, "scaled-residuals"),
+            sample_count,
+            phenotype_count,
+        )
+        scaled_residuals_matrix = scaled_residuals_array.to_numpy()
+        np.true_divide(
+            half_scaled_residuals,
+            np.sqrt(variance),
+            out=scaled_residuals_matrix,
+        )
+        return inverse_variance_array, scaled_residuals_array
 
     def free(self) -> None:
         self.regression_weights.free()
@@ -103,6 +137,7 @@ class NullModelCollection:
 
         nm = cls(
             method,
+            np.full((vc.phenotype_count,), np.nan),
             np.full((vc.phenotype_count,), np.nan),
             np.full((vc.phenotype_count,), np.nan),
             np.full((vc.phenotype_count,), np.nan),

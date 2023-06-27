@@ -49,9 +49,7 @@ class GwasCommand:
         )
         tri_paths = [self.tri_paths_by_chromosome[c] for c in other_chromosomes]
         # Calculate eigendecomposition and free tris.
-        eig = Eigendecomposition.from_files(
-            *tri_paths, sw=self.sw, samples=vc.samples, chromosome=chromosome
-        )
+        eig = Eigendecomposition.from_files(*tri_paths, sw=self.sw, samples=vc.samples)
         return eig
 
     def get_variable_collection(self) -> VariableCollection:

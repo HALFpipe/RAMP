@@ -45,6 +45,8 @@ class CovariateSummary(VariableSummary):
 
 @dataclass
 class PhenotypeSummary(VariableSummary):
+    method: str | None = None
+    log_likelihood: float | None = None
     genetic_variance: float | None = None
     error_variance: float | None = None
     heritability: float | None = None
@@ -64,6 +66,8 @@ class JobSummary:
     def put_null_model_collection(self, nm: NullModelCollection) -> None:
         self.status = "null_model_complete"
         for i, name in enumerate(self.phenotypes.keys()):
+            self.phenotypes[name].method = nm.method
+            self.phenotypes[name].log_likelihood = float(nm.log_likelihood[i])
             self.phenotypes[name].genetic_variance = float(nm.genetic_variance[i])
             self.phenotypes[name].error_variance = float(nm.error_variance[i])
             self.phenotypes[name].heritability = float(nm.heritability[i])
@@ -211,7 +215,7 @@ class JobCollection:
             yaml.dump(value, file_handle, sort_keys=False, width=np.inf)
 
     def run(self) -> None:
-        sw = self.sw
+        phenotype_offset: int = 0
         for variable_collections, summaries in zip(
             self.variable_collection_chunks, self.summary_collection.chunks.values()
         ):
@@ -236,24 +240,11 @@ class JobCollection:
                 )
                 summary.put_null_model_collection(nm)
                 # Extract the matrices we actually need from the nm.
-                variance = nm.variance.to_numpy()
-                (sample_count, phenotype_count) = variance.shape
-                half_scaled_residuals = nm.half_scaled_residuals.to_numpy()
-                # Pre-compute the inverse variance.
-                inverse_variance_array = sw.alloc(
-                    SharedArray.get_name(sw, "inverse-variance"),
-                    sample_count,
-                    phenotype_count,
-                )
-                inverse_variance_array[:] = np.reciprocal(variance)
+                (
+                    inverse_variance_array,
+                    scaled_residuals_array,
+                ) = nm.get_arrays_for_score_calc()
                 inverse_variance_arrays.append(inverse_variance_array)
-                # Pre-compute the inverse variance scaled residuals.
-                scaled_residuals_array = sw.alloc(
-                    SharedArray.get_name(sw, "scaled-residuals"),
-                    sample_count,
-                    phenotype_count,
-                )
-                scaled_residuals_array[:] = half_scaled_residuals / np.sqrt(variance)
                 scaled_residuals_arrays.append(scaled_residuals_array)
                 # Free the nm.
                 nm.free()
@@ -264,10 +255,12 @@ class JobCollection:
                 inverse_variance_arrays,
                 scaled_residuals_arrays,
                 self.stat_file_array,
+                phenotype_offset,
             )
             for summary in summaries:
                 summary.status = "score_complete"
             self.dump()
+            phenotype_offset += sum(vc.phenotype_count for vc in variable_collections)
 
     @property
     def chromosome(self) -> int | str:

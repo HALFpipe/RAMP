@@ -197,6 +197,7 @@ class ProfileMaximumLikelihood:
                 o,
             )
             return phenotype_index, NullModelResult(
+                float(optimize_result.fun),
                 *self.get_heritability(terms),
                 weights.detach().numpy(),
                 errors.detach().numpy(),

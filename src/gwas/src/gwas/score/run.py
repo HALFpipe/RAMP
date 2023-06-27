@@ -28,6 +28,8 @@ def calc_score(
         vcf_file,
         eigendecompositions,
     )
+    for eig in eigendecompositions:
+        eig.free()
     vcf_file.set_samples(set(ec.samples))
     if vcf_file.samples != ec.samples:
         raise ValueError(
@@ -64,7 +66,7 @@ def calc_score(
     calc_proc = Calc(
         t,
         genotype_array,
-        ec.eigenvector_arrays,
+        ec,
         rotated_genotype_array,
         inverse_variance_arrays,
         scaled_residuals_arrays,

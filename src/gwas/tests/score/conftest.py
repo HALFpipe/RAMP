@@ -4,16 +4,18 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from subprocess import check_call
+from typing import Mapping
 
 import numpy as np
 import pytest
 from numpy import typing as npt
 
 from gwas.eig import Eigendecomposition
+from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
+from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection
 from gwas.rmw import Scorefile, ScorefileHeader
-from gwas.tri import Triangular
 from gwas.utils import Pool, chromosome_to_int, chromosomes_set
 from gwas.vcf.base import VCFFile
 
@@ -80,12 +82,31 @@ def eig(
     sw: SharedWorkspace,
     request,
 ) -> Eigendecomposition:
-    tris: list[Triangular] = [
-        Triangular.from_file(tri_paths_by_chromosome[c], sw) for c in other_chromosomes
-    ]
-    eig = Eigendecomposition.from_tri(*tris)
+    eig = Eigendecomposition.from_files(
+        *(tri_paths_by_chromosome[c] for c in other_chromosomes),
+        sw=sw,
+    )
     request.addfinalizer(eig.free)
     return eig
+
+
+@pytest.fixture(scope="module")
+def nm(
+    vc: VariableCollection,
+    eig: Eigendecomposition,
+    request,
+) -> NullModelCollection:
+    nm = NullModelCollection.from_eig(eig, vc, method="fastlmm")
+    request.addfinalizer(nm.free)
+
+    return nm
+
+
+@pytest.fixture(scope="module")
+def vcf_file(
+    chromosome: int | str, vcf_files_by_chromosome: Mapping[int | str, VCFFile]
+) -> VCFFile:
+    return vcf_files_by_chromosome[chromosome]
 
 
 @pytest.fixture(scope="module")
@@ -93,11 +114,11 @@ def rmw_commands(
     directory_factory: DirectoryFactory,
     chromosome: int | str,
     sample_size: int,
-    vcf_files_by_chromosome: dict[int | str, VCFFile],
+    vcf_file: VCFFile,
     vc: VariableCollection,
     eig: Eigendecomposition,
 ) -> list[tuple[Path, list[str]]]:
-    vcf_path = vcf_files_by_chromosome[chromosome].file_path
+    vcf_path = vcf_file.file_path
     rmw_path = Path(directory_factory.get("rmw", sample_size))
 
     if vcf_path.suffix != ".gz":
@@ -226,3 +247,51 @@ def rmw_score(
         headers,
         np.vstack(arrays).transpose(),
     )
+
+
+@pytest.fixture(scope="module")
+def genotypes_array(
+    vcf_file: VCFFile,
+    vc: VariableCollection,
+    sw: SharedWorkspace,
+    eig: Eigendecomposition,
+    request,
+) -> SharedArray:
+    sample_count = vc.sample_count
+    assert eig.sample_count == sample_count
+    variant_count = sw.unallocated_size // (
+        np.float64().itemsize * 2 * (vc.phenotype_count + vc.sample_count)
+    )
+    variant_count = min(variant_count, vcf_file.variant_count)
+
+    name = SharedArray.get_name(sw, "genotypes")
+    genotypes_array = sw.alloc(name, sample_count, variant_count)
+    request.addfinalizer(genotypes_array.free)
+
+    genotypes = genotypes_array.to_numpy()
+    with vcf_file:
+        vcf_file.read(genotypes.transpose())
+
+    return genotypes_array
+
+
+@pytest.fixture(scope="module")
+def rotated_genotypes_array(
+    genotype_array: SharedArray,
+    sw: SharedWorkspace,
+    request,
+) -> SharedArray:
+    genotypes = genotype_array.to_numpy()
+    sample_count, variant_count = genotypes.shape
+
+    name = SharedArray.get_name(sw, "rotated-genotypes")
+    rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
+    request.addfinalizer(rotated_genotypes_array.free)
+
+    mean = genotypes.sum(axis=0)
+    demeaned_genotypes = genotypes - mean
+
+    rotated_genotypes = rotated_genotypes_array.to_numpy()
+    rotated_genotypes[:] = eig.eigenvectors.transpose() @ demeaned_genotypes
+
+    return rotated_genotypes_array

@@ -183,7 +183,6 @@ class Eigendecomposition(SharedArray):
             tri = Triangular.from_file(tri_path, sw)
             if samples is not None:
                 tri.subset_samples(samples)
-                tri.transpose()
             tris.append(tri)
         return cls.from_tri(*tris, chromosome=chromosome)
 
@@ -192,6 +191,7 @@ class Eigendecomposition(SharedArray):
 class EigendecompositionCollection:
     chromosome: int | str | None
     samples: list[str]
+    sample_boolean_vectors: list[npt.NDArray[np.bool_]]
     eigenvector_arrays: list[SharedArray]
 
     @property
@@ -222,24 +222,28 @@ class EigendecompositionCollection:
         ]
         base_sample_count = len(base_samples)
 
-        eigenvector_arrays = list()
+        sample_boolean_vectors: list[npt.NDArray[np.bool_]] = list()
+        eigenvector_arrays: list[SharedArray] = list()
         for eig in eigs:
             sample_count = len(eig.samples)
 
-            sample_indices = [base_samples.index(sample) for sample in eig.samples]
+            sample_boolean_vector = np.fromiter(
+                (sample in eig.samples for sample in base_samples), dtype=np.bool_
+            )
 
             name = f"expanded-{eig.name}"
             array = sw.alloc(name, base_sample_count, sample_count)
 
             matrix = array.to_numpy()
             matrix[:] = 0
-            matrix[sample_indices, :] = eig.eigenvectors
-            eig.free()
+            matrix[sample_boolean_vector, :] = eig.eigenvectors
 
+            sample_boolean_vectors.append(sample_boolean_vector)
             eigenvector_arrays.append(array)
 
         return cls(
             chromosome,
             base_samples,
+            sample_boolean_vectors,
             eigenvector_arrays,
         )

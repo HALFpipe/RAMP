@@ -63,7 +63,7 @@ class TextFileArray(FileArray[T]):
 
     def write_values(
         self,
-        values: npt.NDArray[T],
+        value: npt.NDArray[T],
         row_start: int,
         row_stop: int,
         column_start: int,
@@ -80,8 +80,19 @@ class TextFileArray(FileArray[T]):
                     row_values.extend(map(to_str, metadata.values))
                 elif metadata is not None:
                     row_values.append(metadata)
-            row_values.extend(map(to_str, values[row_index, column_start:column_stop]))
+
+            row_values.extend(
+                map(
+                    to_str,
+                    value[
+                        row_index - row_start,  # Rows go from 0 of values
+                        :,
+                    ],
+                )
+            )
+
             self.file_handle.write(self.delimiter.join(row_values) + "\n")
+            self.current_row_index += 1
 
     def __setitem__(self, key: tuple[slice, ...], value: npt.NDArray[T]) -> None:
         if len(key) != len(self.shape):
@@ -97,6 +108,11 @@ class TextFileArray(FileArray[T]):
         )
 
         # Validate key
+        if value.shape != (row_stop - row_start, column_stop - column_start):
+            raise ValueError(
+                f"Value shape {value.shape} does not match key shape "
+                f"{(row_stop - row_start, column_stop - column_start)}"
+            )
         if row_step is not None and row_step != 1:
             raise ValueError(
                 "Can only write text file sequentially, row step must be 1"

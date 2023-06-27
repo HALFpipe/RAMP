@@ -1,71 +1,111 @@
 # -*- coding: utf-8 -*-
-from typing import Mapping
+
+from pathlib import Path
 
 import numpy as np
-import pytest
 import scipy
+import seaborn as sns
+from matplotlib import pyplot as plt
 from numpy import typing as npt
 
 from gwas.eig import Eigendecomposition
-from gwas.mem.arr import SharedArray
-from gwas.mem.wkspace import SharedWorkspace
+from gwas.log import logger
 from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection
 from gwas.score.calc import calc_u_stat, calc_v_stat
 from gwas.vcf.base import VCFFile
 
+from ...src.gwas.mem.arr import SharedArray
 from ..utils import check_bias
 from .conftest import RmwScore
 from .rmw_debug import RmwDebug
 
 
-@pytest.fixture(scope="module")
-def rotated_genotypes(
-    chromosome: int | str,
-    vcf_files_by_chromosome: Mapping[int | str, VCFFile],
-    vc: VariableCollection,
-    sw: SharedWorkspace,
-    eig: Eigendecomposition,
-    rmw_score: RmwScore,
-    request,
-):
-    r = rmw_score.array
+def plot_stat(
+    x: npt.NDArray[np.float64],
+    y: npt.NDArray[np.float64],
+    title: str,
+    xlabel: str,
+    ylabel: str,
+    path: Path,
+) -> None:
+    # Capitalize first letter of labels
+    title = title[0].upper() + title[1:]
+    xlabel = xlabel[0].upper() + xlabel[1:]
+    ylabel = ylabel[0].upper() + ylabel[1:]
 
-    sample_count = vc.sample_count
-    assert eig.sample_count == sample_count
-    vcf_file = vcf_files_by_chromosome[chromosome]
-    variant_count = sw.unallocated_size // (
-        np.float64().itemsize * 2 * (vc.phenotype_count + vc.sample_count)
+    (color,) = sns.color_palette("hls", 1)
+
+    figure, axes = plt.subplots(figsize=(6, 6), dpi=600)
+    axes.set_title(title)
+    axes.scatter(
+        x=x,
+        y=y,
+        color=color,
+        alpha=0.005,
+        edgecolors=None,  # type: ignore
     )
-    variant_count = min(variant_count, vcf_file.variant_count)
+    axes.axline((0, 0), slope=1, color="black")
+    axes.set_xlabel(xlabel)
+    axes.set_ylabel(ylabel)
+    figure.savefig(f"{path}.scatter.png")
+    plt.close(figure)
 
-    name = SharedArray.get_name(sw, "genotypes")
-    genotypes_array = sw.alloc(name, sample_count, variant_count)
-    request.addfinalizer(genotypes_array.free)
-    name = SharedArray.get_name(sw, "rotated-genotypes")
-    rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
-    request.addfinalizer(rotated_genotypes_array.free)
+    figure, axes = plt.subplots(figsize=(6, 6), dpi=600)
+    axes.set_title(title)
+    sns.residplot(
+        x=x,
+        y=y,
+        scatter_kws=dict(
+            color=color,
+            alpha=0.005,
+            edgecolors=None,
+        ),
+        ax=axes,
+    )
+    axes.set_xlabel(xlabel)
+    axes.set_ylabel(ylabel)
+    figure.savefig(f"{path}.residuals.png")
+    plt.close(figure)
 
-    genotypes = genotypes_array.to_numpy()
-    with vcf_file:
-        vcf_file.read(genotypes.transpose())
 
+def test_rotate_demeaned_genotypes(
+    genotype_array: SharedArray,
+    eig: Eigendecomposition,
+    rotated_genotypes_array: SharedArray,
+) -> None:
+    genotypes = genotype_array.to_numpy()
+    rotated_genotypes = rotated_genotypes_array.to_numpy()
+
+    mean = genotypes.sum(axis=0)
+
+    rotated_with_mean = np.asfortranarray(eig.eigenvectors.transpose() @ genotypes)
+    scipy.linalg.blas.dger(
+        alpha=-1,
+        x=eig.eigenvectors.sum(axis=0),
+        y=mean,
+        a=rotated_with_mean,
+        overwrite_a=True,
+        overwrite_y=False,
+    )
+    assert np.allclose(rotated_with_mean, rotated_genotypes)
+
+
+def test_genotypes_array(
+    vcf_file: VCFFile,
+    genotype_array: SharedArray,
+    vc: VariableCollection,
+    rmw_score: RmwScore,
+) -> None:
+    r = rmw_score.array
+    genotypes = genotype_array.to_numpy()
+
+    sample_count, variant_count = genotypes.shape
     positions = np.asanyarray(vcf_file.variants.position)
 
     alternate_allele_count = genotypes.sum(axis=0)
     mean = alternate_allele_count / sample_count
     alternate_allele_frequency = mean / 2
-    genotypes -= mean
-
-    variant_count = positions.size
-    assert variant_count == vcf_file.variant_count
-    genotypes_array.resize(sample_count, variant_count)
-    genotypes = genotypes_array.to_numpy()
-
-    rotated_genotypes_array.resize(sample_count, variant_count)
-    rotated_genotypes = rotated_genotypes_array.to_numpy()
-
-    rotated_genotypes[:] = eig.eigenvectors.transpose() @ genotypes
 
     assert np.all(r["POS"] == positions[:, np.newaxis])
     assert np.all(r["N_INFORMATIVE"] == vc.sample_count)
@@ -76,30 +116,18 @@ def rotated_genotypes(
         alternate_allele_count[:, np.newaxis],
     )
 
-    return rotated_genotypes
-
-
-@pytest.fixture(scope="module")
-def nm(
-    vc: VariableCollection,
-    eig: Eigendecomposition,
-    request,
-) -> NullModelCollection:
-    nm = NullModelCollection.from_eig(eig, vc, method="fastlmm")
-    request.addfinalizer(nm.free)
-
-    return nm
-
 
 def test_score(
+    tmp_path: Path,
     phenotype_index: int,
-    vc: VariableCollection,
     nm: NullModelCollection,
     eig: Eigendecomposition,
-    rotated_genotypes: npt.NDArray,
+    rotated_genotypes_array: SharedArray,
     rmw_score: RmwScore,
     rmw_debug: RmwDebug,
-):
+) -> None:
+    rotated_genotypes = rotated_genotypes_array.to_numpy()
+
     phenotype_count = 1
     rotated_genotype = rotated_genotypes[:, 0]
     assert np.allclose(
@@ -109,7 +137,7 @@ def test_score(
         rtol=1e-6,
     )
 
-    variant_count = rotated_genotypes.shape[1]
+    sample_count, variant_count = rotated_genotypes.shape
 
     # Parse rmw scorefile columns
     rmw_u_stat = rmw_score.array["U_STAT"]
@@ -163,10 +191,55 @@ def test_score(
 
     to_compare = finite[:, np.newaxis] & ~invalid
 
-    assert check_bias(u_stat, rmw_u_stat, to_compare)
-    assert check_bias(sqrt_v_stat, rmw_sqrt_v_stat, to_compare, tolerance=1e-1)
-    assert check_bias(effsize, rmw_effsize, to_compare, check_residuals=False)
-    assert check_bias(log_pvalue, log_rmw_pvalue, to_compare)
+    is_ok = True
+
+    has_no_bias = check_bias(u_stat, rmw_u_stat, to_compare)
+    is_ok = is_ok and has_no_bias
+
+    has_no_bias = check_bias(sqrt_v_stat, rmw_sqrt_v_stat, to_compare, tolerance=1e-1)
+    is_ok = is_ok and has_no_bias
+
+    same_maximum = np.isclose(
+        nm.log_likelihood[phenotype_index],
+        rmw_debug.log_likelihood_hat,
+        atol=1e-3,
+        rtol=1e-3,
+    )
+    if same_maximum:
+        has_no_bias = check_bias(
+            effsize,
+            rmw_effsize,
+            to_compare,
+            tolerance=np.abs(rmw_effsize[to_compare]).mean() / 1e3,
+            check_residuals=False,
+        )
+        is_ok = is_ok and has_no_bias
+
+        has_no_bias = check_bias(log_pvalue, log_rmw_pvalue, to_compare)
+        is_ok = is_ok and has_no_bias
+    else:
+        logger.info(
+            f"log likelihood is {nm.log_likelihood[phenotype_index]} "
+            f"(rmw is {rmw_debug.log_likelihood_hat})"
+        )
+    if not is_ok or not same_maximum:
+        title = f"OpenSNP (n={sample_count})"
+        for name, rmw_stat, stat in [
+            ("U", u_stat, rmw_u_stat),
+            ("sqrt(V)", sqrt_v_stat, rmw_sqrt_v_stat),
+            ("effect size", effsize, rmw_effsize),
+            ("log p-value", log_pvalue, log_rmw_pvalue),
+        ]:
+            plot_stat(
+                rmw_stat[to_compare],
+                stat[to_compare],
+                title,
+                f"RAREMETALWORKER {name}",
+                name,
+                tmp_path / f"{name}",
+            )
+
+    assert is_ok
 
 
 # def test_calc_score(

@@ -8,8 +8,11 @@ from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event
 
 import numpy as np
+import scipy
+from numpy import typing as npt
 
 from ..compression.arr.base import FileArray
+from ..eig import EigendecompositionCollection
 from ..log import logger
 from ..mem.arr import SharedArray
 from ..utils import Action, Process, SharedState
@@ -25,19 +28,19 @@ class TaskProgress:
 @dataclass(kw_only=True)
 class TaskSyncCollection(SharedState):
     job_count: int
-    # Genotypes array can be overwritten by fresh data.
+    # Genotypes array can be overwritten by fresh data
     can_read: Event = field(default_factory=mp.Event)
-    # Passes the number of variants that were read to the calculation process.
+    # Passes the number of variants that were read to the calculation process
     read_count_queue: Queue[int] = field(default_factory=mp.Queue)
-    # Indicates that writing has finished and we can calculate.
+    # Indicates that writing has finished and we can calculate
     can_calc: list[Event] = field(init=False)
     # Passes the number of variants that have finished calculating to the writer
-    # process.
+    # process
     calc_count_queue: Queue[int] = field(default_factory=mp.Queue)
-    # Indicates that calculation has finished and we can write out the results.
+    # Indicates that calculation has finished and we can write out the results
     can_write: list[Event] = field(init=False)
 
-    # Passes the current progress to the main process.
+    # Passes the current progress to the main process
     progress_queue: Queue[TaskProgress] = field(default_factory=mp.Queue)
 
     def __post_init__(self) -> None:
@@ -79,30 +82,33 @@ class GenotypeReader(Worker):
         variant_indices = self.vcf_file.variant_indices.copy()
         variant_count = self.genotypes_array.shape[1]
 
+        sample_count = self.vcf_file.sample_count
+
         with self.vcf_file:
             while len(variant_indices) > 0:
-                # Make sure the genotypes array is not in use.
+                # Make sure the genotypes array is not in use
                 action = self.t.wait(self.t.can_read)
                 if action is Action.EXIT:
                     break
                 self.t.can_read.clear()
-                # Read the genotypes.
+                # Read the genotypes
                 self.vcf_file.variant_indices = variant_indices[:variant_count]
-                genotypes = self.genotypes_array.to_numpy(
-                    shape=(self.vcf_file.sample_count, self.vcf_file.variant_count)
+                genotypes: npt.NDArray[np.float64] = self.genotypes_array.to_numpy(
+                    shape=(sample_count, self.vcf_file.variant_count)
                 )
                 logger.debug("Reading genotypes")
                 self.vcf_file.read(genotypes.transpose())
-                # Pass how many variants were read to the calculation process.
+                # Pass how many variants were read to the calculation process
                 self.t.read_count_queue.put_nowait(
                     int(self.vcf_file.variant_indices.size)
                 )
-                # Remove already read variant indices.
+                # Remove already read variant indices
                 variant_indices = variant_indices[variant_count:]
                 if variant_indices.size == 0:
-                    # Signal that we are done.
+                    # Signal that we are done
                     self.t.read_count_queue.put_nowait(0)
-                    # Exit the process.
+                    # Exit the process
+                    logger.debug("Genotype reader has finished")
                     break
 
 
@@ -111,7 +117,7 @@ class Calc(Worker):
         self,
         t: TaskSyncCollection,
         genotypes_array: SharedArray,
-        eigenvector_arrays: list[SharedArray],
+        ec: EigendecompositionCollection,
         rotated_genotypes_array: SharedArray,
         inverse_variance_arrays: list[SharedArray],
         scaled_residuals_arrays: list[SharedArray],
@@ -121,7 +127,7 @@ class Calc(Worker):
     ) -> None:
         self.genotypes_array = genotypes_array
         self.rotated_genotypes_array = rotated_genotypes_array
-        self.eigenvector_arrays = eigenvector_arrays
+        self.ec = ec
         self.inverse_variance_arrays = inverse_variance_arrays
         self.scaled_residuals_arrays = scaled_residuals_arrays
         self.stat_array = stat_array
@@ -131,7 +137,7 @@ class Calc(Worker):
     def func(self) -> None:
         eigenvector_matrices = [
             eigenvector_array.to_numpy()
-            for eigenvector_array in self.eigenvector_arrays
+            for eigenvector_array in self.ec.eigenvector_arrays
         ]
         inverse_variance_matrices = [
             inverse_variance_array.to_numpy()
@@ -158,7 +164,7 @@ class Calc(Worker):
             )
         ]
 
-        job_count = len(self.eigenvector_arrays)
+        job_count = len(self.ec.eigenvector_arrays)
 
         while True:
             logger.debug(
@@ -172,7 +178,7 @@ class Calc(Worker):
             variant_count = value
             self.t.calc_count_queue.put_nowait(variant_count)
             if value == 0:
-                # Exit the process.
+                # Exit the process
                 return
 
             sample_count = self.genotypes_array.shape[0]
@@ -196,7 +202,25 @@ class Calc(Worker):
                 rotated_genotypes = self.rotated_genotypes_array.to_numpy(
                     shape=(sample_count, variant_count)
                 )
-                rotated_genotypes[:] = eigenvector_matrix.transpose() @ genotypes
+                np.matmul(
+                    eigenvector_matrix.transpose(),
+                    genotypes,
+                    out=rotated_genotypes,
+                )
+                logger.debug("Subtracting the rotated mean from the rotated genotypes")
+                sample_boolean_vector = self.ec.sample_boolean_vectors[i]
+                mean = genotypes.mean(
+                    axis=0,
+                    where=sample_boolean_vector[:, np.newaxis],
+                )
+                scipy.linalg.blas.dger(
+                    -1,
+                    eigenvector_matrix.sum(axis=0),
+                    mean,
+                    a=rotated_genotypes,
+                    overwrite_a=True,
+                    overwrite_y=False,
+                )
 
                 if i == job_count - 1:
                     logger.debug("Allow the reader to read the next batch of variants")
@@ -211,18 +235,30 @@ class Calc(Worker):
                     break
                 can_calc.clear()
 
-                # Calculate the score statistics.
+                # Calculate the score statistics
                 u_stat = stat[0, phenotype_slice, :].transpose()
                 v_stat = stat[1, phenotype_slice, :].transpose()
                 logger.debug(
                     f"Calculating U statistic for phenotypes {phenotype_slice}"
                 )
+
                 calc_u_stat(scaled_residuals_matrix, rotated_genotypes, u_stat)
+                np.set_printoptions(linewidth=1000)
+                print(scaled_residuals_matrix)
+                print(rotated_genotypes)
+
                 logger.debug("Squaring genotypes")
-                rotated_genotypes[:] = np.square(rotated_genotypes)
+                np.square(rotated_genotypes, out=rotated_genotypes)
+
                 logger.debug("Calculating V statistic")
+
                 calc_v_stat(inverse_variance_matrix, rotated_genotypes, u_stat, v_stat)
-                # Signal that calculation has finished.
+                np.set_printoptions(linewidth=1000)
+                print(inverse_variance_matrix)
+                print(rotated_genotypes)
+                print(v_stat)
+
+                # Signal that calculation has finished
                 can_write.set()
 
 
@@ -255,7 +291,7 @@ class ScoreWriter(Worker):
 
         with self.stat_file_array:
             while True:
-                # Wait for the calculation to finish.
+                # Wait for the calculation to finish
                 value = self.t.get(self.t.calc_count_queue)
                 if value is Action.EXIT:
                     break
@@ -263,7 +299,7 @@ class ScoreWriter(Worker):
                     raise ValueError("Expected an integer.")
                 variant_count = value
                 if variant_count == 0:
-                    # Exit the process.
+                    # Exit the process
                     break
 
                 logger.debug("Wait for the calculation to finish")
@@ -274,7 +310,7 @@ class ScoreWriter(Worker):
                         break
                     can_write.clear()
 
-                # Write the data.
+                # Write the data
                 variant_slice = slice(variant_index, variant_index + variant_count)
                 stat = self.stat_array.to_numpy(
                     shape=(2, phenotype_count, variant_count)
@@ -290,7 +326,7 @@ class ScoreWriter(Worker):
                     variant_slice, phenotype_slice
                 ] = two_dimensional_stat
 
-                # Allow the calculation to continue.
+                # Allow the calculation to continue
                 for i in range(job_count):
                     can_calc = self.t.can_calc[i]
                     can_calc.set()

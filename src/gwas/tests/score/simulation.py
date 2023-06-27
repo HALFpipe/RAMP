@@ -13,9 +13,8 @@ from gwas.utils import Pool
 from ..conftest import DirectoryFactory
 from ..utils import gcta64, is_bfile, is_pfile, plink2
 
-minor_allele_frequency_cutoff: float = 0.05
-effect_size: float = 2
-causal_variant_count: int = int(3e4)
+minor_allele_frequency_cutoff: float = 0.001
+causal_variant_count: int = 1000
 heritability: float = 0.6
 simulation_count: int = 16
 covariate_count: int = 4
@@ -43,10 +42,13 @@ def pfile_paths(
                 "--silent",
                 "--vcf",
                 str(vcf_path),
+                "--extract-if-info",
+                "R2 >= 0.5",
                 "--threads",
                 str(1),
                 "--memory",
                 str(2**10),
+                "--make-pgen",
                 "--out",
                 str(pfile_path),
             ]
@@ -153,7 +155,7 @@ def simulation(
     variant_list_path = tmp_path / "causal.snplist"
     with variant_list_path.open("wt") as file_handle:
         for variant in causal_variants:
-            file_handle.write(f"{variant}\t{effect_size}\n")
+            file_handle.write(f"{variant}\n")
 
     simulation_path = tmp_path / "simulation"
     phen_path = simulation_path.with_suffix(".phen")
