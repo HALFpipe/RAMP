@@ -211,24 +211,23 @@ def test_score(
         atol=1e-3,
         rtol=1e-3,
     )
+    has_no_effsize_bias = check_bias(
+        effsize,
+        rmw_effsize,
+        to_compare,
+        tolerance=np.abs(rmw_effsize[to_compare]).mean() / 1e3,
+        check_residuals=False,
+    )
+    has_no_log_pvalue_bias = check_bias(log_pvalue, log_rmw_pvalue, to_compare)
     if same_maximum:
-        has_no_bias = check_bias(
-            effsize,
-            rmw_effsize,
-            to_compare,
-            tolerance=np.abs(rmw_effsize[to_compare]).mean() / 1e3,
-            check_residuals=False,
-        )
-        is_ok = is_ok and has_no_bias
-
-        has_no_bias = check_bias(log_pvalue, log_rmw_pvalue, to_compare)
-        is_ok = is_ok and has_no_bias
+        is_ok = is_ok and has_no_effsize_bias
+        is_ok = is_ok and has_no_log_pvalue_bias
     else:
         logger.info(
             f"log likelihood is {nm.log_likelihood[phenotype_index]} "
             f"(rmw is {rmw_debug.log_likelihood_hat})"
         )
-    if not is_ok or not same_maximum:
+    if not is_ok:
         title = f"OpenSNP (n={sample_count})"
         for name, rmw_stat, stat in [
             ("U", u_stat, rmw_u_stat),
