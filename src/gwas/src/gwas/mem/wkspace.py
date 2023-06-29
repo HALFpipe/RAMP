@@ -105,20 +105,40 @@ class SharedWorkspace(AbstractContextManager):
         return array
 
     def merge(self, *names: str):
+        """Merge multiple allocations into a single contiguous allocation.
+
+        Parameters
+        ----------
+        self : SharedWorkspace
+            The shared workspace instance.
+        *names : str
+            The names of the allocations to merge.
+
+        Returns
+        -------
+        SharedArray
+            A new shared array representing the merged allocation.
+
+        Raises
+        ------
+        ValueError
+            If the allocations are not contiguous or have different dtypes or
+            incompatible shapes.
+        """
         allocations = self.allocations
 
         to_merge = [(name, a) for name, a in allocations.items() if name in names]
         to_merge.sort(key=lambda t: t[-1].start)
 
-        # check contiguous
+        # Check contiguous
         for (_, a), (_, b) in pairwise(to_merge):
             if a.start + a.size != b.start:
-                raise ValueError
+                raise ValueError(f'Allocations "{a}" and "{b}" are not contiguous')
 
-        # determine dtype
+        # Determine dtype
         dtype_set = set(a.dtype for _, a in to_merge)
         if len(dtype_set) != 1:
-            raise ValueError
+            raise ValueError("Allocations have different dtypes")
         (dtype,) = dtype_set
 
         # determine size
@@ -127,7 +147,7 @@ class SharedWorkspace(AbstractContextManager):
 
         tile_shape_set = set(a.shape[:-1] for _, a in to_merge)
         if len(tile_shape_set) != 1:
-            raise ValueError
+            raise ValueError("Allocations have incompatible shapes")
         (tile_shape,) = tile_shape_set
         shape = tuple([*tile_shape, sum(a.shape[-1] for _, a in to_merge)])
 
@@ -148,6 +168,11 @@ class SharedWorkspace(AbstractContextManager):
         logger.debug(f'Free allocation "{name}" ')
 
     def squash(self) -> None:
+        """
+        Squashes all allocations in the shared memory buffer to make them
+        contiguous and to reclaim space. This method moves each allocation up to the
+        end of the previous allocation.
+        """
         data: npt.NDArray = np.ndarray(
             (self.size,),
             buffer=self.buf,
