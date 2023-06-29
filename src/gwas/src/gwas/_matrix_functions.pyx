@@ -136,11 +136,11 @@ def dgesvdq(
     cdef int n = a.shape[1]
     check_strides(v, n)
 
-    cdef char joba = b"H"  # do not truncate
-    cdef char jobp = b"P"  # enable row pivoting
-    cdef char jobr = b"N"  # no additional transpose
-    cdef char jobu = b"N"  # no left singular vectors
-    cdef char jobv = b"A"  # all right singular vectors
+    cdef char joba = b"H"  # Do not truncate
+    cdef char jobp = b"P"  # Enable row pivoting
+    cdef char jobr = b"N"  # No additional transpose
+    cdef char jobu = b"N"  # No left singular vectors
+    cdef char jobv = b"A"  # All right singular vectors
 
     cdef int numrank = 0
 
