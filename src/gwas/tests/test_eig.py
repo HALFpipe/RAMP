@@ -2,49 +2,45 @@
 import gzip
 from contextlib import chdir
 from pathlib import Path
+from random import sample, seed
 from subprocess import check_call
-from typing import Mapping
+from typing import Mapping, Sequence
 
 import numpy as np
 import pytest
 import scipy
 
 from gwas.eig import Eigendecomposition
+from gwas.log import logger
+from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
-from gwas.tri import Triangular, scale
-from gwas.utils import chromosome_to_int, chromosomes_set
+from gwas.tri.base import Triangular
+from gwas.tri.tsqr import scale
 from gwas.vcf.base import VCFFile
 
 from .utils import bcftools, rmw, tabix, to_bgzip
 
-chromosomes = sorted(chromosomes_set() - {1, "X"}, key=chromosome_to_int)
 minor_allele_frequency_cutoff: float = 0.05
 
 
-@pytest.mark.slow
-def test_eig(
-    vcf_files_by_size_and_chromosome: Mapping[str, Mapping[int | str, VCFFile]],
-    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
+def load_genotypes(
+    vcf_files: list[VCFFile],
+    samples: list[str],
+    chromosomes: Sequence[int | str],
     sw: SharedWorkspace,
-):
-    sampe_size_label = "small"
-    vcf_files = list(vcf_files_by_size_and_chromosome[sampe_size_label].values())
-    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sampe_size_label]
+) -> SharedArray:
+    vcf_file = vcf_files[0]
+    sample_count = vcf_file.sample_count
 
-    tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes]
-    eig_array = Eigendecomposition.from_files(*tri_paths, sw=sw)
-
-    (sample_count,) = set(v.sample_count for v in vcf_files)
-
-    array = sw.alloc("array", sample_count, 1)
+    name = SharedArray.get_name(sw, "genotypes")
+    array = sw.alloc(name, sample_count, 1)
     a = array.to_numpy(include_trailing_free_memory=True)
 
     variant_count = 0
     for vcf_file in vcf_files:
         if vcf_file.chromosome not in chromosomes:
+            logger.debug("Skipping chromosome %s", vcf_file.chromosome)
             continue
-        vcf_file.set_samples(set(eig_array.samples))
-        assert vcf_file.samples == eig_array.samples
         vcf_file.set_variants_from_cutoffs(
             minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
         )
@@ -57,10 +53,53 @@ def test_eig(
             variant_count += vcf_file.variant_count
 
     array.resize(sample_count, variant_count)
-    a = array.to_numpy()
-    scale(a.transpose())
+    array.transpose()
 
-    # check that svd is equal
+    a = array.to_numpy()
+    scale(a)
+
+    sample_count = len(samples)
+    sample_indices = [vcf_file.samples.index(sample) for sample in samples]
+    a[:, :sample_count] = a[:, sample_indices]
+    array.resize(variant_count, sample_count)
+
+    return array
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("subset_proportion", [0.8, 1])
+def test_eig(
+    subset_proportion: float,
+    vcf_files_by_size_and_chromosome: Mapping[str, Mapping[int | str, VCFFile]],
+    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
+    sw: SharedWorkspace,
+):
+    sampe_size_label = "small"
+    chromosomes: Sequence[int | str] = [7, 8, 9, 10]
+
+    vcf_files = list(vcf_files_by_size_and_chromosome[sampe_size_label].values())
+    vcf_file = vcf_files[0]
+    samples = vcf_file.samples
+    if not np.isclose(subset_proportion, 1):
+        seed(42)
+        subset = set(sample(samples, k=int(len(samples) * subset_proportion)))
+        samples = [sample for sample in samples if sample in subset]  # Keep order
+
+    array = load_genotypes(
+        vcf_files,
+        samples,
+        chromosomes,
+        sw,
+    )
+
+    variant_count, _ = array.shape
+    a = array.to_numpy().transpose()
+
+    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sampe_size_label]
+
+    tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes]
+    eig_array = Eigendecomposition.from_files(*tri_paths, sw=sw, samples=samples)
+
     _, scipy_singular_values, scipy_eigenvectors = scipy.linalg.svd(
         a.transpose(),
         full_matrices=False,
@@ -69,7 +108,7 @@ def test_eig(
     assert np.allclose(scipy_eigenvalues, eig_array.eigenvalues)
     assert np.abs(scipy_eigenvalues - eig_array.eigenvalues).mean() < 1e-14
 
-    # check reconstructing covariance
+    # Check reconstructing covariance
     c = np.cov(a, ddof=0)
     eig_c = (
         eig_array.eigenvectors * eig_array.eigenvalues
@@ -77,25 +116,30 @@ def test_eig(
     assert np.allclose(c, eig_c, atol=1e-3)
     assert np.abs(c - eig_c).mean() < 1e-4
 
-    # check that eigenvectors are just permuted
+    # Check that eigenvectors are just permuted
     permutation = np.rint(scipy_eigenvectors @ eig_array.eigenvectors).astype(int)
     assert ((permutation == 0) | (np.abs(permutation) == 1)).all()
     assert (1 == np.count_nonzero(permutation, axis=0)).all()
     assert (1 == np.count_nonzero(permutation, axis=1)).all()
 
-    # check that qr is equal
+    # Check that QR is equal
     (numpy_tri,) = scipy.linalg.qr(a.transpose(), mode="r")
 
     tri_arrays = [
         Triangular.from_file(tri_paths_by_chromosome[c], sw) for c in chromosomes
     ]
+    for tri in tri_arrays:
+        tri.subset_samples(samples)
+    sw.squash()
     tri_array = sw.merge(*(tri.name for tri in tri_arrays))
-    (tri,) = scipy.linalg.qr(tri_array.to_numpy().transpose(), mode="r")
+    (tri_matrix,) = scipy.linalg.qr(tri_array.to_numpy().transpose(), mode="r")
     assert np.allclose(
-        tri.transpose() @ tri,
+        tri_matrix.transpose() @ tri_matrix,
         numpy_tri.transpose() @ numpy_tri,
     )
-    assert np.allclose(tri.transpose() @ tri / variant_count, c, atol=1e-3)
+    assert np.allclose(
+        tri_matrix.transpose() @ tri_matrix / variant_count, c, atol=1e-3
+    )
 
     array.free()
     eig_array.free()
@@ -129,8 +173,8 @@ def test_eig_rmw(
 
     ped_path = tmp_path / f"chr{c}.ped"
     with ped_path.open("wt") as file_handle:
-        for sample in vcf_file.samples:
-            file_handle.write(f"{sample} {sample} 0 0 1 0\n")
+        for s in vcf_file.samples:
+            file_handle.write(f"{s} {s} 0 0 1 0\n")
 
     dat_path = tmp_path / f"chr{c}.dat"
     with dat_path.open("wt") as file_handle:

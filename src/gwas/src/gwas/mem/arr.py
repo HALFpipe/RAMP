@@ -2,7 +2,7 @@
 import json
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Literal, Self, overload
 
 import numpy as np
 import scipy
@@ -10,6 +10,7 @@ from numpy import typing as npt
 
 from .._matrix_functions import dimatcopy, set_tril
 from ..compression.pipe import CompressedTextReader
+from ..utils import invert_pivot
 from .wkspace import Allocation, SharedWorkspace
 
 
@@ -299,64 +300,70 @@ class SharedArray:
         allocations[self.name] = Allocation(a.start, size, shape, a.dtype)
         self.sw.allocations = allocations
 
-    def triangularize(self) -> None:
-        """Triangularize to upper triangular matrix via the LAPACK routine GEQRF, which
-        is what scipy.linalg.qr uses internally.
+    @overload
+    def triangularize(self, pivoting: Literal[True] = True) -> npt.NDArray[np.uint32]:
+        ...
+
+    @overload
+    def triangularize(self, pivoting: Literal[False]) -> None:
+        ...
+
+    def triangularize(self, pivoting: bool = True):
+        """Triangularize to upper triangular matrix via the LAPACK routine GEQRF or
+        GEQP3, which is what scipy.linalg.qr uses internally.
 
         Raises:
             RuntimeError: If the LAPACK routine fails.
         """
         a = self.to_numpy()
 
-        # Retrieve function.
-        func = scipy.linalg.get_lapack_funcs("geqrf", (a,))
+        jpvt: npt.NDArray[np.uint32] | None = None
 
-        # Calculate lwork.
-        _, _, lwork, _ = func(a, lwork=-1, overwrite_a=True)
-        lwork = int(lwork)
+        if pivoting:
+            # Retrieve function
+            func = scipy.linalg.get_lapack_funcs("geqp3", (a,))
 
-        # Direct computation for better precision as per
-        # https://doi.org/10.1145/1996092.1996103
-        _, _, _, info = func(
-            a,
-            lwork=lwork,
-            overwrite_a=True,
-        )
-        if info != 0:
-            raise RuntimeError
+            # Calculate lwork
+            _, _, _, lwork, _ = func(a, lwork=-1, overwrite_a=True)
+            lwork = int(lwork)
 
-        # Set lower triangular part to zero.
-        set_tril(a)
+            # Run the computation
+            _, jpvt, _, _, info = func(
+                a,
+                lwork=lwork,
+                overwrite_a=True,
+            )
+            if info != 0:
+                raise RuntimeError
 
-    def triangularize_with_pivoting(self) -> npt.NDArray[np.integer]:
-        """Triangularize to upper triangular matrix with pivoting via the
-        LAPACK routine GEQP3.
+            jpvt = np.asarray(jpvt, dtype=np.uint32)
 
-        Raises:
-            RuntimeError: If the LAPACK routine fails.
-        """
-        a = self.to_numpy()
+            # Make pivot indices 0-based
+            jpvt -= 1
+        else:
+            # Retrieve function.
+            func = scipy.linalg.get_lapack_funcs("geqrf", (a,))
 
-        # Retrieve function.
-        func = scipy.linalg.get_lapack_funcs("geqp3", (a,))
+            # Calculate lwork.
+            _, _, lwork, _ = func(a, lwork=-1, overwrite_a=True)
+            lwork = int(lwork)
 
-        # Calculate lwork.
-        _, _, _, lwork, _ = func(a, lwork=-1, overwrite_a=True)
-        lwork = int(lwork)
-
-        # Run the computation.
-        _, jpvt, _, _, info = func(
-            a,
-            lwork=lwork,
-            overwrite_a=True,
-        )
-        if info != 0:
-            raise RuntimeError
+            # Direct computation for better precision as per
+            # https://doi.org/10.1145/1996092.1996103
+            _, _, _, info = func(
+                a,
+                lwork=lwork,
+                overwrite_a=True,
+            )
+            if info != 0:
+                raise RuntimeError
 
         # Set lower triangular part to zero.
         set_tril(a)
-
-        # Make pivot indices 0-based.
-        jpvt -= 1
 
         return jpvt
+
+    def apply_inverse_pivot(self, jpvt: npt.NDArray[np.uint32]) -> None:
+        # Apply the inverse pivot to the columns
+        matrix = self.to_numpy()
+        matrix[:] = matrix[:, invert_pivot(jpvt)]

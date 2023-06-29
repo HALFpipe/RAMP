@@ -7,7 +7,8 @@ import pytest
 from numpy import typing as npt
 
 from gwas.mem.wkspace import SharedWorkspace
-from gwas.tri import Triangular
+from gwas.tri.base import Triangular, is_lower_triangular
+from gwas.tri.tsqr import scale
 from gwas.vcf.base import VCFFile
 
 sample_size_label = "large"
@@ -23,7 +24,7 @@ def vcf_file(
 
 
 @pytest.fixture(scope="module")
-def dosage_array(vcf_file: VCFFile) -> npt.NDArray:
+def genotypes_array(vcf_file: VCFFile) -> npt.NDArray:
     vcf_file.set_variants_from_cutoffs(
         minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
     )
@@ -31,21 +32,14 @@ def dosage_array(vcf_file: VCFFile) -> npt.NDArray:
     with vcf_file:
         vcf_file.read(a)
 
-    mean = np.mean(a, axis=1)
-    minor_allele_frequency = mean / 2
-    a -= mean[:, np.newaxis]
-
-    standard_deviation = np.sqrt(
-        2 * minor_allele_frequency * (1 - minor_allele_frequency)
-    )
-    a /= standard_deviation[:, np.newaxis]
+    scale(a)
 
     return a
 
 
 @pytest.fixture(scope="module")
-def numpy_tri(dosage_array: npt.NDArray) -> npt.NDArray:
-    a = dosage_array
+def numpy_tri(genotypes_array: npt.NDArray) -> npt.NDArray:
+    a = genotypes_array
 
     r = np.linalg.qr(a, mode="r")
     if not isinstance(r, np.ndarray):
@@ -62,7 +56,7 @@ def numpy_tri(dosage_array: npt.NDArray) -> npt.NDArray:
 @pytest.mark.slow
 def test_tri(
     vcf_file: VCFFile,
-    dosage_array: npt.NDArray,
+    genotypes_array: npt.NDArray,
     numpy_tri: npt.NDArray,
 ):
     log_size = 30  # 1 gigabyte.
@@ -71,7 +65,7 @@ def test_tri(
     vcf_file.set_variants_from_cutoffs(
         minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
     )
-    assert dosage_array.shape[0] == vcf_file.variant_count
+    assert genotypes_array.shape[0] == vcf_file.variant_count
 
     # Check that we cannot use a direct algorithm because we would
     # run out of memory.
@@ -137,7 +131,8 @@ def test_tri_file(tmp_path: Path, numpy_tri: npt.NDArray, sw: SharedWorkspace):
     assert len(sw.allocations) == 1
 
 
-def test_tri_subset_samples(sw: SharedWorkspace):
+@pytest.mark.parametrize("pivoting", [True, False])
+def test_tri_subset_samples(pivoting: bool, sw: SharedWorkspace):
     k = 100
 
     A = np.random.rand(10000, k)
@@ -152,9 +147,25 @@ def test_tri_subset_samples(sw: SharedWorkspace):
 
     samples = [f"sample_{i:02d}" for i in range(k)]
     subset_samples = [samples[i] for i in indices]
+    assert len(subset_samples) < len(samples)
 
     R = np.linalg.qr(A, mode="r")
     assert isinstance(R, np.ndarray) and not isinstance(R, tuple)
+    R = R.transpose()  # Ensure that we have a lower triangular matrix
+    assert is_lower_triangular(R)
+
+    R1 = np.linalg.qr(B, mode="r")
+    assert isinstance(R1, np.ndarray) and not isinstance(R1, tuple)
+    R1 = R1.transpose()  # Ensure that we have a lower triangular matrix
+    assert is_lower_triangular(R1)
+    assert np.allclose(R1 @ R1.transpose(), D)
+
+    R2 = np.linalg.qr(R[indices, :].transpose(), mode="r")
+    assert isinstance(R2, np.ndarray)
+    R2 = R2.transpose()  # Ensure that we have a lower triangular matrix
+    assert is_lower_triangular(R2)
+    assert np.allclose(np.abs(R2), np.abs(R1))
+    assert np.allclose(R2 @ R2.transpose(), D)
 
     tri = Triangular.from_numpy(
         R,
@@ -166,19 +177,20 @@ def test_tri_subset_samples(sw: SharedWorkspace):
         r_squared_cutoff=-np.inf,
     )
     assert isinstance(tri, Triangular)
+    assert is_lower_triangular(tri.to_numpy())
     assert np.allclose(tri.to_numpy(), R)
 
-    tri.subset_samples(subset_samples)
+    tri.subset_samples(subset_samples, pivoting=pivoting)
     R3 = tri.to_numpy()
-    assert np.allclose(R3.transpose() @ R3, D)
+    if not pivoting:
+        assert is_lower_triangular(R3)
+    assert np.allclose(R3 @ R3.transpose(), D)
 
-    R1 = np.linalg.qr(B, mode="r")
-    assert isinstance(R1, np.ndarray) and not isinstance(R1, tuple)
-    assert np.allclose(R1.transpose() @ R1, D)
-
-    R2 = np.linalg.qr(R[:, indices], mode="r")
-    assert isinstance(R2, np.ndarray)
-    assert np.allclose(R2.transpose() @ R2, D)
+    R4 = np.linalg.qr(R3.transpose(), mode="r")
+    assert isinstance(R4, np.ndarray)
+    R4 = R4.transpose()  # Ensure that we have a lower triangular matrix
+    assert is_lower_triangular(R4)
+    assert np.allclose(np.abs(R4), np.abs(R1))
 
     tri.free()
     assert len(sw.allocations) == 1

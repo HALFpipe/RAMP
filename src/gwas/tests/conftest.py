@@ -6,7 +6,7 @@ from typing import Literal, Mapping
 import pytest
 
 from gwas.mem.wkspace import SharedWorkspace
-from gwas.tri import calc_tri
+from gwas.tri.calc import calc_tri
 from gwas.utils import chromosome_to_int, chromosomes_set
 from gwas.vcf.base import VCFFile, calc_vcf
 
@@ -17,7 +17,7 @@ SampleSizeLabel = Literal["small", "medium", "large"]
 sample_sizes: Mapping[SampleSizeLabel, int] = dict(small=100, medium=500, large=3421)
 
 
-@pytest.fixture(scope="module", params=[22, "X"], autouse=True)
+@pytest.fixture(scope="module", params=[22, "X"])
 def chromosome(request) -> str | int:
     return request.param
 
