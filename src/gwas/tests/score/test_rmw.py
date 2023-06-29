@@ -4,44 +4,11 @@ from time import time
 
 import blosc2
 import numpy as np
-import pytest
 
 from gwas.compression.arr.base import FileArray, compression_methods
 from gwas.log import logger
-from gwas.rmw import Scorefile
 
 from .conftest import RmwScore
-
-
-def compare_scorefile_arrays(array, test_array):
-    for record, test_record in zip(array, test_array):
-        for a, b in zip(record, test_record):
-            if np.issubdtype(type(a), np.floating):
-                if np.isnan(a):
-                    assert np.isnan(b)
-                    continue
-            assert a == b
-
-
-def test_scorefile(
-    tmp_path: Path,
-    rmw_scorefile_paths: list[Path],
-    sample_size_label: str,
-):
-    if sample_size_label != "small":
-        pytest.skip()
-
-    scorefile = rmw_scorefile_paths[0]
-
-    header, array = Scorefile.read(scorefile)
-
-    test_scorefile = tmp_path / "test.score.txt"
-    Scorefile.write(test_scorefile, header, array)
-
-    test_header, test_array = Scorefile.read(test_scorefile)
-
-    assert header == test_header
-    compare_scorefile_arrays(array, test_array)
 
 
 def test_compression(

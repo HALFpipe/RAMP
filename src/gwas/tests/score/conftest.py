@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from subprocess import check_call
-from typing import Mapping
+from typing import IO, Mapping
 
 import numpy as np
 import pytest
@@ -16,7 +16,13 @@ from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection
 from gwas.rmw import Scorefile, ScorefileHeader
-from gwas.utils import Pool, chromosome_to_int, chromosomes_set
+from gwas.score.command import GwasCommand
+from gwas.utils import (
+    Pool,
+    chromosome_to_int,
+    chromosomes_set,
+    make_sample_boolean_vectors,
+)
 from gwas.vcf.base import VCFFile
 
 from ..conftest import DirectoryFactory
@@ -26,6 +32,7 @@ from .simulation import (
     SimulationResult,
     bfile_path,
     covariate_count,
+    missing_value_pattern_count,
     pfile_paths,
     simulation,
     simulation_count,
@@ -46,11 +53,11 @@ def phenotype_index(request) -> int:
 
 
 @pytest.fixture(scope="module")
-def vc(
+def variable_collections(
     simulation: SimulationResult,
     sw: SharedWorkspace,
     request,
-) -> VariableCollection:
+) -> list[VariableCollection]:
     np.random.seed(47)
 
     samples = list(simulation.phen[:, 1])
@@ -61,45 +68,69 @@ def vc(
     covariates = np.random.normal(size=(len(samples), covariate_count))
     covariates -= covariates.mean(axis=0)
 
-    vc = VariableCollection.from_arrays(
+    base_variable_collection = VariableCollection.from_arrays(
         samples,
         phenotype_names,
         phenotypes,
         covariate_names,
         covariates,
         sw,
+        missing_value_strategy="listwise_deletion",
     )
 
-    request.addfinalizer(vc.free)
+    variable_collections = GwasCommand.split_by_missing_values(base_variable_collection)
+    assert len(variable_collections) == missing_value_pattern_count
 
-    return vc
+    base_variable_collection.free()
+    for i, variable_collection in enumerate(variable_collections):
+        variable_collection.name = f"variableCollection_{i + 1:d}"
+        request.addfinalizer(variable_collection.free)
+
+    return variable_collections
 
 
 @pytest.fixture(scope="module")
-def eig(
+def eigendecompositions(
     other_chromosomes: list[str | int],
     tri_paths_by_chromosome: dict[str | int, Path],
+    variable_collections: list[VariableCollection],
     sw: SharedWorkspace,
     request,
-) -> Eigendecomposition:
-    eig = Eigendecomposition.from_files(
-        *(tri_paths_by_chromosome[c] for c in other_chromosomes),
-        sw=sw,
-    )
-    request.addfinalizer(eig.free)
-    return eig
+) -> list[Eigendecomposition]:
+    eigendecompositions = [
+        Eigendecomposition.from_files(
+            *(tri_paths_by_chromosome[c] for c in other_chromosomes),
+            samples=variable_collection.samples,
+            sw=sw,
+        )
+        for variable_collection in variable_collections
+    ]
+
+    for eigendecomposition in eigendecompositions:
+        request.addfinalizer(eigendecomposition.free)
+
+    return eigendecompositions
 
 
 @pytest.fixture(scope="module")
-def nm(
-    vc: VariableCollection,
-    eig: Eigendecomposition,
+def null_model_collections(
+    variable_collections: list[VariableCollection],
+    eigendecompositions: list[Eigendecomposition],
     request,
-) -> NullModelCollection:
-    nm = NullModelCollection.from_eig(eig, vc, method="fastlmm")
-    request.addfinalizer(nm.free)
+) -> list[NullModelCollection]:
+    null_model_collections = [
+        NullModelCollection.from_eig(
+            eigendecomposition, variable_collection, method="fastlmm"
+        )
+        for variable_collection, eigendecomposition in zip(
+            variable_collections, eigendecompositions
+        )
+    ]
 
-    return nm
+    for null_model_collection in null_model_collections:
+        request.addfinalizer(null_model_collection.free)
+
+    return null_model_collections
 
 
 @pytest.fixture(scope="module")
@@ -115,8 +146,8 @@ def rmw_commands(
     chromosome: int | str,
     sample_size: int,
     vcf_file: VCFFile,
-    vc: VariableCollection,
-    eig: Eigendecomposition,
+    variable_collections: list[VariableCollection],
+    eigendecompositions: list[Eigendecomposition],
 ) -> list[tuple[Path, list[str]]]:
     vcf_path = vcf_file.file_path
     rmw_path = Path(directory_factory.get("rmw", sample_size))
@@ -132,70 +163,76 @@ def rmw_commands(
         else:
             return " ".join(map(np.format_float_scientific, a))
 
-    kinship = (eig.eigenvectors * eig.eigenvalues) @ eig.eigenvectors.transpose()
-    kinship_path = rmw_path / "Empirical.Kinship.gz"
-    with gzip.open(kinship_path, "wt") as file_handle:
-        file_handle.write(" ".join(vc.samples))
-        file_handle.write("\n")
-
-        for i in range(len(vc.samples)):
-            row = format_row(kinship[i, : i + 1])
-            file_handle.write(f"{row}\n")
-
-    covariates = vc.covariates.to_numpy()
-    phenotypes = vc.phenotypes.to_numpy()
-
     rmw_commands: list[tuple[Path, list[str]]] = list()
 
     commands_path = rmw_path / "commands.txt"
+    file_handle: IO[str]
     with commands_path.open("wt") as file_handle:
         pass  # Truncate file
 
-    for j in range(vc.phenotype_count):
-        base = vc.phenotype_names[j]
-
-        ped_path = rmw_path / f"{base}.ped"
-        with ped_path.open("wt") as file_handle:
-            for i, s in enumerate(vc.samples):
-                c = format_row(covariates[i, 1:])  # Skip intercept
-                p = format_row(phenotypes[i, j])
-                file_handle.write(f"{s} {s} 0 0 1 {p} {c}\n")
-
-        dat_path = rmw_path / f"{base}.dat"
-        with dat_path.open("wt") as file_handle:
-            file_handle.write(f"T {base}\n")
-            for name in vc.covariate_names[1:]:  # Skip intercept
-                file_handle.write(f"C {name}\n")
-
-        prefix = str(rmw_path / f"chr{chromosome}")
-
-        scorefile = f"{prefix}.{base}.singlevar.score.txt.gz"
-
-        command = [
-            rmw,
-            "--ped",
-            str(ped_path),
-            "--dat",
-            str(dat_path),
-            "--vcf",
-            str(vcf_gz_path),
-            "--dosage",
-            "--prefix",
-            str(prefix),
-            "--LDwindow",
-            "100",
-            "--zip",
-            "--thin",
-            "--kinFile",
-            str(kinship_path),
-            "--noPhoneHome",
-            "--useCovariates",
-        ]
-        with commands_path.open("at") as file_handle:
-            file_handle.write(" ".join(command))
+    for variable_collection, eigendecomposition in zip(
+        variable_collections, eigendecompositions
+    ):
+        kinship = (
+            eigendecomposition.eigenvectors * eigendecomposition.eigenvalues
+        ) @ eigendecomposition.eigenvectors.transpose()
+        kinship_path = rmw_path / f"{variable_collection.name}_empirical_kinship.txt.gz"
+        with gzip.open(kinship_path, "wt") as file_handle:
+            file_handle.write(" ".join(variable_collection.samples))
             file_handle.write("\n")
 
-        rmw_commands.append((Path(scorefile), command))
+            for i in range(len(variable_collection.samples)):
+                row = format_row(kinship[i, : i + 1])
+                file_handle.write(f"{row}\n")
+
+        covariates = variable_collection.covariates.to_numpy()
+        phenotypes = variable_collection.phenotypes.to_numpy()
+
+        for j in range(variable_collection.phenotype_count):
+            base = variable_collection.phenotype_names[j]
+
+            ped_path = rmw_path / f"{base}.ped"
+            with ped_path.open("wt") as file_handle:
+                for i, s in enumerate(variable_collection.samples):
+                    c = format_row(covariates[i, 1:])  # Skip intercept
+                    p = format_row(phenotypes[i, j])
+                    file_handle.write(f"{s} {s} 0 0 1 {p} {c}\n")
+
+            dat_path = rmw_path / f"{base}.dat"
+            with dat_path.open("wt") as file_handle:
+                file_handle.write(f"T {base}\n")
+                for name in variable_collection.covariate_names[1:]:  # Skip intercept
+                    file_handle.write(f"C {name}\n")
+
+            prefix = str(rmw_path / f"chr{chromosome}")
+
+            scorefile = f"{prefix}.{base}.singlevar.score.txt.gz"
+
+            command = [
+                rmw,
+                "--ped",
+                str(ped_path),
+                "--dat",
+                str(dat_path),
+                "--vcf",
+                str(vcf_gz_path),
+                "--dosage",
+                "--prefix",
+                str(prefix),
+                "--LDwindow",
+                "100",
+                "--zip",
+                "--thin",
+                "--kinFile",
+                str(kinship_path),
+                "--noPhoneHome",
+                "--useCovariates",
+            ]
+            with commands_path.open("at") as file_handle:
+                file_handle.write(" ".join(command))
+                file_handle.write("\n")
+
+            rmw_commands.append((Path(scorefile), command))
 
     return rmw_commands
 
@@ -252,13 +289,12 @@ def rmw_score(
 @pytest.fixture(scope="module")
 def genotypes_array(
     vcf_file: VCFFile,
-    vc: VariableCollection,
     sw: SharedWorkspace,
     request,
 ) -> SharedArray:
-    sample_count = vc.sample_count
+    sample_count = len(vcf_file.samples)
     variant_count = sw.unallocated_size // (
-        np.float64().itemsize * 2 * (vc.phenotype_count + vc.sample_count)
+        np.float64().itemsize * (1 + missing_value_pattern_count) * sample_count
     )
     variant_count = min(variant_count, vcf_file.variant_count)
 
@@ -276,24 +312,34 @@ def genotypes_array(
 
 
 @pytest.fixture(scope="module")
-def rotated_genotypes_array(
+def rotated_genotypes_arrays(
+    vcf_file: VCFFile,
     genotypes_array: SharedArray,
-    eig: Eigendecomposition,
+    eigendecompositions: list[Eigendecomposition],
     sw: SharedWorkspace,
     request,
-) -> SharedArray:
+) -> list[SharedArray]:
     genotypes = genotypes_array.to_numpy()
-    sample_count, variant_count = genotypes.shape
-    assert eig.sample_count == sample_count
+    _, variant_count = genotypes.shape
 
-    name = SharedArray.get_name(sw, "rotated-genotypes")
-    rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
-    request.addfinalizer(rotated_genotypes_array.free)
+    sample_boolean_vectors = make_sample_boolean_vectors(
+        vcf_file.samples, (eig.samples for eig in eigendecompositions)
+    )
 
-    mean = genotypes.mean(axis=0)
-    demeaned_genotypes = genotypes - mean
+    rotated_genotypes_arrays: list[SharedArray] = list()
+    for eig, sample_boolean_vector in zip(eigendecompositions, sample_boolean_vectors):
+        sample_count = eig.sample_count
 
-    rotated_genotypes = rotated_genotypes_array.to_numpy()
-    rotated_genotypes[:] = eig.eigenvectors.transpose() @ demeaned_genotypes
+        name = SharedArray.get_name(sw, "rotated-genotypes")
+        rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
+        request.addfinalizer(rotated_genotypes_array.free)
 
-    return rotated_genotypes_array
+        mean = genotypes.mean(axis=0, where=sample_boolean_vector[:, np.newaxis])
+        demeaned_genotypes = genotypes[sample_boolean_vector, :] - mean
+
+        rotated_genotypes = rotated_genotypes_array.to_numpy()
+        rotated_genotypes[:] = eig.eigenvectors.transpose() @ demeaned_genotypes
+
+        rotated_genotypes_arrays.append(rotated_genotypes_array)
+
+    return rotated_genotypes_arrays

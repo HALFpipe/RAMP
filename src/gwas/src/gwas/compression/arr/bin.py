@@ -113,6 +113,7 @@ class Blosc2FileArray(FileArray[T]):
                 ),
                 **kwargs,
             )
+            array.vlmeta["axis_metadata"] = self.axis_metadata
         else:
             array = blosc2.open(
                 urlpath=str(file_path),

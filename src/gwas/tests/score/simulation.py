@@ -19,6 +19,7 @@ heritability: float = 0.6
 simulation_count: int = 16
 covariate_count: int = 4
 missing_value_rate: float = 0.05
+missing_value_pattern_count: int = 3
 
 
 @pytest.fixture(scope="module")
@@ -184,20 +185,19 @@ def simulation(
     phen = np.loadtxt(phen_path, dtype=str)
     par = np.loadtxt(par_path, skiprows=1, dtype=str)
 
-    # pattern_count = 3
-    # patterns = [
-    #     np.random.choice(
-    #         a=[False, True],
-    #         size=sample_size,
-    #         p=[1 - missing_value_rate, missing_value_rate],
-    #     )
-    #     for _ in range(pattern_count)
-    # ]
+    patterns = [
+        np.random.choice(
+            a=[False, True],
+            size=sample_size,
+            p=[1 - missing_value_rate, missing_value_rate],
+        )
+        for _ in range(missing_value_pattern_count)
+    ]
 
-    # for i in range(simulation_count):
-    #     pattern_index = np.random.choice(pattern_count)
-    #     for j in range(sample_size):
-    #         if patterns[pattern_index][j]:
-    #             phen[j, 2 + i] = "n/a"
+    for i in range(simulation_count):
+        pattern_index = np.random.choice(missing_value_pattern_count)
+        for j in range(sample_size):
+            if patterns[pattern_index][j]:
+                phen[j, 2 + i] = "NaN"
 
     return SimulationResult(phen, par)

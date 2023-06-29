@@ -6,11 +6,16 @@ from pathlib import Path
 from typing import Self
 
 import numpy as np
+import pandas as pd
 from numpy import typing as npt
 
 from .log import logger
 from .mem.arr import SharedArray
 from .mem.wkspace import SharedWorkspace
+
+
+def combine(data_frames: list[pd.DataFrame]) -> pd.DataFrame:
+    return reduce(lambda a, b: a.combine_first(b), data_frames)
 
 
 def read_and_combine(paths: list[Path]) -> tuple[list[str], list[str], npt.NDArray]:
@@ -22,7 +27,7 @@ def read_and_combine(paths: list[Path]) -> tuple[list[str], list[str], npt.NDArr
         data_frame.set_index(data_frame.columns[0], inplace=True)
         data_frames.append(data_frame)
 
-    data_frame = reduce(lambda a, b: a.combine_first(b), data_frames)
+    data_frame = combine(data_frames)
 
     return (
         list(data_frame.index),
@@ -71,7 +76,22 @@ class VariableCollection:
             and np.isfinite(self.covariates.to_numpy()).all()
         )
 
-    def free(self):
+    def copy(self) -> Self:
+        phenotypes = self.phenotypes.to_numpy()
+        covariates = self.covariates.to_numpy()
+        vc = self.from_arrays(
+            self.samples.copy(),
+            self.phenotype_names.copy(),
+            phenotypes,
+            self.covariate_names.copy(),
+            covariates,
+            self.sw,
+            missing_value_strategy="listwise_deletion",  # No need to remove any samples
+        )
+        vc.name = self.name
+        return vc
+
+    def free(self) -> None:
         self.phenotypes.free()
         self.covariates.free()
 

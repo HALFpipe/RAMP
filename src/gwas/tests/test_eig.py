@@ -78,6 +78,7 @@ def test_eig(
     chromosomes: Sequence[int | str] = [7, 8, 9, 10]
 
     vcf_files = list(vcf_files_by_size_and_chromosome[sampe_size_label].values())
+    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sampe_size_label]
     vcf_file = vcf_files[0]
     samples = vcf_file.samples
     if not np.isclose(subset_proportion, 1):
@@ -94,22 +95,46 @@ def test_eig(
 
     variant_count, _ = array.shape
     a = array.to_numpy().transpose()
-
-    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sampe_size_label]
-
-    tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes]
-    eig_array = Eigendecomposition.from_files(*tri_paths, sw=sw, samples=samples)
+    c = np.cov(a, ddof=0)
 
     _, scipy_singular_values, scipy_eigenvectors = scipy.linalg.svd(
         a.transpose(),
         full_matrices=False,
     )
+
+    # Check that QR is equal
+    (numpy_tri,) = scipy.linalg.qr(a.transpose(), mode="r")
+
+    tri_arrays = [
+        Triangular.from_file(tri_paths_by_chromosome[c], sw) for c in chromosomes
+    ]
+    if samples != vcf_file.samples:
+        for tri in tri_arrays:
+            tri.subset_samples(samples)
+    sw.squash()
+    tri_array = sw.merge(*(tri.name for tri in tri_arrays))
+
+    _, tri_singular_values, _ = scipy.linalg.svd(
+        tri_array.to_numpy().transpose(),
+        full_matrices=False,
+    )
+    assert np.allclose(scipy_singular_values, tri_singular_values)
+
+    (tri_r,) = scipy.linalg.qr(tri_array.to_numpy().transpose(), mode="r")
+    assert np.allclose(
+        tri_r.transpose() @ tri_r,
+        numpy_tri.transpose() @ numpy_tri,
+    )
+    assert np.allclose(tri_r.transpose() @ tri_r / variant_count, c, atol=1e-3)
+
+    tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes]
+    eig_array = Eigendecomposition.from_files(*tri_paths, sw=sw, samples=samples)
+
     scipy_eigenvalues = np.square(scipy_singular_values) / variant_count
     assert np.allclose(scipy_eigenvalues, eig_array.eigenvalues)
     assert np.abs(scipy_eigenvalues - eig_array.eigenvalues).mean() < 1e-14
 
     # Check reconstructing covariance
-    c = np.cov(a, ddof=0)
     eig_c = (
         eig_array.eigenvectors * eig_array.eigenvalues
     ) @ eig_array.eigenvectors.transpose()
@@ -121,25 +146,6 @@ def test_eig(
     assert ((permutation == 0) | (np.abs(permutation) == 1)).all()
     assert (1 == np.count_nonzero(permutation, axis=0)).all()
     assert (1 == np.count_nonzero(permutation, axis=1)).all()
-
-    # Check that QR is equal
-    (numpy_tri,) = scipy.linalg.qr(a.transpose(), mode="r")
-
-    tri_arrays = [
-        Triangular.from_file(tri_paths_by_chromosome[c], sw) for c in chromosomes
-    ]
-    for tri in tri_arrays:
-        tri.subset_samples(samples)
-    sw.squash()
-    tri_array = sw.merge(*(tri.name for tri in tri_arrays))
-    (tri_matrix,) = scipy.linalg.qr(tri_array.to_numpy().transpose(), mode="r")
-    assert np.allclose(
-        tri_matrix.transpose() @ tri_matrix,
-        numpy_tri.transpose() @ numpy_tri,
-    )
-    assert np.allclose(
-        tri_matrix.transpose() @ tri_matrix / variant_count, c, atol=1e-3
-    )
 
     array.free()
     eig_array.free()

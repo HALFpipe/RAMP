@@ -2,7 +2,7 @@
 import logging
 import multiprocessing as mp
 import sys
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import Literal
 
@@ -14,10 +14,8 @@ def main() -> None:
     run(sys.argv[1:])
 
 
-def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") -> None:
+def parse_arguments(argv: list[str]) -> Namespace:
     from gwas.compression.arr.base import compression_methods
-    from gwas.log import logger, setup_logging
-    from gwas.mem.wkspace import SharedWorkspace
     from gwas.null_model.base import NullModelCollection
     from gwas.utils import chromosomes_set
 
@@ -79,7 +77,7 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
         "--compression-method",
         required=False,
         choices=compression_methods.keys(),
-        default="blosc2_zstd_bitshuffle",
+        default="zstd_text",
     )
     argument_parser.add_argument(
         "--add-principal-components",
@@ -102,7 +100,14 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
     argument_parser.add_argument("--mem-gb", type=float)
     argument_parser.add_argument("--num-threads", type=int, default=mp.cpu_count())
 
-    arguments = argument_parser.parse_args(argv)
+    return argument_parser.parse_args(argv)
+
+
+def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") -> None:
+    arguments = parse_arguments(argv)
+
+    from gwas.log import logger, setup_logging
+    from gwas.mem.wkspace import SharedWorkspace
 
     setup_logging(level=arguments.log_level)
     output_directory = Path(arguments.output_directory)

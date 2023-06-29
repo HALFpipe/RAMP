@@ -248,7 +248,7 @@ class SharedArray:
         self.sw.allocations = allocations
 
     def compress(self, indices: npt.NDArray[np.integer]) -> None:
-        """compress rows
+        """Compress rows
 
         Parameters
         ----------

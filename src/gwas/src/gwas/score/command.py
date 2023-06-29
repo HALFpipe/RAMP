@@ -3,7 +3,7 @@ from argparse import Namespace
 from dataclasses import dataclass, field
 from pathlib import Path
 from pprint import pformat
-from typing import Iterable, Mapping, Sequence
+from typing import Callable, Iterable, Mapping, Sequence
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -16,7 +16,7 @@ from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..pheno import VariableCollection
 from ..score.job import JobCollection
-from ..tri import calc_tri
+from ..tri.calc import calc_tri
 from ..utils import chromosome_to_int, parse_chromosome
 from ..vcf.base import VCFFile, calc_vcf
 
@@ -62,22 +62,28 @@ class GwasCommand:
             missing_value_strategy=self.arguments.missing_value_strategy,
         )
 
-    def split_by_missing_values(self) -> list[VariableCollection]:
+    @staticmethod
+    def split_by_missing_values(
+        base_variable_collection: VariableCollection,
+        add_principal_components: int = 0,
+        get_eigendecomposition: Callable[
+            [int | str, VariableCollection], Eigendecomposition
+        ]
+        | None = None,
+    ) -> list[VariableCollection]:
         # Load phenotype and covariate data for all samples that have genetic data and
         # count missing values.
-        vc = self.get_variable_collection()
-        phenotype_names = vc.phenotype_names
-        samples = vc.samples
+        phenotype_names = base_variable_collection.phenotype_names
+        samples = base_variable_collection.samples
         (
             missing_value_patterns,
             missing_value_pattern_indices,
         ) = np.unique(
-            np.isfinite(vc.phenotypes.to_numpy()),
+            np.isfinite(base_variable_collection.phenotypes.to_numpy()),
             axis=1,
             return_inverse=True,
         )
         (_, missing_value_pattern_count) = missing_value_patterns.shape
-        vc.free()
 
         variable_collections: list[VariableCollection] = list()
         for i in tqdm(
@@ -109,36 +115,45 @@ class GwasCommand:
                     f"No phenotypes in chunk {i}. This should not happen"
                 )
 
-            vc = self.get_variable_collection()
-            vc.subset_phenotypes(pattern_phenotypes)
-            vc.subset_samples(pattern_samples)
-            if not vc.is_finite:
+            variable_collection = base_variable_collection.copy()
+            variable_collection.subset_phenotypes(pattern_phenotypes)
+            variable_collection.subset_samples(pattern_samples)
+            if not variable_collection.is_finite:
                 # Sanity check.
                 raise RuntimeError(
                     f"Missing values remain in chunk {i}. This should not happen"
                 )
 
-            if self.arguments.add_principal_components > 0:
-                eig = self.get_eigendecomposition("X", vc)  # All autosomes
+            if add_principal_components > 0:
+                if get_eigendecomposition is None:
+                    raise RuntimeError(
+                        "Cannot add principal components without eigendecomposition "
+                        "function"
+                    )
+                eig = get_eigendecomposition("X", variable_collection)  # All autosomes
 
-                k = self.arguments.add_principal_components
-                pc_array = eig.eigenvectors[:, :k]
-                pc_names = [f"principal_component_{i + 1:02d}" for i in range(k)]
+                pc_array = eig.eigenvectors[:, :add_principal_components]
+                pc_names = [
+                    f"principal_component_{i + 1:02d}"
+                    for i in range(add_principal_components)
+                ]
 
                 # Merge the existing array with the principal components
-                covariates = np.hstack([vc.covariates.to_numpy(), pc_array])
+                covariates = np.hstack(
+                    [variable_collection.covariates.to_numpy(), pc_array]
+                )
 
                 # Clean up.
                 eig.free()
-                vc.covariates.free()
-                self.sw.squash()
+                variable_collection.covariates.free()
+                variable_collection.sw.squash()
 
-                vc.covariate_names.extend(pc_names)
-                vc.covariates = SharedArray.from_numpy(
-                    covariates, self.sw, prefix="covariates"
+                variable_collection.covariate_names.extend(pc_names)
+                variable_collection.covariates = SharedArray.from_numpy(
+                    covariates, variable_collection.sw, prefix="covariates"
                 )
 
-            variable_collections.append(vc)
+            variable_collections.append(variable_collection)
 
         # Sort by number of phenotypes
         variable_collections.sort(key=lambda vc: -vc.phenotype_count)
@@ -180,7 +195,13 @@ class GwasCommand:
             self.arguments.kinship_r_squared_cutoff,
         )
         # Split into missing value chunks
-        self.variable_collections = self.split_by_missing_values()
+        base_variable_collection = self.get_variable_collection()
+        self.variable_collections = self.split_by_missing_values(
+            base_variable_collection,
+            self.arguments.add_principal_components,
+            self.get_eigendecomposition,
+        )
+        base_variable_collection.free()
         self.set_vcf_files(vcf_files)
 
     def set_vcf_files(self, vcf_files: list[VCFFile]) -> None:

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from itertools import chain
 from pathlib import Path
 
 import numpy as np
@@ -9,7 +10,7 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 from numpy import typing as npt
 
-from gwas.eig import Eigendecomposition
+from gwas.eig import Eigendecomposition, EigendecompositionCollection
 from gwas.log import logger
 from gwas.mem.arr import SharedArray
 from gwas.null_model.base import NullModelCollection
@@ -20,6 +21,76 @@ from gwas.vcf.base import VCFFile
 from ..utils import check_bias
 from .conftest import RmwScore
 from .rmw_debug import RmwDebug
+
+
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
+def test_rotate_demeaned_genotypes(
+    vcf_file: VCFFile,
+    genotypes_array: SharedArray,
+    eigendecompositions: list[Eigendecomposition],
+    rotated_genotypes_arrays: list[SharedArray],
+) -> None:
+    ec = EigendecompositionCollection.from_eigendecompositions(
+        vcf_file,
+        eigendecompositions,
+        base_samples=vcf_file.samples,
+    )
+
+    genotypes = genotypes_array.to_numpy()
+    for eigenvector_array, sample_boolean_vector, rotated_genotypes_array in zip(
+        ec.eigenvector_arrays, ec.sample_boolean_vectors, rotated_genotypes_arrays
+    ):
+        eigenvectors = eigenvector_array.to_numpy()
+
+        rotated_genotypes = rotated_genotypes_array.to_numpy()
+
+        mean = genotypes.mean(axis=0, where=sample_boolean_vector[:, np.newaxis])
+
+        rotated_with_mean = np.asfortranarray(eigenvectors.transpose() @ genotypes)
+        scipy.linalg.blas.dger(
+            alpha=-1,
+            x=eigenvectors.sum(axis=0),
+            y=mean,
+            a=rotated_with_mean,
+            overwrite_a=True,
+            overwrite_y=False,
+        )
+        assert np.allclose(rotated_with_mean, rotated_genotypes)
+
+
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
+def test_genotypes_array(
+    vcf_file: VCFFile,
+    genotypes_array: SharedArray,
+    variable_collections: list[VariableCollection],
+    rmw_score: RmwScore,
+) -> None:
+    r = rmw_score.array
+    genotypes = genotypes_array.to_numpy()
+
+    sample_count, _ = genotypes.shape
+    positions = np.asanyarray(vcf_file.variants.position)
+
+    alternate_allele_count = genotypes.sum(axis=0)
+    mean = alternate_allele_count / sample_count
+    alternate_allele_frequency = mean / 2
+
+    assert np.all(r["POS"] == positions[:, np.newaxis])
+    for phenotype_index, sample_count in enumerate(
+        chain.from_iterable(
+            [variable_collection.sample_count] * variable_collection.phenotype_count
+            for variable_collection in variable_collections
+        )
+    ):
+        assert (r["N_INFORMATIVE"][phenotype_index] == sample_count).all()
+    assert np.allclose(r["FOUNDER_AF"], alternate_allele_frequency[:, np.newaxis])
+    assert np.allclose(r["ALL_AF"], alternate_allele_frequency[:, np.newaxis])
+    assert np.allclose(
+        r["INFORMATIVE_ALT_AC"],
+        alternate_allele_count[:, np.newaxis],
+    )
 
 
 def plot_stat(
@@ -70,74 +141,39 @@ def plot_stat(
     plt.close(figure)
 
 
-@pytest.mark.parametrize("chromosome", [22], indirect=True)
-@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
-def test_rotate_demeaned_genotypes(
-    genotypes_array: SharedArray,
-    eig: Eigendecomposition,
-    rotated_genotypes_array: SharedArray,
-) -> None:
-    genotypes = genotypes_array.to_numpy()
-    rotated_genotypes = rotated_genotypes_array.to_numpy()
-
-    mean = genotypes.mean(axis=0)
-
-    rotated_with_mean = np.asfortranarray(eig.eigenvectors.transpose() @ genotypes)
-    scipy.linalg.blas.dger(
-        alpha=-1,
-        x=eig.eigenvectors.sum(axis=0),
-        y=mean,
-        a=rotated_with_mean,
-        overwrite_a=True,
-        overwrite_y=False,
-    )
-    assert np.allclose(rotated_with_mean, rotated_genotypes)
-
-
-@pytest.mark.parametrize("chromosome", [22], indirect=True)
-@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
-def test_genotypes_array(
-    vcf_file: VCFFile,
-    genotypes_array: SharedArray,
-    vc: VariableCollection,
-    rmw_score: RmwScore,
-) -> None:
-    r = rmw_score.array
-    genotypes = genotypes_array.to_numpy()
-
-    sample_count, variant_count = genotypes.shape
-    positions = np.asanyarray(vcf_file.variants.position)
-
-    alternate_allele_count = genotypes.sum(axis=0)
-    mean = alternate_allele_count / sample_count
-    alternate_allele_frequency = mean / 2
-
-    assert np.all(r["POS"] == positions[:, np.newaxis])
-    assert np.all(r["N_INFORMATIVE"] == vc.sample_count)
-    assert np.allclose(r["FOUNDER_AF"], alternate_allele_frequency[:, np.newaxis])
-    assert np.allclose(r["ALL_AF"], alternate_allele_frequency[:, np.newaxis])
-    assert np.allclose(
-        r["INFORMATIVE_ALT_AC"],
-        alternate_allele_count[:, np.newaxis],
-    )
-
-
 def test_score(
     tmp_path: Path,
     phenotype_index: int,
-    nm: NullModelCollection,
-    eig: Eigendecomposition,
-    genotypes_array: SharedArray,
-    rotated_genotypes_array: SharedArray,
+    null_model_collections: list[NullModelCollection],
+    eigendecompositions: list[Eigendecomposition],
+    rotated_genotypes_arrays: list[SharedArray],
     rmw_score: RmwScore,
     rmw_debug: RmwDebug,
 ) -> None:
+    variable_collection_index = 0
+    inner_index = phenotype_index
+
+    for null_model_collection in null_model_collections:
+        if inner_index - null_model_collection.phenotype_count < 0:
+            break
+        inner_index -= null_model_collection.phenotype_count
+        variable_collection_index += 1
+
+    logger.debug(
+        f"Phenotype index {phenotype_index} is in variable collection "
+        f"{variable_collection_index} at position {inner_index}"
+    )
+
+    null_model_collection = null_model_collections[variable_collection_index]
+    eigendecomposition = eigendecompositions[variable_collection_index]
+    rotated_genotypes_array = rotated_genotypes_arrays[variable_collection_index]
+
     rotated_genotypes = rotated_genotypes_array.to_numpy()
 
     phenotype_count = 1
     rotated_genotype = rotated_genotypes[:, 0]
     assert np.allclose(
-        eig.eigenvectors.transpose() @ rmw_debug.genotype,
+        eigendecomposition.eigenvectors.transpose() @ rmw_debug.genotype,
         rotated_genotype,
         atol=1e-6,
         rtol=1e-6,
@@ -164,9 +200,9 @@ def test_score(
     u_stat = np.empty((variant_count, phenotype_count))
     v_stat = np.empty((variant_count, phenotype_count))
 
-    half_scaled_residuals = nm.half_scaled_residuals.to_numpy()
+    half_scaled_residuals = null_model_collection.half_scaled_residuals.to_numpy()
     half_scaled_residuals = half_scaled_residuals[:, phenotype_index, np.newaxis]
-    variance = nm.variance.to_numpy()
+    variance = null_model_collection.variance.to_numpy()
     variance = variance[:, phenotype_index, np.newaxis]
 
     inverse_variance = np.reciprocal(variance)
@@ -205,8 +241,9 @@ def test_score(
     has_no_bias = check_bias(sqrt_v_stat, rmw_sqrt_v_stat, to_compare, tolerance=1e-1)
     is_ok = is_ok and has_no_bias
 
+    log_likelihood = null_model_collection.log_likelihood[phenotype_index]
     same_maximum = np.isclose(
-        nm.log_likelihood[phenotype_index],
+        log_likelihood,
         rmw_debug.log_likelihood_hat,
         atol=1e-3,
         rtol=1e-3,
@@ -224,7 +261,7 @@ def test_score(
         is_ok = is_ok and has_no_log_pvalue_bias
     else:
         logger.info(
-            f"log likelihood is {nm.log_likelihood[phenotype_index]} "
+            f"log likelihood is {log_likelihood} "
             f"(rmw is {rmw_debug.log_likelihood_hat})"
         )
     if not is_ok:

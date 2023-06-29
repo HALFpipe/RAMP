@@ -34,31 +34,25 @@ class Triangular(SharedArray):
     def to_file_name(self) -> str:
         return self.get_file_name(self.chromosome)
 
-    def subset_samples(self, samples: list[str], pivoting: bool = True) -> None:
+    def subset_samples(self, samples: list[str]) -> None:
         """Reduce the lower triangular matrix to a subset of samples.
         Golub and Van Loan (1996) section 12.5.2 implements this by first removing the
-        specified columns from the matrix, and uses standard methods to make it
-        triangular again.
+        specified rows from the matrix.
+        Since we are just using them for SVD, we just remove the rows and leave
+        the matrix non-triangular.
 
         Args:
             samples (list[str]): The samples to keep.
         """
         if samples == self.samples:
-            # Nothing to do.
+            # Nothing to do
             return
 
-        from .tsqr import TallSkinnyQR
-
-        new_sample_indices = [self.samples.index(sample) for sample in samples]
-
+        new_sample_indices = np.array(
+            [self.samples.index(sample) for sample in samples]
+        )
         # Remove samples
-        self.transpose()
-        array = self.to_numpy()
-        array[:, : len(samples)] = array[:, new_sample_indices]
-        self.resize(self.sample_count, len(samples))
-
-        TallSkinnyQR.triangularize(self, pivoting=pivoting)
-
+        self.compress(new_sample_indices)
         self.samples = samples
 
     @staticmethod
