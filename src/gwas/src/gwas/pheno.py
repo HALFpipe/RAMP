@@ -226,22 +226,22 @@ class VariableCollection:
         if samples is None:
             samples = phenotype_samples
         if samples is None:
-            raise RuntimeError("No samples found in phenotype files.")
+            raise RuntimeError("No samples found in phenotype files")
 
         covariate_samples, covariate_names, covariate_array = read_and_combine(
             covariate_paths
         )
 
-        # Use only samples that are present in all files.
+        # Use only samples that are present in all files
         sample_indices = [
-            i
-            for i, sample in enumerate(phenotype_samples)
-            if sample in samples and sample in covariate_samples
+            phenotype_samples.index(sample)
+            for sample in samples
+            if sample in phenotype_samples and sample in covariate_samples
         ]
         phenotype_samples = [phenotype_samples[i] for i in sample_indices]
         phenotype_array = phenotype_array[sample_indices, :]
 
-        # Ensure that covariates are in the same order as phenotypes.
+        # Ensure that covariates are in the same order as phenotypes
         sample_indices = [
             covariate_samples.index(sample)
             for sample in phenotype_samples
@@ -249,6 +249,8 @@ class VariableCollection:
         ]
         covariate_samples = [covariate_samples[i] for i in sample_indices]
         covariate_array = covariate_array[sample_indices, :]
+
+        samples = [sample for sample in samples if sample in phenotype_samples]
 
         if samples is None:
             raise RuntimeError
