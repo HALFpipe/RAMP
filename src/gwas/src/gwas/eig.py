@@ -236,7 +236,8 @@ class EigendecompositionCollection:
         for eig, sample_boolean_vector in zip(eigs, sample_boolean_vectors):
             sample_count = len(eig.samples)
 
-            name = f"expanded-{eig.name}"
+            prefix = eig.get_prefix(chromosome=eig.chromosome)
+            name = SharedArray.get_name(sw, f"expanded-{prefix}")
             array = sw.alloc(name, base_sample_count, sample_count)
 
             matrix = array.to_numpy()
