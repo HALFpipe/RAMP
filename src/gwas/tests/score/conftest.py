@@ -42,17 +42,17 @@ from .simulation import (
 pytest_fixtures = [bfile_path, pfile_paths, simulation, variants, rmw_debug]
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def other_chromosomes(chromosome: int | str) -> list[str | int]:
     return sorted(chromosomes_set() - {chromosome, "X"}, key=chromosome_to_int)
 
 
-@pytest.fixture(scope="module", params=list(range(simulation_count)))
+@pytest.fixture(scope="session", params=list(range(simulation_count)))
 def phenotype_index(request) -> int:
     return request.param
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def variable_collections(
     simulation: SimulationResult,
     sw: SharedWorkspace,
@@ -81,15 +81,35 @@ def variable_collections(
     variable_collections = GwasCommand.split_by_missing_values(base_variable_collection)
     assert len(variable_collections) == missing_value_pattern_count
 
+    should_be_missing = np.array(simulation.patterns)[
+        simulation.pattern_indices
+    ].transpose()
+    assert (np.isnan(phenotypes) == should_be_missing).all()
+
     base_variable_collection.free()
     for i, variable_collection in enumerate(variable_collections):
-        variable_collection.name = f"variableCollection_{i + 1:d}"
+        variable_collection.name = f"variableCollection-{i + 1:d}"
         request.addfinalizer(variable_collection.free)
+
+    vc_by_phenotype = {
+        phenotype_name: variable_collection
+        for variable_collection in variable_collections
+        for phenotype_name in variable_collection.phenotype_names
+    }
+    for i in range(simulation_count):
+        phenotype_name = phenotype_names[i]
+        vc = vc_by_phenotype[phenotype_name]
+        phenotype_samples = [
+            sample
+            for sample, missing in zip(samples, should_be_missing[:, i])
+            if not missing
+        ]
+        assert vc.samples == phenotype_samples
 
     return variable_collections
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def eigendecompositions(
     other_chromosomes: list[str | int],
     tri_paths_by_chromosome: dict[str | int, Path],
@@ -112,7 +132,7 @@ def eigendecompositions(
     return eigendecompositions
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def null_model_collections(
     variable_collections: list[VariableCollection],
     eigendecompositions: list[Eigendecomposition],
@@ -133,14 +153,14 @@ def null_model_collections(
     return null_model_collections
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def vcf_file(
     chromosome: int | str, vcf_files_by_chromosome: Mapping[int | str, VCFFile]
 ) -> VCFFile:
     return vcf_files_by_chromosome[chromosome]
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def rmw_commands(
     directory_factory: DirectoryFactory,
     chromosome: int | str,
@@ -237,7 +257,7 @@ def rmw_commands(
     return rmw_commands
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def rmw_scorefile_paths(
     rmw_commands: list[tuple[Path, list[str]]],
 ) -> list[Path]:
@@ -269,7 +289,7 @@ def read_scorefile(path: Path) -> tuple[ScorefileHeader, npt.NDArray]:
     return header, array
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def rmw_score(
     rmw_scorefile_paths: list[Path],
 ) -> RmwScore:
@@ -286,7 +306,7 @@ def rmw_score(
     )
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def genotypes_array(
     vcf_file: VCFFile,
     sw: SharedWorkspace,
@@ -311,7 +331,7 @@ def genotypes_array(
     return genotypes_array
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def rotated_genotypes_arrays(
     vcf_file: VCFFile,
     genotypes_array: SharedArray,

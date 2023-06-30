@@ -22,7 +22,7 @@ missing_value_rate: float = 0.05
 missing_value_pattern_count: int = 3
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def pfile_paths(
     directory_factory: DirectoryFactory, sample_size: int, vcf_paths: list[Path]
 ):
@@ -61,7 +61,7 @@ def pfile_paths(
     return pfiles
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def bfile_path(
     directory_factory: DirectoryFactory, sample_size: int, pfile_paths: list[Path]
 ):
@@ -96,7 +96,7 @@ def bfile_path(
     return bfile_path
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def variants(
     directory_factory: DirectoryFactory,
     sample_size: int,
@@ -137,9 +137,11 @@ def variants(
 class SimulationResult:
     phen: npt.NDArray[np.str_]
     par: npt.NDArray[np.str_]
+    patterns: list[npt.NDArray[np.bool_]]
+    pattern_indices: list[int]
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def simulation(
     directory_factory: DirectoryFactory,
     sample_size: int,
@@ -152,6 +154,7 @@ def simulation(
     tmp_path = Path(directory_factory.get("variables", sample_size))
 
     seed(42)
+    np.random.seed(47)
     causal_variants = sample(variants, k=causal_variant_count)
     variant_list_path = tmp_path / "causal.snplist"
     with variant_list_path.open("wt") as file_handle:
@@ -185,7 +188,7 @@ def simulation(
     phen = np.loadtxt(phen_path, dtype=str)
     par = np.loadtxt(par_path, skiprows=1, dtype=str)
 
-    patterns = [
+    patterns: list[npt.NDArray[np.bool_]] = [
         np.random.choice(
             a=[False, True],
             size=sample_size,
@@ -194,10 +197,12 @@ def simulation(
         for _ in range(missing_value_pattern_count)
     ]
 
+    pattern_indices: list[int] = list()
     for i in range(simulation_count):
         pattern_index = np.random.choice(missing_value_pattern_count)
+        pattern_indices.append(pattern_index)
         for j in range(sample_size):
             if patterns[pattern_index][j]:
                 phen[j, 2 + i] = "NaN"
 
-    return SimulationResult(phen, par)
+    return SimulationResult(phen, par, patterns, pattern_indices)

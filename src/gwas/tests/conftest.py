@@ -17,12 +17,12 @@ SampleSizeLabel = Literal["small", "medium", "large"]
 sample_sizes: Mapping[SampleSizeLabel, int] = dict(small=100, medium=500, large=3421)
 
 
-@pytest.fixture(scope="module", params=[22, "X"])
+@pytest.fixture(scope="session", params=[22, "X"])
 def chromosome(request) -> str | int:
     return request.param
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def sw(request) -> SharedWorkspace:
     sw = SharedWorkspace.create()
 
@@ -126,7 +126,7 @@ def raw_path():
     return base_path / dataset / "raw"
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def tri_paths_by_size_and_chromosome(
     vcf_files_by_size_and_chromosome: Mapping[
         SampleSizeLabel, Mapping[int | str, VCFFile]
@@ -144,7 +144,7 @@ def tri_paths_by_size_and_chromosome(
     }
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def tri_paths_by_chromosome(
     sample_size_label: str,
     tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],

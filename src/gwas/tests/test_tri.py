@@ -131,8 +131,7 @@ def test_tri_file(tmp_path: Path, numpy_tri: npt.NDArray, sw: SharedWorkspace):
     assert len(sw.allocations) == 1
 
 
-@pytest.mark.parametrize("pivoting", [True, False])
-def test_tri_subset_samples(pivoting: bool, sw: SharedWorkspace):
+def test_tri_subset_samples(sw: SharedWorkspace):
     k = 100
 
     A = np.random.rand(10000, k)
@@ -180,10 +179,8 @@ def test_tri_subset_samples(pivoting: bool, sw: SharedWorkspace):
     assert is_lower_triangular(tri.to_numpy())
     assert np.allclose(tri.to_numpy(), R)
 
-    tri.subset_samples(subset_samples, pivoting=pivoting)
+    tri.subset_samples(subset_samples)
     R3 = tri.to_numpy()
-    if not pivoting:
-        assert is_lower_triangular(R3)
     assert np.allclose(R3 @ R3.transpose(), D)
 
     R4 = np.linalg.qr(R3.transpose(), mode="r")

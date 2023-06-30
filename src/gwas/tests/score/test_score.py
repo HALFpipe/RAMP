@@ -21,6 +21,7 @@ from gwas.vcf.base import VCFFile
 from ..utils import check_bias
 from .conftest import RmwScore
 from .rmw_debug import RmwDebug
+from .simulation import simulation_count
 
 
 @pytest.mark.parametrize("chromosome", [22], indirect=True)
@@ -67,30 +68,52 @@ def test_genotypes_array(
     variable_collections: list[VariableCollection],
     rmw_score: RmwScore,
 ) -> None:
-    r = rmw_score.array
+    rmw = rmw_score.array
     genotypes = genotypes_array.to_numpy()
 
     sample_count, _ = genotypes.shape
-    positions = np.asanyarray(vcf_file.variants.position)
+    positions = np.asanyarray(vcf_file.vcf_variants.position)
 
-    alternate_allele_count = genotypes.sum(axis=0)
-    mean = alternate_allele_count / sample_count
-    alternate_allele_frequency = mean / 2
-
-    assert np.all(r["POS"] == positions[:, np.newaxis])
+    assert np.all(rmw["POS"] == positions[:, np.newaxis])
     for phenotype_index, sample_count in enumerate(
         chain.from_iterable(
             [variable_collection.sample_count] * variable_collection.phenotype_count
             for variable_collection in variable_collections
         )
     ):
-        assert (r["N_INFORMATIVE"][phenotype_index] == sample_count).all()
-    assert np.allclose(r["FOUNDER_AF"], alternate_allele_frequency[:, np.newaxis])
-    assert np.allclose(r["ALL_AF"], alternate_allele_frequency[:, np.newaxis])
-    assert np.allclose(
-        r["INFORMATIVE_ALT_AC"],
-        alternate_allele_count[:, np.newaxis],
-    )
+        assert (rmw["N_INFORMATIVE"][:, phenotype_index] == sample_count).all()
+
+    vc_by_phenotype = {
+        phenotype_name: variable_collection
+        for variable_collection in variable_collections
+        for phenotype_name in variable_collection.phenotype_names
+    }
+    phenotype_names = [
+        phenotype_name
+        for variable_collection in variable_collections
+        for phenotype_name in variable_collection.phenotype_names
+    ]
+    base_samples = vcf_file.samples
+    for i in range(simulation_count):
+        phenotype_name = phenotype_names[i]
+        vc = vc_by_phenotype[phenotype_name]
+        sample_boolean_vector = np.fromiter(
+            (sample in vc.samples for sample in base_samples), dtype=np.bool_
+        )
+        sample_count = sample_boolean_vector.sum()
+
+        alternate_allele_count = genotypes.sum(
+            axis=0, where=sample_boolean_vector[:, np.newaxis]
+        )
+        mean = alternate_allele_count / sample_count
+        alternate_allele_frequency = mean / 2
+
+        assert np.allclose(rmw["FOUNDER_AF"][:, i], alternate_allele_frequency)
+        assert np.allclose(rmw["ALL_AF"][:, i], alternate_allele_frequency)
+        assert np.allclose(
+            rmw["INFORMATIVE_ALT_AC"][:, i],
+            alternate_allele_count,
+        )
 
 
 def plot_stat(

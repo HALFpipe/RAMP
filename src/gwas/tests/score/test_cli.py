@@ -47,7 +47,11 @@ def test_run(
     phenotype_frame.to_csv(
         phenotype_path, sep="\t", index=True, header=True, na_rep="n/a"
     )
-    phenotype_names: list[str] = list(phenotype_frame.columns)
+    phenotype_names = [
+        phenotype_name
+        for variable_collection in variable_collections
+        for phenotype_name in variable_collection.phenotype_names
+    ]
 
     covariate_frames = [
         pd.DataFrame(
@@ -85,6 +89,12 @@ def test_run(
     )
     command = GwasCommand(arguments, tmp_path, sw)
     command.run()
+
+    for a, b in zip(command.variable_collections, variable_collections):
+        assert a.phenotype_names == b.phenotype_names
+        assert a.samples == b.samples
+    for a, b in zip(eigendecompositions, variable_collections):
+        assert a.samples == b.samples
 
     sc = SummaryCollection.from_file(tmp_path / f"chr{chromosome}.metadata.yaml.gz")
     (summaries,) = sc.chunks.values()
