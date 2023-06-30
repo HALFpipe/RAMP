@@ -163,9 +163,6 @@ def finalize_sample_classes(
             continue
         mixed = set.union(*class_dict.values())
         class_dict["mixed"] = mixed
-    # import pdb
-
-    # pdb.set_trace()
 
     # Create non-main ancestry group.
     sample_populations = sample_classes["population"]

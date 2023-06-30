@@ -86,7 +86,6 @@ class CppVCFFile(VCFFile):
                 self.dosage_field_index,
             )
 
-        # import pdb; pdb.set_trace()
         run_float_reader(
             dosages.transpose(),
             self.float_reader,

@@ -239,7 +239,7 @@ class JobCollection:
                     num_threads=self.num_threads,
                 )
                 summary.put_null_model_collection(nm)
-                # Extract the matrices we actually need from the nm.
+                # Extract the matrices we actually need from the null model
                 (
                     inverse_variance_array,
                     scaled_residuals_array,
