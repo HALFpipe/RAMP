@@ -201,6 +201,11 @@ class GwasCommand:
             self.arguments.add_principal_components,
             self.get_eigendecomposition,
         )
+        if len(self.variable_collections) == 0:
+            raise ValueError(
+                "No phenotypes to analyze. Please check if the sample IDs "
+                "match between your phenotype/covariate files and the VCF files."
+            )
         base_variable_collection.free()
         self.set_vcf_files(vcf_files)
 
