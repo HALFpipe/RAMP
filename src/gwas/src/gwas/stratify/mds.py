@@ -88,7 +88,7 @@ def parse_mds(arguments: Namespace, rename_sample: Callable[[str], str]) -> MDS:
     matrix = np.loadtxt(arguments.mds, skiprows=1, delimiter=",", dtype=dtype)
     is_sample = ~np.isin(matrix["FID"], populations)
     samples: list[SampleID] = [
-        SampleID(rename_sample(fid), rename_sample(iid))
+        SampleID(fid, iid)
         for fid, iid in zip(matrix["FID"], matrix["IID"])
         if fid not in populations
     ]
