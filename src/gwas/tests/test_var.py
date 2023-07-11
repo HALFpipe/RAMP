@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from random import seed
+from typing import Type
 
 import numpy as np
 import pytest
@@ -8,6 +9,7 @@ import torch
 
 from gwas.null_model.ml import (
     MaximumLikelihood,
+    OptimizeInput,
     ProfileMaximumLikelihood,
     RestrictedMaximumLikelihood,
 )
@@ -16,7 +18,7 @@ from gwas.null_model.ml import (
 @pytest.mark.parametrize(
     "driver", [MaximumLikelihood, ProfileMaximumLikelihood, RestrictedMaximumLikelihood]
 )
-def test_var(driver):
+def test_var(driver: Type[ProfileMaximumLikelihood]):
     seed(0xABC)
 
     # simulate data
@@ -48,13 +50,17 @@ def test_var(driver):
     rotated_covariates = torch.tensor(eigenvectors.transpose() @ covariates)
     rotated_phenotype = torch.tensor(eigenvectors.transpose() @ phenotype)
 
-    ml = driver(
-        sample_count,
+    o: OptimizeInput = OptimizeInput(
         eigenvalues,
         rotated_covariates,
         rotated_phenotype,
     )
-    optimize_result = ml.optimize()
+
+    ml = driver(
+        sample_count,
+        covariate_count,
+    )
+    optimize_result = ml.optimize(o)
     terms = optimize_result.x
 
     heritability = terms[1] / terms[:2].sum()
