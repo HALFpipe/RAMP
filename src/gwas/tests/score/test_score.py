@@ -205,10 +205,11 @@ def test_score(
     sample_count, variant_count = rotated_genotypes.shape
 
     # Parse rmw scorefile columns
-    rmw_u_stat = rmw_score.array["U_STAT"]
-    rmw_sqrt_v_stat = rmw_score.array["SQRT_V_STAT"]
-    rmw_effsize = rmw_score.array["ALT_EFFSIZE"]
-    rmw_pvalue = rmw_score.array["PVALUE"]
+    rmw_array = rmw_score.array[:variant_count, :]
+    rmw_u_stat = rmw_array["U_STAT"]
+    rmw_sqrt_v_stat = rmw_array["SQRT_V_STAT"]
+    rmw_effsize = rmw_array["ALT_EFFSIZE"]
+    rmw_pvalue = rmw_array["PVALUE"]
 
     rmw_u_stat = rmw_u_stat[:, phenotype_index, np.newaxis]
     rmw_sqrt_v_stat = rmw_sqrt_v_stat[:, phenotype_index, np.newaxis]
@@ -224,9 +225,9 @@ def test_score(
     v_stat = np.empty((variant_count, phenotype_count))
 
     half_scaled_residuals = null_model_collection.half_scaled_residuals.to_numpy()
-    half_scaled_residuals = half_scaled_residuals[:, phenotype_index, np.newaxis]
+    half_scaled_residuals = half_scaled_residuals[:, inner_index, np.newaxis]
     variance = null_model_collection.variance.to_numpy()
-    variance = variance[:, phenotype_index, np.newaxis]
+    variance = variance[:, inner_index, np.newaxis]
 
     inverse_variance = np.reciprocal(variance)
     sqrt_inverse_variance = np.power(variance, -0.5)
@@ -264,7 +265,7 @@ def test_score(
     has_no_bias = check_bias(sqrt_v_stat, rmw_sqrt_v_stat, to_compare, tolerance=1e-1)
     is_ok = is_ok and has_no_bias
 
-    log_likelihood = null_model_collection.log_likelihood[phenotype_index]
+    log_likelihood = null_model_collection.log_likelihood[inner_index]
     same_maximum = np.isclose(
         log_likelihood,
         rmw_debug.log_likelihood_hat,
