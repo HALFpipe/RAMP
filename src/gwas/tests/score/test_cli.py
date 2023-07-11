@@ -93,8 +93,8 @@ def test_run(
     for a, b in zip(command.variable_collections, variable_collections):
         assert a.phenotype_names == b.phenotype_names
         assert a.samples == b.samples
-    for a, b in zip(eigendecompositions, variable_collections):
-        assert a.samples == b.samples
+    for eig, b in zip(eigendecompositions, variable_collections):
+        assert eig.samples == b.samples
 
     sc = SummaryCollection.from_file(tmp_path / f"chr{chromosome}.metadata.yaml.gz")
     (summaries,) = sc.chunks.values()
