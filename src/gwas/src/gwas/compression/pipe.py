@@ -214,5 +214,6 @@ def load_from_cache(cache_path: Path, key: str) -> Any:
 
 
 def save_to_cache(cache_path: Path, key: str, value: Any) -> None:
+    cache_path.mkdir(parents=True, exist_ok=True)
     with CompressedBytesWriter(cache_path / f"{key}{cache_suffix}") as file_handle:
         pickle.dump(value, file_handle)

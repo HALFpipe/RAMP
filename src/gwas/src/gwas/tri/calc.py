@@ -74,6 +74,8 @@ def get_tri_tasks(
     minor_allele_frequency_cutoff: float,
     r_squared_cutoff: float,
 ) -> tuple[TaskSyncCollection, list[Task]]:
+    # Ensure the output directory exists
+    output_directory.mkdir(parents=True, exist_ok=True)
     t = TaskSyncCollection()
     t.can_run.set()  # We can run the first task immediately.
     # Prepare the list of tasks to run.
