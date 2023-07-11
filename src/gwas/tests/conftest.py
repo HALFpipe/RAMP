@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Literal, Mapping
 
 import pytest
+from psutil import virtual_memory
 
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri.calc import calc_tri
@@ -24,7 +25,7 @@ def chromosome(request) -> str | int:
 
 @pytest.fixture(scope="session")
 def sw(request) -> SharedWorkspace:
-    sw = SharedWorkspace.create()
+    sw = SharedWorkspace.create(size=int(virtual_memory().available * (2 / 3)))
 
     request.addfinalizer(sw.close)
     request.addfinalizer(sw.unlink)
