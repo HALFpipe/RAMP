@@ -10,8 +10,10 @@ from gwas.log import logger
 from gwas.null_model.ml import (
     FaST_LMM,
     MaximumLikelihood,
+    MaximumPenalizedLikelihood,
     OptimizeInput,
     ProfileMaximumLikelihood,
+    RestrictedMaximumLikelihood,
 )
 
 from ..utils import check_bias
@@ -22,7 +24,7 @@ def test_fast_lmm(
     rmw_debug: RmwDebug,
 ) -> None:
     sample_count, covariate_count = rmw_debug.x.shape
-    ml = FaST_LMM(sample_count, covariate_count)
+    ml = FaST_LMM(sample_count, covariate_count, enable_softplus_penalty=False)
 
     optimize_input = OptimizeInput(
         torch.tensor(rmw_debug.d),
@@ -96,7 +98,14 @@ def test_fast_lmm(
 
 
 @pytest.mark.parametrize(
-    "ml_class", [MaximumLikelihood, ProfileMaximumLikelihood, FaST_LMM]
+    "ml_class",
+    [
+        MaximumLikelihood,
+        ProfileMaximumLikelihood,
+        MaximumPenalizedLikelihood,
+        RestrictedMaximumLikelihood,
+        FaST_LMM,
+    ],
 )
 def test_optimize(
     rmw_debug: RmwDebug,
@@ -111,7 +120,7 @@ def test_optimize(
         torch.tensor(rmw_debug.trans_u_y[:, np.newaxis]),
     )
 
-    optimize_result = ml.optimize(optimize_input, scale=False)
+    optimize_result = ml.optimize(optimize_input)
     terms = torch.Tensor(optimize_result.x)
     (heritability, genetic_variance, error_variance) = ml.get_heritability(terms)
 

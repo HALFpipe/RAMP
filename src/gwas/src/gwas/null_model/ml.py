@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cached_property, partial
 from multiprocessing import cpu_count
-from typing import ClassVar, NamedTuple
+from typing import Any, ClassVar, NamedTuple
 
 import numpy as np
 import scipy
@@ -20,6 +20,7 @@ from ..utils import Pool
 from .base import NullModelCollection, NullModelResult
 
 minimum_variance: float = 1e-4
+maximum_variance_multiplier: float = 4.0
 
 
 class OptimizeInput(NamedTuple):
@@ -44,15 +45,20 @@ class ProfileMaximumLikelihood:
     sample_count: int
     covariate_count: int
 
-    needs_grad: ClassVar[bool] = True
+    enable_softplus_penalty: bool = True
+
+    requires_grad: ClassVar[bool] = True
 
     def get_initial_terms(self, o: OptimizeInput):
-        var: float = o.rotated_phenotype.var().item()
-        return [var / 2] * 2
+        variance: float = o.rotated_phenotype.var().item()
+        return [variance / 2] * 2
 
     def bounds(self, o: OptimizeInput) -> list[tuple[float, float]]:
-        variance = o.rotated_phenotype.var().item()
-        return [(minimum_variance, variance), (0, variance)]
+        variance: float = o.rotated_phenotype.var().item()
+        return [
+            (minimum_variance, variance * maximum_variance_multiplier),
+            (0, variance * maximum_variance_multiplier),
+        ]
 
     @cached_property
     def func(self):
@@ -64,9 +70,27 @@ class ProfileMaximumLikelihood:
         terms = self.terms_to_tensor(self.get_initial_terms(o))
 
         func = self.minus_two_log_likelihood
-
-        if self.needs_grad:
+        if self.requires_grad:
             func = grad_and_value(func)
+
+        func = memory_efficient_fusion(func)
+
+        # perform warm-up iterations
+        for _ in range(3):
+            func(terms, o)
+
+        return func
+
+    @cached_property
+    def hessian(self):
+        o = OptimizeInput(
+            torch.rand(self.sample_count),
+            torch.rand(self.sample_count, self.covariate_count),
+            torch.rand(self.sample_count, 1),
+        )
+        terms = self.terms_to_tensor(self.get_initial_terms(o))
+
+        func = hessian(self.minus_two_log_likelihood)
         func = memory_efficient_fusion(func)
 
         # perform warm-up iterations
@@ -79,12 +103,6 @@ class ProfileMaximumLikelihood:
     def get_regression_weights(
         terms: torch.Tensor, o: OptimizeInput
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        terms = torch.where(
-            torch.isfinite(terms),
-            terms,
-            0,
-        )
-
         (eigenvalues, rotated_covariates, rotated_phenotype) = o
 
         variance = terms[1] * eigenvalues + terms[0]
@@ -94,9 +112,7 @@ class ProfileMaximumLikelihood:
         scaled_phenotype = rotated_phenotype * inverse_variance
 
         regression_weights = torch.linalg.lstsq(
-            scaled_covariates,
-            scaled_phenotype,
-            rcond=None,
+            scaled_covariates, scaled_phenotype, rcond=None
         ).solution
 
         scaled_residuals = scaled_phenotype - scaled_covariates @ regression_weights
@@ -127,32 +143,28 @@ class ProfileMaximumLikelihood:
 
         return weights, standard_errors, residuals, variance
 
-    def minus_two_log_likelihood(self, terms: torch.Tensor, o: OptimizeInput):
-        _, scaled_residuals, variance, _, _ = self.get_regression_weights(terms, o)
-        constant = torch.log(variance).sum()
-        minus_two_log_likelihood = (
-            constant
-            + self.sample_count
-            + self.sample_count * torch.log(torch.square(scaled_residuals).mean())
-        )
-        return torch.where(
-            torch.isfinite(minus_two_log_likelihood),
-            minus_two_log_likelihood,
-            torch.inf,
-        )
-
-    @staticmethod
-    def terms_to_tensor(numpy_terms):
-        return torch.tensor(
+    @classmethod
+    def terms_to_tensor(cls, numpy_terms):
+        terms = torch.tensor(
             numpy_terms,
             dtype=torch.float64,
-            requires_grad=True,
+            requires_grad=cls.requires_grad,
         )
+        terms = torch.where(torch.isfinite(terms), terms, 0.0)
+        return terms
 
     def wrapper(self, numpy_terms: npt.NDArray, o: OptimizeInput):
+        try:
+            terms = self.terms_to_tensor(numpy_terms)
+            grad, value = self.func(terms, o)
+            return value.item(), grad.detach().numpy()
+        except RuntimeError:
+            return np.nan, np.full_like(numpy_terms, np.nan)
+
+    def hessian_wrapper(self, numpy_terms: npt.NDArray, o: OptimizeInput):
         terms = self.terms_to_tensor(numpy_terms)
-        grad, value = self.func(terms, o)
-        return value.item(), grad.detach().numpy()
+        hess = self.hessian(terms, o)
+        return hess.detach().numpy()
 
     @staticmethod
     def get_heritability(terms) -> tuple[float, float, float]:
@@ -161,36 +173,40 @@ class ProfileMaximumLikelihood:
         heritability = float(genetic_variance / (genetic_variance + error_variance))
         return heritability, genetic_variance, error_variance
 
-    def optimize(self, o: OptimizeInput, scale: bool = False) -> OptimizeResult:
-        if scale:
-            scaling_factor: float = o.rotated_phenotype.std().item()
-            o = OptimizeInput(
-                o.eigenvalues,
-                o.rotated_covariates,
-                o.rotated_phenotype / scaling_factor,
-            )
-        else:
-            scaling_factor = 1
+    def optimize(
+        self,
+        o: OptimizeInput,
+        method: str = "TNC",
+        enable_hessian: bool = False,
+        **kwargs,
+    ) -> OptimizeResult:
+        init = self.get_initial_terms(o)
+        bounds = self.bounds(o)
 
-        func = self.wrapper
-        optimize_result = scipy.optimize.basinhopping(  # type: ignore
-            func,
-            self.get_initial_terms(o),
-            minimizer_kwargs=dict(
-                method="L-BFGS-B", jac=True, bounds=self.bounds(o), args=(o,)
-            ),
-            niter=2**10,
+        minimizer_kwargs: dict[str, Any] = dict(
+            method=method,
+            jac=True,
+            bounds=bounds,
+            args=(o,),
         )
-
-        optimize_result.x[:2] *= np.square(scaling_factor)
-        optimize_result.x[2:] *= scaling_factor
+        if enable_hessian:
+            minimizer_kwargs.update(dict(hess=self.hessian_wrapper))
+        optimize_result = scipy.optimize.basinhopping(  # type: ignore
+            self.wrapper,
+            init,
+            minimizer_kwargs=minimizer_kwargs,
+            stepsize=init[0] / 10,
+            niter=2**10,
+            niter_success=2**4,
+            **kwargs,
+        )
 
         return optimize_result
 
-    def apply(self, optimize_job: OptimizeJob) -> tuple[int, NullModelResult]:
+    def apply(self, optimize_job: OptimizeJob, **kwargs) -> tuple[int, NullModelResult]:
         (phenotype_index, num_nested_threads, o) = optimize_job
         with threadpool_limits(limits=num_nested_threads):
-            optimize_result = self.optimize(o)
+            optimize_result = self.optimize(o, **kwargs)
             terms = torch.tensor(optimize_result.x)
             weights, errors, residuals, variance = self.get_standard_errors(
                 terms,
@@ -213,6 +229,7 @@ class ProfileMaximumLikelihood:
         vc: VariableCollection,
         nm: NullModelCollection,
         num_threads: int = cpu_count(),
+        **kwargs,
     ) -> None:
         eigenvectors = eig.eigenvectors
         covariates = vc.covariates.to_numpy().copy()
@@ -243,15 +260,44 @@ class ProfileMaximumLikelihood:
             )
             for phenotype_index in range(vc.phenotype_count)
         )
+        apply = partial(ml.apply, **kwargs)
 
         with Pool(processes=num_processes) as pool:
             for i, r in tqdm(
-                pool.imap_unordered(ml.apply, optimize_jobs),
+                pool.imap_unordered(apply, optimize_jobs),
                 desc="fitting null models",
                 unit="phenotypes",
                 total=vc.phenotype_count,
             ):
                 nm.put(i, r)
+
+    def softplus_penalty(self, terms: torch.Tensor, o: OptimizeInput) -> torch.Tensor:
+        beta = 1e4
+        maximum_variance = o.rotated_phenotype.var() * torch.tensor(
+            maximum_variance_multiplier
+        )
+        upper_penalty = torch.nn.functional.softplus(
+            terms[:2] - maximum_variance,
+            beta=beta,
+        )
+        lower_penalty = torch.nn.functional.softplus(
+            -terms[:2],
+            beta=beta,
+        )
+        penalty = torch.tensor(beta) * (lower_penalty.sum() + upper_penalty.sum())
+        return penalty
+
+    def minus_two_log_likelihood(
+        self, terms: torch.Tensor, o: OptimizeInput
+    ) -> torch.Tensor:
+        (_, scaled_residuals, variance, _, _) = self.get_regression_weights(terms, o)
+        sample_count = torch.tensor(self.sample_count, dtype=torch.float64)
+        constant = torch.log(variance).sum() + sample_count
+        deviation = sample_count * torch.log(torch.square(scaled_residuals).mean())
+        minus_two_log_likelihood = constant + deviation
+        if self.enable_softplus_penalty:
+            minus_two_log_likelihood += self.softplus_penalty(terms, o)
+        return minus_two_log_likelihood
 
 
 def logdet(a: torch.Tensor) -> torch.Tensor:
@@ -274,38 +320,64 @@ def logdet(a: torch.Tensor) -> torch.Tensor:
 
 @dataclass
 class RestrictedMaximumLikelihood(ProfileMaximumLikelihood):
-    @classmethod
-    def minus_two_log_likelihood(cls, variance_terms: torch.Tensor, o: OptimizeInput):
+    def minus_two_log_likelihood(
+        self, terms: torch.Tensor, o: OptimizeInput
+    ) -> torch.Tensor:
         (
             _,
             scaled_residuals,
             variance,
             scaled_covariates,
-            scaled_phenotype,
-        ) = cls.get_regression_weights(variance_terms, o)
+            _,
+        ) = self.get_regression_weights(terms, o)
+        sample_count = torch.tensor(self.sample_count, dtype=torch.float64)
+        constant = torch.log(variance).sum() + sample_count
+        deviation = sample_count * torch.log(torch.square(scaled_residuals).mean())
+        penalty = logdet(scaled_covariates.t() @ scaled_covariates)
+        minus_two_log_likelihood = constant + deviation + penalty
+        if self.enable_softplus_penalty:
+            minus_two_log_likelihood += self.softplus_penalty(terms, o)
+        return minus_two_log_likelihood
 
-        minus_two_log_likelihood = (
-            torch.log(variance).sum()
-            + logdet(scaled_covariates.t() @ scaled_covariates)
-            + (scaled_phenotype * scaled_residuals).sum()
-        )
 
-        return torch.where(
-            torch.isfinite(minus_two_log_likelihood),
-            minus_two_log_likelihood,
-            torch.inf,
-        )
+@dataclass
+class MaximumPenalizedLikelihood(ProfileMaximumLikelihood):
+    """
+    - Chung, Y., Rabe-Hesketh, S., Dorie, V., Gelman, A., & Liu, J. (2013).
+      A nondegenerate penalized likelihood estimator for variance parameters in
+      multilevel models.
+      Psychometrika, 78, 685-709.
+    - Chung, Y., Rabe-Hesketh, S., & Choi, I. H. (2013).
+      Avoiding zero between-study variance estimates in random-effects meta-analysis.
+      Statistics in medicine, 32(23), 4071-4089.
+    - Chung, Y., Rabe-Hesketh, S., Gelman, A., Liu, J., & Dorie, V. (2012).
+      Avoiding boundary estimates in linear mixed models through weakly informative
+      priors.
+    """
+
+    def minus_two_log_likelihood(
+        self, terms: torch.Tensor, o: OptimizeInput
+    ) -> torch.Tensor:
+        (_, scaled_residuals, variance, _, _) = self.get_regression_weights(terms, o)
+        sample_count = torch.tensor(self.sample_count, dtype=torch.float64)
+        constant = torch.log(variance).sum() + sample_count
+        deviation = sample_count * torch.log(torch.square(scaled_residuals).mean())
+        penalty = -torch.log(terms).sum()
+        minus_two_log_likelihood = constant + deviation + penalty
+        if self.enable_softplus_penalty:
+            minus_two_log_likelihood += self.softplus_penalty(terms, o)
+        return minus_two_log_likelihood
 
 
 @dataclass
 class MaximumLikelihood(ProfileMaximumLikelihood):
     def get_initial_terms(self, o: OptimizeInput):
         terms = torch.tensor([1, 0], dtype=torch.float64)
-        regression_weights, _, _, _, _ = super().get_regression_weights(
+        regression_weights_tensor, _, _, _, _ = super().get_regression_weights(
             terms,
             o,
         )
-        regression_weights = list(regression_weights.detach().numpy().ravel())
+        regression_weights = list(regression_weights_tensor.detach().numpy().ravel())
         return super().get_initial_terms(o) + regression_weights
 
     def bounds(self, o: OptimizeInput) -> list[tuple[float, float]]:
@@ -353,21 +425,20 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
 class FaST_LMM(ProfileMaximumLikelihood):
     step: float = 0.2
 
-    needs_grad: ClassVar[bool] = False
-
-    @staticmethod
-    def terms_to_tensor(numpy_terms):
-        return torch.tensor(
-            numpy_terms,
-            dtype=torch.float64,
-        )
+    requires_grad: ClassVar[bool] = False
 
     def wrapper(self, log_variance_ratio: npt.NDArray, o: OptimizeInput):
         variance_ratio = np.power(10, log_variance_ratio)
         terms = torch.tensor([variance_ratio, 1], dtype=torch.float64)
         return self.func(terms, o).item()
 
-    def optimize(self, o: OptimizeInput, scale: bool = False) -> OptimizeResult:
+    def optimize(
+        self,
+        o: OptimizeInput,
+        method: str = "TNC",
+        enable_hessian: bool = False,
+        **kwargs,
+    ) -> OptimizeResult:
         func = self.wrapper
 
         upper_bound = float(np.log10(o.rotated_phenotype.var()))
