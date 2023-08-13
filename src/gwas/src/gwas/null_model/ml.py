@@ -40,6 +40,22 @@ class OptimizeResult(NamedTuple):
     fun: float
 
 
+class RegressionWeights(NamedTuple):
+    regression_weights: torch.Tensor
+    scaled_residuals: torch.Tensor
+    variance: torch.Tensor
+    inverse_variance: torch.Tensor
+    scaled_covariates: torch.Tensor
+    scaled_phenotype: torch.Tensor
+
+
+class MinusTwoLogLikelihoodTerms(NamedTuple):
+    sample_count: torch.Tensor
+    genetic_variance: torch.Tensor
+    logarithmic_determinant: torch.Tensor
+    r: RegressionWeights
+
+
 @dataclass
 class ProfileMaximumLikelihood:
     sample_count: int
@@ -102,11 +118,13 @@ class ProfileMaximumLikelihood:
     @staticmethod
     def get_regression_weights(
         terms: torch.Tensor, o: OptimizeInput
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> RegressionWeights:
         (eigenvalues, rotated_covariates, rotated_phenotype) = o
 
-        variance = terms[1] * eigenvalues + terms[0]
-        inverse_variance = torch.pow(variance, -0.5)[:, np.newaxis]
+        genetic_variance = terms[1]
+        error_variance = terms[0]
+        variance = (genetic_variance * eigenvalues + error_variance)[:, np.newaxis]
+        inverse_variance = torch.pow(variance, -0.5)
 
         scaled_covariates = rotated_covariates * inverse_variance
         scaled_phenotype = rotated_phenotype * inverse_variance
@@ -115,33 +133,36 @@ class ProfileMaximumLikelihood:
             scaled_covariates, scaled_phenotype, rcond=None
         ).solution
 
-        scaled_residuals = scaled_phenotype - scaled_covariates @ regression_weights
+        scaled_residuals = torch.ravel(
+            scaled_phenotype - scaled_covariates @ regression_weights
+        )
 
-        return (
-            regression_weights,
-            scaled_residuals,
-            variance,
-            scaled_covariates,
-            scaled_phenotype,
+        return RegressionWeights(
+            regression_weights=regression_weights,
+            scaled_residuals=scaled_residuals,
+            variance=variance,
+            inverse_variance=inverse_variance,
+            scaled_covariates=scaled_covariates,
+            scaled_phenotype=scaled_phenotype,
         )
 
     @classmethod
     def get_standard_errors(
         cls, terms: torch.Tensor, o: OptimizeInput
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        weights, residuals, variance, covariates, _ = cls.get_regression_weights(
-            terms, o
+        r = cls.get_regression_weights(terms, o)
+
+        degrees_of_freedom = r.scaled_covariates.shape[0] - r.scaled_covariates.shape[1]
+        residual_variance = torch.square(r.scaled_residuals).sum() / degrees_of_freedom
+
+        inverse_covariance = torch.linalg.inv(
+            r.scaled_covariates.t() @ r.scaled_covariates
         )
-
-        degrees_of_freedom = covariates.shape[0] - covariates.shape[1]
-        residual_variance = torch.square(residuals).sum() / degrees_of_freedom
-
-        inverse_covariance = torch.linalg.inv(covariates.t() @ covariates)
         standard_errors = residual_variance * torch.sqrt(
             torch.diagonal(inverse_covariance)
         )
 
-        return weights, standard_errors, residuals, variance
+        return r.regression_weights, standard_errors, r.scaled_residuals, r.variance
 
     @classmethod
     def terms_to_tensor(cls, numpy_terms):
@@ -178,6 +199,7 @@ class ProfileMaximumLikelihood:
         o: OptimizeInput,
         method: str = "TNC",
         enable_hessian: bool = False,
+        disp: bool = False,
         **kwargs,
     ) -> OptimizeResult:
         init = self.get_initial_terms(o)
@@ -188,6 +210,7 @@ class ProfileMaximumLikelihood:
             jac=True,
             bounds=bounds,
             args=(o,),
+            options=dict(disp=disp),
         )
         if enable_hessian:
             minimizer_kwargs.update(dict(hess=self.hessian_wrapper))
@@ -198,6 +221,7 @@ class ProfileMaximumLikelihood:
             stepsize=init[0] / 10,
             niter=2**10,
             niter_success=2**4,
+            disp=disp,
             **kwargs,
         )
 
@@ -287,17 +311,37 @@ class ProfileMaximumLikelihood:
         penalty = torch.tensor(beta) * (lower_penalty.sum() + upper_penalty.sum())
         return penalty
 
+    def get_minus_two_log_likelihood_terms(
+        self, terms: torch.Tensor, o: OptimizeInput
+    ) -> MinusTwoLogLikelihoodTerms:
+        sample_count = torch.tensor(self.sample_count, dtype=torch.float64)
+        genetic_variance = terms[1]
+        r = self.get_regression_weights(terms, o)
+
+        logarithmic_determinant = torch.log(r.variance).sum()
+
+        return MinusTwoLogLikelihoodTerms(
+            sample_count=sample_count,
+            genetic_variance=genetic_variance,
+            logarithmic_determinant=logarithmic_determinant,
+            r=r,
+        )
+
     def minus_two_log_likelihood(
         self, terms: torch.Tensor, o: OptimizeInput
     ) -> torch.Tensor:
-        (_, scaled_residuals, variance, _, _) = self.get_regression_weights(terms, o)
-        sample_count = torch.tensor(self.sample_count, dtype=torch.float64)
-        constant = torch.log(variance).sum() + sample_count
-        deviation = sample_count * torch.log(torch.square(scaled_residuals).mean())
-        minus_two_log_likelihood = constant + deviation
+        t = self.get_minus_two_log_likelihood_terms(terms, o)
+        deviation = torch.square(t.r.scaled_residuals).sum()
+        minus_two_log_likelihood = t.logarithmic_determinant + deviation
+
         if self.enable_softplus_penalty:
             minus_two_log_likelihood += self.softplus_penalty(terms, o)
-        return minus_two_log_likelihood
+
+        return torch.where(
+            torch.isfinite(minus_two_log_likelihood),
+            minus_two_log_likelihood,
+            torch.inf,
+        )
 
 
 def logdet(a: torch.Tensor) -> torch.Tensor:
@@ -323,21 +367,19 @@ class RestrictedMaximumLikelihood(ProfileMaximumLikelihood):
     def minus_two_log_likelihood(
         self, terms: torch.Tensor, o: OptimizeInput
     ) -> torch.Tensor:
-        (
-            _,
-            scaled_residuals,
-            variance,
-            scaled_covariates,
-            _,
-        ) = self.get_regression_weights(terms, o)
-        sample_count = torch.tensor(self.sample_count, dtype=torch.float64)
-        constant = torch.log(variance).sum() + sample_count
-        deviation = sample_count * torch.log(torch.square(scaled_residuals).mean())
-        penalty = logdet(scaled_covariates.t() @ scaled_covariates)
-        minus_two_log_likelihood = constant + deviation + penalty
+        t = self.get_minus_two_log_likelihood_terms(terms, o)
+        deviation = torch.square(t.r.scaled_residuals).sum()
+        penalty = logdet(t.r.scaled_covariates.t() @ t.r.scaled_covariates)
+        minus_two_log_likelihood = t.logarithmic_determinant + deviation + penalty
+
         if self.enable_softplus_penalty:
             minus_two_log_likelihood += self.softplus_penalty(terms, o)
-        return minus_two_log_likelihood
+
+        return torch.where(
+            torch.isfinite(minus_two_log_likelihood),
+            minus_two_log_likelihood,
+            torch.inf,
+        )
 
 
 @dataclass
@@ -358,26 +400,19 @@ class MaximumPenalizedLikelihood(ProfileMaximumLikelihood):
     def minus_two_log_likelihood(
         self, terms: torch.Tensor, o: OptimizeInput
     ) -> torch.Tensor:
-        (_, scaled_residuals, variance, _, _) = self.get_regression_weights(terms, o)
-        sample_count = torch.tensor(self.sample_count, dtype=torch.float64)
-        constant = torch.log(variance).sum() + sample_count
-        deviation = sample_count * torch.log(torch.square(scaled_residuals).mean())
         penalty = -torch.log(terms).sum()
-        minus_two_log_likelihood = constant + deviation + penalty
-        if self.enable_softplus_penalty:
-            minus_two_log_likelihood += self.softplus_penalty(terms, o)
-        return minus_two_log_likelihood
+        return super().minus_two_log_likelihood(terms, o) + penalty
 
 
 @dataclass
 class MaximumLikelihood(ProfileMaximumLikelihood):
     def get_initial_terms(self, o: OptimizeInput):
         terms = torch.tensor([1, 0], dtype=torch.float64)
-        regression_weights_tensor, _, _, _, _ = super().get_regression_weights(
+        r = super().get_regression_weights(
             terms,
             o,
         )
-        regression_weights = list(regression_weights_tensor.detach().numpy().ravel())
+        regression_weights = list(r.regression_weights.detach().numpy().ravel())
         return super().get_initial_terms(o) + regression_weights
 
     def bounds(self, o: OptimizeInput) -> list[tuple[float, float]]:
@@ -427,6 +462,25 @@ class FaST_LMM(ProfileMaximumLikelihood):
 
     requires_grad: ClassVar[bool] = False
 
+    def minus_two_log_likelihood(
+        self, terms: torch.Tensor, o: OptimizeInput
+    ) -> torch.Tensor:
+        t = self.get_minus_two_log_likelihood_terms(terms, o)
+        minus_two_log_likelihood = (
+            t.sample_count
+            + t.logarithmic_determinant
+            + t.sample_count * torch.log(torch.square(t.r.scaled_residuals).mean())
+        )
+
+        if self.enable_softplus_penalty:
+            minus_two_log_likelihood += self.softplus_penalty(terms, o)
+
+        return torch.where(
+            torch.isfinite(minus_two_log_likelihood),
+            minus_two_log_likelihood,
+            torch.inf,
+        )
+
     def wrapper(self, log_variance_ratio: npt.NDArray, o: OptimizeInput):
         variance_ratio = np.power(10, log_variance_ratio)
         terms = torch.tensor([variance_ratio, 1], dtype=torch.float64)
@@ -437,6 +491,7 @@ class FaST_LMM(ProfileMaximumLikelihood):
         o: OptimizeInput,
         method: str = "TNC",
         enable_hessian: bool = False,
+        disp: bool = False,
         **kwargs,
     ) -> OptimizeResult:
         func = self.wrapper
