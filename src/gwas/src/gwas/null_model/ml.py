@@ -7,7 +7,7 @@ from typing import Any, ClassVar, NamedTuple
 import numpy as np
 import scipy
 import torch
-from functorch import grad_and_value, hessian
+from functorch import grad_and_value, hessian, vmap
 from functorch.compile import memory_efficient_fusion
 from numpy import typing as npt
 from threadpoolctl import threadpool_limits
@@ -65,9 +65,27 @@ class ProfileMaximumLikelihood:
 
     requires_grad: ClassVar[bool] = True
 
-    def get_initial_terms(self, o: OptimizeInput):
+    def get_initial_terms(self, o: OptimizeInput) -> npt.NDArray[np.float64]:
+        """
+        Do a brute force search
+        """
         variance: float = o.rotated_phenotype.var().item()
-        return [variance / 2] * 2
+
+        variance_ratios = np.linspace(0.01, 0.99, 100)
+        variances = np.linspace(variance * 0.001, variance * 2, 100)
+        grid = np.meshgrid(variance_ratios, variances)
+
+        combinations = np.vstack([m.ravel() for m in grid]).transpose()
+        genetic_variance = (1 - combinations[:, 0]) * combinations[:, 1]
+        error_variance = combinations[:, 0] * combinations[:, 1]
+
+        terms_grid = np.vstack([error_variance, genetic_variance]).transpose()
+        wrapper = vmap(partial(self.minus_two_log_likelihood, o=o))
+
+        minus_two_log_likelihoods = wrapper(torch.tensor(terms_grid)).numpy()
+        i = np.argmin(minus_two_log_likelihoods)
+
+        return terms_grid[i, :].astype(np.float64)
 
     def bounds(self, o: OptimizeInput) -> list[tuple[float, float]]:
         variance: float = o.rotated_phenotype.var().item()
@@ -197,7 +215,7 @@ class ProfileMaximumLikelihood:
     def optimize(
         self,
         o: OptimizeInput,
-        method: str = "TNC",
+        method: str = "L-BFGS-B",
         enable_hessian: bool = False,
         disp: bool = False,
         **kwargs,
@@ -210,7 +228,7 @@ class ProfileMaximumLikelihood:
             jac=True,
             bounds=bounds,
             args=(o,),
-            options=dict(disp=disp),
+            # options=dict(disp=disp),
         )
         if enable_hessian:
             minimizer_kwargs.update(dict(hess=self.hessian_wrapper))
@@ -218,7 +236,7 @@ class ProfileMaximumLikelihood:
             self.wrapper,
             init,
             minimizer_kwargs=minimizer_kwargs,
-            stepsize=init[0] / 10,
+            stepsize=np.mean(init) / 8,
             niter=2**10,
             niter_success=2**4,
             disp=disp,
@@ -400,7 +418,7 @@ class MaximumPenalizedLikelihood(ProfileMaximumLikelihood):
     def minus_two_log_likelihood(
         self, terms: torch.Tensor, o: OptimizeInput
     ) -> torch.Tensor:
-        penalty = -torch.log(terms).sum()
+        penalty = -2 * torch.log(terms).sum()
         return super().minus_two_log_likelihood(terms, o) + penalty
 
 
