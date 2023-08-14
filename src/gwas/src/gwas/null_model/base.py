@@ -43,7 +43,7 @@ class NullModelCollection:
     half_scaled_residuals: SharedArray
     variance: SharedArray
 
-    methods: ClassVar[list[str]] = ["fastlmm", "ml", "pml", "rml"]
+    methods: ClassVar[list[str]] = ["fastlmm", "pfastlmm", "pml", "mpl", "reml", "ml"]
 
     @property
     def phenotype_count(self) -> int:
@@ -114,9 +114,10 @@ class NullModelCollection:
         method: str | None = "fastlmm",
         **kwargs,
     ) -> Self:
-        from .fastlmm import FaSTLMM
+        from .fastlmm import FaSTLMM, PenalizedFaSTLMM
         from .ml import (
             MaximumLikelihood,
+            MaximumPenalizedLikelihood,
             ProfileMaximumLikelihood,
             RestrictedMaximumLikelihood,
         )
@@ -147,13 +148,15 @@ class NullModelCollection:
             variance,
         )
 
-        if method == "fastlmm":
-            FaSTLMM.fit(eig, vc, nm, **kwargs)
-        elif method == "ml":
-            MaximumLikelihood.fit(eig, vc, nm, **kwargs)
-        elif method == "pml":
-            ProfileMaximumLikelihood.fit(eig, vc, nm, **kwargs)
-        elif method == "reml":
-            RestrictedMaximumLikelihood.fit(eig, vc, nm, **kwargs)
+        if method is not None:
+            func = {
+                "fastlmm": FaSTLMM.fit,
+                "pfastlmm": PenalizedFaSTLMM.fit,
+                "pml": ProfileMaximumLikelihood.fit,
+                "mpl": MaximumPenalizedLikelihood.fit,
+                "reml": RestrictedMaximumLikelihood.fit,
+                "ml": MaximumLikelihood.fit,
+            }[method]
+            func(eig, vc, nm, **kwargs)
 
         return nm
