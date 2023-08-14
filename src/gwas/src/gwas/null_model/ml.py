@@ -159,9 +159,7 @@ class ProfileMaximumLikelihood:
             scaled_covariates, scaled_phenotype, rcond=None
         ).solution
 
-        scaled_residuals = torch.ravel(
-            scaled_phenotype - scaled_covariates @ regression_weights
-        )
+        scaled_residuals = scaled_phenotype - scaled_covariates @ regression_weights
 
         return RegressionWeights(
             regression_weights=regression_weights,
@@ -398,7 +396,8 @@ class RestrictedMaximumLikelihood(ProfileMaximumLikelihood):
     ) -> torch.Tensor:
         t = self.get_minus_two_log_likelihood_terms(terms, o)
         penalty = logdet(t.r.scaled_covariates.t() @ t.r.scaled_covariates)
-        minus_two_log_likelihood = t.logarithmic_determinant + t.deviation + penalty
+        deviation = (t.r.scaled_phenotype * t.r.scaled_residuals).sum()
+        minus_two_log_likelihood = t.logarithmic_determinant + deviation + penalty
 
         if self.enable_softplus_penalty:
             minus_two_log_likelihood += self.softplus_penalty(terms, o)

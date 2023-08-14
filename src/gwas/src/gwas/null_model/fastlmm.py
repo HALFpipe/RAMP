@@ -112,7 +112,7 @@ class PenalizedFaSTLMM(FaSTLMM):
         genetic_variance = t.deviation / (t.sample_count - 4)
         error_variance = variance_ratio * genetic_variance
 
-        penalty = -torch.log(variance_ratio)
+        penalty = -2 * torch.log(variance_ratio)
 
         minus_two_log_likelihood = (
             (t.sample_count - 4)
