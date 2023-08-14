@@ -114,8 +114,8 @@ class NullModelCollection:
         method: str | None = "fastlmm",
         **kwargs,
     ) -> Self:
+        from .fastlmm import FaSTLMM
         from .ml import (
-            FaST_LMM,
             MaximumLikelihood,
             ProfileMaximumLikelihood,
             RestrictedMaximumLikelihood,
@@ -148,7 +148,7 @@ class NullModelCollection:
         )
 
         if method == "fastlmm":
-            FaST_LMM.fit(eig, vc, nm, **kwargs)
+            FaSTLMM.fit(eig, vc, nm, **kwargs)
         elif method == "ml":
             MaximumLikelihood.fit(eig, vc, nm, **kwargs)
         elif method == "pml":

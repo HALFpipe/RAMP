@@ -7,8 +7,8 @@ import pytest
 import torch
 
 from gwas.log import logger
+from gwas.null_model.fastlmm import FaSTLMM
 from gwas.null_model.ml import (
-    FaST_LMM,
     MaximumLikelihood,
     MaximumPenalizedLikelihood,
     OptimizeInput,
@@ -20,11 +20,11 @@ from ..utils import check_bias
 from .rmw_debug import RmwDebug
 
 
-def test_fast_lmm(
+def test_fastlmm(
     rmw_debug: RmwDebug,
 ) -> None:
     sample_count, covariate_count = rmw_debug.x.shape
-    ml = FaST_LMM(sample_count, covariate_count, enable_softplus_penalty=False)
+    ml = FaSTLMM(sample_count, covariate_count, enable_softplus_penalty=False)
 
     optimize_input = OptimizeInput(
         torch.tensor(rmw_debug.d),
@@ -50,26 +50,20 @@ def test_fast_lmm(
     ):
         terms = torch.tensor([variance_ratio, 1], dtype=torch.float64)
 
-        (
-            regression_weights,
-            scaled_residuals,
-            variance,
-            _,
-            _,
-        ) = ml.get_regression_weights(terms, optimize_input)
+        r = ml.get_regression_weights(terms, optimize_input)
 
-        constant = float(torch.log(variance).sum())
+        constant = float(torch.log(r.variance).sum())
         assert np.isclose(constant, rmw_constant, atol=1e-3, rtol=1e-3)
 
-        sigma = float(torch.square(scaled_residuals).mean())
+        sigma = float(torch.square(r.scaled_residuals).mean())
         assert np.isclose(sigma, rmw_sigma, atol=1e-3)
 
         (weights, _, residuals, variance) = ml.get_standard_errors(
             terms, optimize_input
         )
         # Sanity check as these values should just be passed through
-        assert np.allclose(weights, regression_weights, atol=1e-3)
-        assert np.allclose(residuals, scaled_residuals, atol=1e-3)
+        assert np.allclose(weights, r.regression_weights, atol=1e-3)
+        assert np.allclose(residuals, r.scaled_residuals, atol=1e-3)
 
         # Compare to raremetalworker
         assert np.allclose(weights.ravel(), rmw_beta, atol=1e-3)
@@ -104,7 +98,7 @@ def test_fast_lmm(
         ProfileMaximumLikelihood,
         MaximumPenalizedLikelihood,
         RestrictedMaximumLikelihood,
-        FaST_LMM,
+        FaSTLMM,
     ],
 )
 def test_optimize(
@@ -140,7 +134,7 @@ def test_optimize(
     )
     if ml_class == ProfileMaximumLikelihood:
         pass
-    elif ml_class == FaST_LMM:
+    elif ml_class == FaSTLMM:
         same_maximum = np.isclose(
             log_likelihood, rmw_debug.log_likelihood_hat, atol=1e-3
         )
