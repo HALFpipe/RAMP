@@ -108,7 +108,7 @@ class GenotypeReader(Worker):
                     # Signal that we are done
                     self.t.read_count_queue.put_nowait(0)
                     # Exit the process
-                    logger.debug("Genotype reader has finished")
+                    logger.debug("Genotype reader has finished and will exit")
                     break
 
 
@@ -167,9 +167,7 @@ class Calc(Worker):
         job_count = len(self.ec.eigenvector_arrays)
 
         while True:
-            logger.debug(
-                "Waiting for the reader to finish reading the a batch of variants"
-            )
+            logger.debug("Waiting for the reader to finish reading")
             value = self.t.get(self.t.read_count_queue)
             if value is Action.EXIT:
                 break
@@ -197,15 +195,20 @@ class Calc(Worker):
                 phenotype_slice = phenotype_slices[i]
                 can_write = self.t.can_write[i]
 
-                logger.debug("Multiply the genotypes with the eigenvectors")
                 (sample_count, _) = scaled_residuals_matrix.shape
                 rotated_genotypes = self.rotated_genotypes_array.to_numpy(
                     shape=(sample_count, variant_count)
                 )
-                np.matmul(
-                    eigenvector_matrix.transpose(),
-                    genotypes,
-                    out=rotated_genotypes,
+                logger.debug("Multiplying the genotypes with the eigenvectors")
+                scipy.linalg.blas.dgemm(
+                    alpha=1,
+                    a=eigenvector_matrix,
+                    b=genotypes,
+                    beta=0,
+                    c=rotated_genotypes,
+                    trans_a=True,
+                    trans_b=False,
+                    overwrite_c=True,
                 )
                 logger.debug("Subtracting the rotated mean from the rotated genotypes")
                 sample_boolean_vector = self.ec.sample_boolean_vectors[i]
@@ -214,22 +217,18 @@ class Calc(Worker):
                     where=sample_boolean_vector[:, np.newaxis],
                 )
                 scipy.linalg.blas.dger(
-                    -1,
-                    eigenvector_matrix.sum(axis=0),
-                    mean,
+                    alpha=-1,
+                    x=eigenvector_matrix.sum(axis=0),
+                    y=mean,
                     a=rotated_genotypes,
                     overwrite_a=True,
                     overwrite_y=False,
                 )
-
                 if i == job_count - 1:
                     logger.debug("Allow the reader to read the next batch of variants")
                     self.t.can_read.set()
 
-                logger.debug(
-                    "Waiting for the writer to finish writing the previous batch of "
-                    "variants"
-                )
+                logger.debug("Waiting for the writer to finish writing")
                 action = self.t.wait(can_calc)
                 if action is Action.EXIT:
                     break
@@ -291,7 +290,7 @@ class ScoreWriter(Worker):
 
         with self.stat_file_array:
             while True:
-                # Wait for the calculation to finish
+                logger.debug("Wait for the calculation to start")
                 value = self.t.get(self.t.calc_count_queue)
                 if value is Action.EXIT:
                     break

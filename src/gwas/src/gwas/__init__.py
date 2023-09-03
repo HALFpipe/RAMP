@@ -13,6 +13,7 @@ finally:
 
 # Show compression error messages.
 os.environ["BLOSC_TRACE"] = "1"
+# os.environ["MKL_VERBOSE"] = "1"
 
 torch.set_default_tensor_type(torch.DoubleTensor)
 torch.set_default_dtype(torch.float64)

@@ -97,10 +97,17 @@ def calc_score(
             for can_calc in t.can_calc:
                 can_calc.set()
             while True:
+                # Error handling
                 try:
                     raise t.exception_queue.get_nowait()
                 except Empty:
                     pass
+                for proc in procs:
+                    if proc.exitcode is not None and proc.exitcode != 0:
+                        raise RuntimeError(
+                            f'Process "{proc.name}" exited with code {proc.exitcode}'
+                        )
+                # Check if we are done
                 update_progress_bar()
                 for proc in procs:
                     proc.join(timeout=1)

@@ -12,7 +12,7 @@ from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event
 from queue import Empty
 from shutil import which
-from typing import Any, Iterable, Type, TypeVar, get_args, get_origin
+from typing import Any, Iterable, Sequence, Type, TypeVar, get_args, get_origin
 
 import numpy as np
 import torch.multiprocessing as mp
@@ -83,7 +83,14 @@ def underscore(x: str) -> str:
     return re.sub(r"([a-z\d])([A-Z])", r"\1_\2", x).lower()
 
 
-def initializer(sched_affinity: set[int], logging_level: str | int) -> None:
+def get_initargs() -> tuple:
+    return os.sched_getaffinity(0), logger.getEffectiveLevel()
+
+
+def initializer(
+    sched_affinity: set[int],
+    logging_level: str | int,
+) -> None:
     os.sched_setaffinity(0, sched_affinity)
 
     setup_logging(logging_level)
@@ -96,7 +103,7 @@ class Pool(mp_pool.Pool):
         maxtasksperchild: int | None = None,
         context: Any | None = None,
     ) -> None:
-        initargs = (os.sched_getaffinity(0), logger.getEffectiveLevel())
+        initargs = get_initargs()
         if context is None:
             context = get_context("spawn")
         super().__init__(processes, initializer, initargs, maxtasksperchild, context)
@@ -117,6 +124,16 @@ class SharedState:
     # Passes exceptions.
     exception_queue: Queue[Exception] = field(default_factory=mp.Queue)
 
+    def get_name(self, value: Any) -> str:
+        for dataclass_field in fields(self):
+            field_value = getattr(self, dataclass_field.name)
+            if value is field_value:
+                return dataclass_field.name
+            elif isinstance(field_value, Sequence) and value in field_value:
+                index = field_value.index(value)
+                return f"{dataclass_field.name}[{index}]"
+        return repr(value)
+
     def get(self, queue: Queue[V]) -> V | Action:
         """Get an item from a queue while checking for exit.
 
@@ -126,7 +143,7 @@ class SharedState:
         Returns:
             T | Action: The item from the queue or Action.EXIT if we should exit.
         """
-        logger.debug("Waiting for queue %s", queue)
+        logger.debug(f'Waiting for queue "{self.get_name(queue)}"')
         while True:
             if self.should_exit.is_set():
                 return Action.EXIT
@@ -136,7 +153,7 @@ class SharedState:
                 pass
 
     def wait(self, event: Event) -> Action:
-        logger.debug("Waiting for event %s", event)
+        logger.debug(f'Waiting for queue "{self.get_name(event)}"')
         while True:
             if self.should_exit.is_set():
                 return Action.EXIT
@@ -151,8 +168,7 @@ class Process(mp.Process):
         *args,
         **kwargs,
     ) -> None:
-        self.sched_affinity = os.sched_getaffinity(0)
-        self.logging_level = logger.getEffectiveLevel()
+        self.initargs = get_initargs()
         self.exception_queue = exception_queue
         super().__init__(*args, **kwargs)
 
@@ -160,12 +176,13 @@ class Process(mp.Process):
         raise NotImplementedError
 
     def run(self) -> None:
-        initializer(self.sched_affinity, self.logging_level)
+        initializer(*self.initargs)
+        logger.debug(f'Starting process "{self.name}"')
 
         try:
             self.func()
         except Exception as e:
-            logger.exception("An error occurred in %s", self.name, exc_info=e)
+            logger.exception(f'An error occurred in process "{self.name}"', exc_info=e)
             if self.exception_queue is not None:
                 self.exception_queue.put_nowait(e)
 
