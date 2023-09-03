@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 
 from dataclasses import dataclass
+from itertools import chain
 from types import TracebackType
-from typing import IO, Self, Type
+from typing import IO, Iterator, Self, Type
 
 import pandas as pd
 from numpy import typing as npt
@@ -71,15 +72,15 @@ class TextFileArray(FileArray[T]):
             raise RuntimeError("File is not open for writing")
         row_metadata, _ = self.axis_metadata
         for row_index in range(row_start, row_stop):
-            row_values: list[str] = list()
+            row_value_iterators: list[Iterator[str]] = list()
             if row_metadata is not None:
                 metadata = row_metadata.iloc[row_index]
                 if isinstance(metadata, pd.Series):
-                    row_values.extend(map(to_str, metadata.values))
+                    row_value_iterators.append(map(to_str, metadata.values))
                 elif metadata is not None:
-                    row_values.append(metadata)
+                    row_value_iterators.append(iter([metadata]))
 
-            row_values.extend(
+            row_value_iterators.append(
                 map(
                     to_str,
                     value[
@@ -89,7 +90,9 @@ class TextFileArray(FileArray[T]):
                 )
             )
 
-            self.file_handle.write(self.delimiter.join(row_values) + "\n")
+            self.file_handle.write(
+                self.delimiter.join(chain.from_iterable(row_value_iterators)) + "\n"
+            )
             self.current_row_index += 1
 
     def __setitem__(self, key: tuple[slice, ...], value: npt.NDArray[T]) -> None:
