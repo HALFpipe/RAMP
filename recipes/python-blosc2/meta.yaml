@@ -1,10 +1,10 @@
 package:
   name: python-blosc2
-  version: 2.2.2
+  version: 2.2.4
 
 source:
   git_url: https://github.com/Blosc/python-blosc2
-  git_rev: v2.2.3
+  git_rev: v2.2.4
   patches:
     - 0001-expose-cmake-use-system-blosc2.patch
 
