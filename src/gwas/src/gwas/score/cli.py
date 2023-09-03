@@ -71,7 +71,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
         "--null-model-method",
         required=False,
         choices=NullModelCollection.methods,
-        default="mpl",
+        default="fastlmm",
     )
     argument_parser.add_argument(
         "--compression-method",
