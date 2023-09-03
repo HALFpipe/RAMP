@@ -1,6 +1,9 @@
-# gwas-protocol
+gwas-protocol
+=============
 
-# To create a local development environment run:
+To create a local development environment run:
+
+```bash
 mamba create --name "gwas" \
   "mamba" \
   "python>=3.11" "more-itertools" \
@@ -12,3 +15,4 @@ mamba create --name "gwas" \
   "bcftools>=1.17" "plink" "plink2" "tabix" \
   "cython>=3b1" "mkl-include" "mypy" "pytest-benchmark" "threadpoolctl" \
   "gcc" "gxx" "sysroot_linux-64>=2.17"
+```
