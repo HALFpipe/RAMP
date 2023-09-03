@@ -25,7 +25,9 @@ def chromosome(request) -> str | int:
 
 @pytest.fixture(scope="session")
 def sw(request) -> SharedWorkspace:
-    sw = SharedWorkspace.create(size=int(virtual_memory().available * (2 / 3)))
+    size = int(virtual_memory().available * (2 / 3))
+    size = min(size, 48 * 2**30)
+    sw = SharedWorkspace.create(size=size)
 
     request.addfinalizer(sw.close)
     request.addfinalizer(sw.unlink)

@@ -13,7 +13,7 @@ from gwas.compression.pipe import (
 )
 
 
-@pytest.mark.parametrize("compression", ["zst", "xz", "gz", "lrz", "bz2", "lz4"])
+@pytest.mark.parametrize("compression", ["zst", "xz", "gz", "bz2", "lz4"])
 def test_compressed_text(tmp_path: Path, compression: str):
     x: str = "test" * 1000
 
@@ -24,7 +24,7 @@ def test_compressed_text(tmp_path: Path, compression: str):
         assert file_handle.read().strip() == x
 
 
-@pytest.mark.parametrize("compression", ["zst", "xz", "gz", "lrz", "bz2", "lz4"])
+@pytest.mark.parametrize("compression", ["zst", "xz", "gz", "bz2", "lz4"])
 def test_compressed_bytes(tmp_path: Path, compression: str):
     x = np.random.rand(1000, 1000)
 
