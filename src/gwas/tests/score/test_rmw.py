@@ -19,10 +19,13 @@ def test_compression(
         np.dstack([rmw_score.array["U_STAT"], rmw_score.array["SQRT_V_STAT"]])
     ).astype(np.float64)
 
+    variant_count, phenotype_count, _ = scores.shape
+    scores = scores.reshape(variant_count, phenotype_count * 2)
+
     blosc2.print_versions()
 
     for name, compression_method in compression_methods.items():
-        file_path = tmp_path / f"score.{name}.h5"
+        file_path = tmp_path / f"score.{name}{compression_method.suffix}"
 
         start = time()
         array_writer = FileArray.create(

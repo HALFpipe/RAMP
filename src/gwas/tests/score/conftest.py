@@ -22,6 +22,7 @@ from gwas.utils import (
     chromosome_to_int,
     chromosomes_set,
     make_sample_boolean_vectors,
+    to_str,
 )
 from gwas.vcf.base import VCFFile
 
@@ -160,6 +161,13 @@ def vcf_file(
     return vcf_files_by_chromosome[chromosome]
 
 
+def format_row(a) -> str:
+    if a.size == 1:
+        return to_str(a)
+    else:
+        return " ".join(map(to_str, a))
+
+
 @pytest.fixture(scope="session")
 def rmw_commands(
     directory_factory: DirectoryFactory,
@@ -176,12 +184,6 @@ def rmw_commands(
         vcf_gz_path = to_bgzip(rmw_path, vcf_path)
     else:
         vcf_gz_path = vcf_path
-
-    def format_row(a) -> str:
-        if a.size == 1:
-            return np.format_float_scientific(a)
-        else:
-            return " ".join(map(np.format_float_scientific, a))
 
     rmw_commands: list[tuple[Path, list[str]]] = list()
 

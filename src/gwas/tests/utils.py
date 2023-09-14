@@ -81,10 +81,10 @@ def regress(
     if sum_residuals.size == 0:
         sum_residuals = np.inf
     else:
-        sum_residuals = sum_residuals[0]
+        sum_residuals = float(sum_residuals[0])
     mean_residuals = sum_residuals / a.size
 
-    return float(intercept), float(slope), float(mean_residuals)
+    return float(intercept.item()), float(slope.item()), mean_residuals
 
 
 def check_bias(

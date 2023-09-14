@@ -67,7 +67,7 @@ def test_fastlmm(
 
         # Compare to raremetalworker
         assert np.allclose(weights.ravel(), rmw_beta, atol=1e-3)
-        factor = (residuals.ravel() * np.sqrt(variance)).numpy()
+        factor = (residuals * np.sqrt(variance)).ravel().numpy()
         assert check_bias(factor, rmw_factor)
 
         log_likelihood = -0.5 * ml.minus_two_log_likelihood(terms, optimize_input)
@@ -86,9 +86,12 @@ def test_fastlmm(
     (weights, _, residuals, variance) = ml.get_standard_errors(terms, optimize_input)
     assert np.allclose(weights.ravel(), rmw_debug.beta_hat, atol=1e-3)
     assert np.allclose(
-        residuals.ravel() * np.sqrt(variance), rmw_debug.residuals, atol=1e-3, rtol=1e-3
+        (residuals * np.sqrt(variance)).ravel(),
+        rmw_debug.residuals,
+        atol=1e-3,
+        rtol=1e-3,
     )
-    assert np.allclose(variance, rmw_debug.sigma2, atol=1e-3)
+    assert np.allclose(variance.ravel(), rmw_debug.sigma2, atol=1e-3)
 
 
 @pytest.mark.parametrize(

@@ -95,30 +95,29 @@ class TextFileArray(FileArray[T]):
             )
             self.current_row_index += 1
 
-    def __setitem__(self, key: tuple[slice, ...], value: npt.NDArray[T]) -> None:
+    def unpack_key(self, key: tuple[slice, ...]) -> tuple[int, int, int, int]:
         if len(key) != len(self.shape):
             raise ValueError("Key must have same number of dimensions as array")
 
-        # Unpack key
-        row_slice, column_slice = key
+        row_slice, col_slice = key
         row_start, row_step, row_stop = row_slice.start, row_slice.step, row_slice.stop
-        column_start, column_step, column_stop = (
-            column_slice.start,
-            column_slice.step,
-            column_slice.stop,
-        )
+        col_start, col_step, col_stop = col_slice.start, col_slice.step, col_slice.stop
+
+        if col_start is None:
+            col_start = 0
+        if col_stop is None:
+            col_stop = self.shape[1]
+        if row_start is None:
+            row_start = 0
+        if row_stop is None:
+            row_stop = self.shape[0]
 
         # Validate key
-        if value.shape != (row_stop - row_start, column_stop - column_start):
-            raise ValueError(
-                f"Value shape {value.shape} does not match key shape "
-                f"{(row_stop - row_start, column_stop - column_start)}"
-            )
         if row_step is not None and row_step != 1:
             raise ValueError(
                 "Can only write text file sequentially, row step must be 1"
             )
-        if column_step is not None and column_step != 1:
+        if col_step is not None and col_step != 1:
             raise ValueError(
                 "Can only write text file sequentially, column step must be 1"
             )
@@ -127,18 +126,31 @@ class TextFileArray(FileArray[T]):
                 "Can only write text file sequentially, row start must be "
                 f"{self.current_row_index} (got {row_start})"
             )
-        if column_start != self.current_column_index:
+        if col_start != self.current_column_index:
             raise ValueError(
                 "Can only write text file sequentially, column start must be "
-                f"{self.current_column_index} (got {column_start})"
+                f"{self.current_column_index} (got {col_start})"
             )
         if self.has_multiple_parts is None:
-            self.has_multiple_parts = column_stop != self.shape[1]
+            self.has_multiple_parts = col_stop != self.shape[1]
         if not self.has_multiple_parts:
-            if column_stop != self.shape[1]:
+            if col_stop != self.shape[1]:
                 raise ValueError(
                     "Cannot change a single part TextFileArray to a multi-part one"
                 )
+        return row_start, row_stop, col_start, col_stop
+
+    def __setitem__(self, key: tuple[slice, ...], value: npt.NDArray[T]) -> None:
+        row_start, row_stop, col_start, col_stop = self.unpack_key(key)
+
+        # Validate key
+        row_size = row_stop - row_start
+        col_size = col_stop - col_start
+        if value.shape != (row_size, col_size):
+            raise ValueError(
+                f"Value shape {value.shape} does not match key shape "
+                f"{(row_size, col_size)}"
+            )
 
         # Open file handle
         if self.compressed_text_writer is None:
@@ -157,7 +169,7 @@ class TextFileArray(FileArray[T]):
                 file_path, num_threads=self.num_threads
             )
             self.file_handle = self.compressed_text_writer.open()
-            self.write_header(column_start, column_stop)
+            self.write_header(col_start, col_stop)
 
         if self.file_handle is None:
             raise RuntimeError("File is not open for writing")
@@ -168,10 +180,10 @@ class TextFileArray(FileArray[T]):
         # Prepare for next part
         if self.has_multiple_parts:
             if row_stop == self.shape[0]:
-                if column_stop == self.shape[1]:
+                if col_stop == self.shape[1]:
                     self.current_part_index += 1
                     self.current_row_index = 0
-                    self.current_column_index = column_stop
+                    self.current_column_index = col_stop
                     self.compressed_text_writer.close()
                     self.file_handle = None
                     self.compressed_text_writer = None

@@ -68,7 +68,7 @@ class ProfileMaximumLikelihood:
 
     requires_grad: ClassVar[bool] = True
 
-    def get_initial_terms(self, o: OptimizeInput):
+    def get_initial_terms(self, o: OptimizeInput) -> list[float]:
         variance: float = o.rotated_phenotype.var().item()
         return [variance / 2] * 2
 
@@ -242,7 +242,7 @@ class ProfileMaximumLikelihood:
             self.wrapper,
             init,
             minimizer_kwargs=minimizer_kwargs,
-            stepsize=np.mean(init) / 8,
+            stepsize=float(init.mean()) / 8,
             niter=2**10,
             niter_success=2**4,
             disp=disp,
@@ -443,19 +443,22 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
         return terms + regression_weights
 
     def grid_search(self, o: OptimizeInput) -> npt.NDArray[np.float64]:
-        terms = super().grid_search(o)
-        r = super().get_regression_weights(
+        pml = ProfileMaximumLikelihood(**vars(self))
+        terms = pml.grid_search(o)
+        r = pml.get_regression_weights(
             self.terms_to_tensor(terms),
             o,
         )
         regression_weights = r.regression_weights.detach().numpy().ravel()
-        return np.vstack([terms, regression_weights])
+        return np.hstack([terms, regression_weights])
 
     def bounds(self, o: OptimizeInput) -> list[tuple[float, float]]:
         return super().bounds(o) + [(-np.inf, np.inf)] * self.covariate_count
 
     @staticmethod
-    def get_regression_weights(terms: torch.Tensor, o: OptimizeInput):
+    def get_regression_weights(
+        terms: torch.Tensor, o: OptimizeInput
+    ) -> RegressionWeights:
         terms = torch.where(
             torch.isfinite(terms),
             terms,
@@ -472,21 +475,22 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
 
         regression_weights = terms[2:].unsqueeze(1)
         scaled_residuals = scaled_phenotype - scaled_covariates @ regression_weights
-        return (
-            regression_weights,
-            scaled_residuals,
-            variance,
-            scaled_covariates,
-            scaled_phenotype,
+        return RegressionWeights(
+            regression_weights=regression_weights,
+            scaled_residuals=scaled_residuals,
+            variance=variance,
+            inverse_variance=inverse_variance,
+            scaled_covariates=scaled_covariates,
+            scaled_phenotype=scaled_phenotype,
         )
 
     @classmethod
     def get_standard_errors(cls, terms: torch.Tensor, o: OptimizeInput):
-        weights, residuals, variance, _, _ = cls.get_regression_weights(terms, o)
+        r = cls.get_regression_weights(terms, o)
 
         covariance = hessian(cls.minus_two_log_likelihood)(terms, o)
         inverse_covariance = torch.linalg.inv(covariance)
         standard_errors = torch.sqrt(torch.diagonal(inverse_covariance))
         standard_errors = standard_errors[2:].unsqueeze(1)
 
-        return weights, standard_errors, residuals, variance
+        return r.regression_weights, standard_errors, r.scaled_residuals, r.variance

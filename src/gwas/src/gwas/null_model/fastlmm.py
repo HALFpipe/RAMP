@@ -27,7 +27,7 @@ class FaSTLMM(ProfileMaximumLikelihood):
         error_variance = variance_ratio * genetic_variance
 
         minus_two_log_likelihood = (
-            (t.sample_count - 4)
+            t.sample_count
             + t.logarithmic_determinant
             + t.sample_count * torch.log(genetic_variance)
         )
