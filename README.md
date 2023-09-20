@@ -1,5 +1,67 @@
-gwas-protocol
-=============
+GWAS Protocol (as a container)
+==============================
+
+Usage
+-----
+
+The container comes with all the software needed to genrate summary statistics.
+<ol>
+
+<li>
+<p>
+You need to download the container file using one of the following commands. This will use approximately one gigabyte of storage.
+</p>
+<table>
+<thead>
+  <tr>
+    <th><b>Container platform</b></th>
+    <th><b>Version</b></th>
+    <th><b>Command</b></th>
+  </tr>
+</thead>
+<tbody>
+  <tr>
+    <td>Singularity</td>
+    <td>3.x</td>
+    <td><code>wget <a href="http://download.gwas.science/singularity/gwas-protocol-latest.sif">http://download.gwas.science/singularity/gwas-protocol-latest.sif</code></a></td>
+  </tr>
+  <tr>
+    <td>Docker</td>
+    <td></td>
+    <td><code>docker pull gwas.science/gwas-protocol:latest</code></td>
+  </tr>
+</tbody>
+</table>
+</li>
+
+<li>
+<p>
+Next, start an interactive shell inside the container using one of the following commands.
+</p>
+<table>
+<thead>
+  <tr>
+    <th><b>Container platform</b></th>
+    <th><b>Command</b></th>
+  </tr>
+</thead>
+<tbody>
+  <tr>
+    <td>Singularity</td>
+    <td><code>singularity shell --hostname localhost --bind ${working_directory}:/data --bind /tmp gwas-protocol-latest.sif</code></td>
+  </tr>
+  <tr>
+    <td>Docker</td>
+    <td>
+        <code>docker run --interactive --tty --volume ${working_directory}:/data --bind /tmp gwas.science/gwas-protocol /bin/bash</code>
+    </td>
+  </tr>
+</tbody>
+</table>
+</li>
+
+Development
+-----------
 
 To create a local development environment run:
 
