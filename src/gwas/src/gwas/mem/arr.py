@@ -346,7 +346,7 @@ class SharedArray:
 
             # Calculate lwork.
             _, _, lwork, _ = func(a, lwork=-1, overwrite_a=True)
-            lwork = int(lwork)
+            lwork = int(lwork.item())
 
             # Direct computation for better precision as per
             # https://doi.org/10.1145/1996092.1996103
