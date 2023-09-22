@@ -61,7 +61,7 @@ jobs:
         with:
           config-inline: |
             [worker.oci]
-            max-parallelism = 2
+              max-parallelism = 2
 
       - name: Build and push to container registry
         uses: docker/build-push-action@v5
