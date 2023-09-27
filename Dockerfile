@@ -40,22 +40,18 @@ FROM conda as builder
 RUN mamba install --yes "boa" "conda-verify"
 COPY recipes/conda_build_config.yaml /root/conda_build_config.yaml
 
-FROM builder as bolt-lmm
 COPY recipes/bolt-lmm bolt-lmm
 RUN conda mambabuild --no-anaconda-upload "bolt-lmm" && \
     conda build purge
 
-FROM builder as dosage-convertor
 COPY recipes/dosage-convertor dosage-convertor
 RUN conda mambabuild --no-anaconda-upload "dosage-convertor" && \
     conda build purge
 
-FROM builder as gcta
 COPY recipes/gcta gcta
 RUN conda mambabuild --no-anaconda-upload "gcta" && \
     conda build purge
 
-FROM builder as gwas
 COPY src/gwas gwas-protocol/src/gwas
 COPY recipes/gwas gwas-protocol/recipes/gwas
 # copy .git folder too for setuptools_scm
@@ -64,48 +60,33 @@ RUN cd gwas-protocol/recipes && \
     conda mambabuild --no-anaconda-upload "gwas" && \
     conda build purge
 
-FROM builder as qctool
 COPY recipes/qctool qctool
 RUN conda mambabuild --no-anaconda-upload "qctool" && \
     conda build purge
 
-FROM builder as raremetal
 COPY recipes/raremetal raremetal
 RUN conda mambabuild --no-anaconda-upload "raremetal" && \
     conda build purge
 
-FROM builder as r-gmmat
 COPY recipes/r-gmmat r-gmmat
 RUN conda mambabuild --no-anaconda-upload "r-gmmat" && \
     conda build purge
 
-FROM builder as r-saige
 COPY recipes/r-saige r-saige
 RUN conda mambabuild --no-anaconda-upload "r-saige" && \
     conda build purge
 
-FROM builder as python-blosc2
 COPY recipes/python-blosc2 python-blosc2
 RUN conda mambabuild --no-anaconda-upload "python-blosc2" && \
     conda build purge
 
-FROM builder as merge
-COPY --from=bolt-lmm /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
-COPY --from=dosage-convertor /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
-COPY --from=gcta /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
-COPY --from=gwas /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
-COPY --from=qctool /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
-COPY --from=raremetal /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
-COPY --from=r-gmmat /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
-COPY --from=r-saige /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
-COPY --from=python-blosc2 /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
 RUN conda index /usr/local/mambaforge/conda-bld
 
 # Install packages
 # ================
 FROM conda as install
 
-COPY --from=merge /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
+COPY --from=builder /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
 RUN mamba install --yes --use-local \
     "python>=3.11" \
     "pytorch=*=cpu*" \
@@ -140,13 +121,3 @@ RUN mamba install --yes --use-local \
 # =====
 FROM base
 COPY --from=install /usr/local/mambaforge /usr/local/mambaforge
-
-# To create a local development environment run:
-# mamba create --name "gwas" \
-#   "python>=3.11" "mamba" \
-#   "jupyterlab" "ipywidgets" \
-#   "numpy" "scipy" "pandas" "pytorch<2" "networkx" \
-#   "matplotlib" "seaborn" \
-#   "bzip2" "p7zip>=15.09" \
-#   "bcftools>=1.17" "plink" "plink2" "tabix" \
-#   "cython>=3b1" "mkl-include" "mypy" "pytest-benchmark" "threadpoolctl"
