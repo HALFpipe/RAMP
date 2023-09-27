@@ -75,7 +75,7 @@ class SharedWorkspace(AbstractContextManager):
         """
         allocations = self.allocations
         if name in allocations:
-            raise ValueError
+            raise ValueError(f'Allocation "{name}" already exists')
 
         # start at current end
         start = max(a.start + a.size for a in allocations.values())

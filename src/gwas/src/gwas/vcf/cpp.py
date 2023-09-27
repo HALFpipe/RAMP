@@ -67,13 +67,16 @@ class CppVCFFile(VCFFile):
         dosages: npt.NDArray,
     ) -> None:
         if self.file_handle is None:
-            raise ValueError
+            raise ValueError("Cannot read from a closed file")
 
         if dosages.size == 0:
             return  # Nothing to do.
 
         if dosages.shape[1] != self.sample_count:
-            raise ValueError
+            raise ValueError(
+                "The output array does not match the number of samples "
+                f"({dosages.shape[1]} != {self.sample_count})"
+            )
 
         from ._read import create_float_reader, run_float_reader
 
