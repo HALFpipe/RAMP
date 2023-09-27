@@ -31,10 +31,6 @@ class TriWorker(Process):
         logger.debug(f"Triangularizing chromosome {self.tsqr.vcf_file.chromosome}")
         tri = self.tsqr.map_reduce()
 
-        if tri is None:
-            vcf_file = self.tsqr.vcf_file
-            raise ValueError(f"Could not triangularize {vcf_file.file_path}")
-
         tri.to_file(self.tri_path)
         tri.free()
         # Indicate that we can start another task as this one has finished.

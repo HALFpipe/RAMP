@@ -23,6 +23,7 @@ dependencies = [
 [project.scripts]
 score = "gwas.score.cli:main"
 stratify = "gwas.stratify.cli:main"
+tri = "gwas.tri.cli:main"
 
 [build-system]
 requires = [
