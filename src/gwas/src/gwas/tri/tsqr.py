@@ -25,6 +25,7 @@ def scale(b: npt.NDArray):
     standard_deviation = np.sqrt(
         2 * minor_allele_frequency * (1 - minor_allele_frequency)
     )
+    standard_deviation[np.isclose(standard_deviation, 0)] = 1
     b /= standard_deviation[:, np.newaxis]
 
 
@@ -92,6 +93,10 @@ class TallSkinnyQR:
             f'"{self.vcf_file.file_path.name}" into "{shared_array.name}"'
         )
         self.vcf_file.read(array.transpose())
+        if not np.isfinite(array).all():
+            raise ValueError(
+                f"Cannot handle missing dosages in {self.vcf_file.file_path}"
+            )
 
         # Transpose, reshape and scale the data
         shared_array.resize(sample_count, variant_count)
@@ -106,6 +111,9 @@ class TallSkinnyQR:
         # Triangularize to lower triangle
         with multithreading_lock:
             self.triangularize(shared_array)
+
+        if not np.isfinite(array).all():
+            raise ValueError(f"Could not triangularize {self.vcf_file.file_path}")
 
         return Triangular(
             name=name,
@@ -187,7 +195,7 @@ class TallSkinnyQR:
             variant_count = self.vcf_file.variant_count
         return variant_count
 
-    def map_reduce(self) -> Triangular | None:
+    def map_reduce(self) -> Triangular:
         self.variant_indices = self.vcf_file.variant_indices.copy()
 
         arrays: list[Triangular] = list()
@@ -203,4 +211,7 @@ class TallSkinnyQR:
                 except MemoryError:
                     arrays = [self.reduce(*arrays)]
 
-        return self.reduce(*arrays)
+        tri = self.reduce(*arrays)
+        if not np.isfinite(tri.to_numpy()).all():
+            raise ValueError(f"Could not triangularize {self.vcf_file.file_path}")
+        return tri
