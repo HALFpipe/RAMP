@@ -32,7 +32,7 @@ def check_tri_path(
         return None
     chromosome = kwargs["chromosome"]
     samples = vcf_by_chromosome[chromosome].samples
-    if set(kwargs["samples"]) == set(samples):
+    if set(kwargs["samples"]) <= set(samples):
         logger.debug(
             f"Using existing triangularized file {tri_path} "
             f"for chromosome {chromosome}"
@@ -40,7 +40,7 @@ def check_tri_path(
         return chromosome, tri_path
     else:
         logger.warning(
-            f"Will re-calculate tri file {tri_path} " f"because samples do not match"
+            f"Will re-calculate tri file {tri_path} because samples do not match"
         )
         return None
 
