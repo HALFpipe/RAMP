@@ -52,14 +52,6 @@ COPY recipes/gcta gcta
 RUN conda mambabuild --no-anaconda-upload "gcta" && \
     conda build purge
 
-COPY src/gwas gwas-protocol/src/gwas
-COPY recipes/gwas gwas-protocol/recipes/gwas
-# copy .git folder too for setuptools_scm
-COPY .git gwas-protocol/.git
-RUN cd gwas-protocol/recipes && \
-    conda mambabuild --no-anaconda-upload "gwas" && \
-    conda build purge
-
 COPY recipes/qctool qctool
 RUN conda mambabuild --no-anaconda-upload "qctool" && \
     conda build purge
@@ -78,6 +70,14 @@ RUN conda mambabuild --no-anaconda-upload "r-saige" && \
 
 COPY recipes/python-blosc2 python-blosc2
 RUN conda mambabuild --no-anaconda-upload "python-blosc2" && \
+    conda build purge
+
+COPY src/gwas gwas-protocol/src/gwas
+COPY recipes/gwas gwas-protocol/recipes/gwas
+# copy .git folder too for setuptools_scm
+COPY .git gwas-protocol/.git
+RUN cd gwas-protocol/recipes && \
+    conda mambabuild --no-anaconda-upload "gwas" && \
     conda build purge
 
 RUN conda index /usr/local/mambaforge/conda-bld
