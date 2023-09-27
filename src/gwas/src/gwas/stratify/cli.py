@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 import logging
+import sys
 from argparse import Action, ArgumentError, ArgumentParser, Namespace
+from pathlib import Path
 from typing import Any, Sequence
 
-from ..log import logger
+from ..log import logger, setup_logging
 from .populations import populations, super_populations
-from .run import run
+from .run import stratify
 
 
 class GroupAction(Action):
@@ -37,15 +39,7 @@ class GroupAction(Action):
         setattr(namespace, self.dest, items)
 
 
-def main():
-    logging.basicConfig(
-        level=logging.INFO,
-        format=(
-            "%(asctime)s [%(levelname)8s] %(funcName)s: "
-            "%(message)s (%(filename)s:%(lineno)s)"
-        ),
-    )
-
+def parse_arguments(argv: list[str]) -> Namespace:
     argument_parser = ArgumentParser()
 
     # Input files
@@ -132,13 +126,26 @@ def main():
         action="store_true",
         default=False,
     )
-
+    # Program options
+    argument_parser.add_argument(
+        "--log-level", choices=logging.getLevelNamesMapping().keys(), default="INFO"
+    )
     argument_parser.add_argument("--debug", action="store_true", default=False)
 
-    arguments = argument_parser.parse_args()
+    return argument_parser.parse_args(argv)
+
+
+def main():
+    arguments = parse_arguments(sys.argv[1:])
+
+    output_directory = Path.cwd()
+    if arguments.output_directory is not None:
+        output_directory = Path(arguments.output_directory)
+
+    setup_logging(level=arguments.log_level, log_path=output_directory)
 
     try:
-        run(arguments)
+        stratify(arguments, output_directory)
     except Exception as e:
         logger.exception("Exception: %s", e, exc_info=True)
         if arguments.debug:

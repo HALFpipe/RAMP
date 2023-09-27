@@ -29,7 +29,7 @@ def write_table(
     data_frame.to_csv(f"{prefix}.tsv", **csv_kwargs)
 
 
-def run(arguments: Namespace) -> None:
+def stratify(arguments: Namespace, output_directory: Path) -> None:
     sample_classes: dict[str, dict[str, set[SampleID]]] = defaultdict(
         lambda: defaultdict(set)
     )
@@ -96,10 +96,6 @@ def run(arguments: Namespace) -> None:
         phenotype_array,
         phenotype_samples,
     )
-
-    output_directory = Path.cwd()
-    if arguments.output_directory is not None:
-        output_directory = Path(arguments.output_directory)
 
     write_table(
         str(output_directory / "stratified_phenotypes"),

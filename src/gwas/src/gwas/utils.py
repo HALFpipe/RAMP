@@ -6,6 +6,7 @@ import os
 import re
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum, auto
+from logging import LogRecord
 from multiprocessing import get_context
 from multiprocessing import pool as mp_pool
 from multiprocessing.queues import Queue
@@ -18,7 +19,7 @@ import numpy as np
 import torch.multiprocessing as mp
 from numpy import typing as npt
 
-from gwas.log import logger, setup_logging
+from gwas.log import logger, worker_configurer
 
 try:
     from pytest_cov.embed import cleanup_on_sigterm  # type: ignore
@@ -83,17 +84,27 @@ def underscore(x: str) -> str:
     return re.sub(r"([a-z\d])([A-Z])", r"\1_\2", x).lower()
 
 
-def get_initargs() -> tuple:
-    return os.sched_getaffinity(0), logger.getEffectiveLevel()
+def get_initargs() -> tuple[set[int], Queue[LogRecord], int | str]:
+    from .log import logging_thread
+
+    if logging_thread is None:
+        raise ValueError("Cannot get initargs before logging is set up")
+
+    return (
+        os.sched_getaffinity(0),
+        logging_thread.logging_queue,
+        logger.getEffectiveLevel(),
+    )
 
 
 def initializer(
     sched_affinity: set[int],
-    logging_level: str | int,
+    logging_queue: Queue[LogRecord],
+    log_level: int | str,
 ) -> None:
     os.sched_setaffinity(0, sched_affinity)
 
-    setup_logging(logging_level)
+    worker_configurer(logging_queue, log_level)
 
 
 class Pool(mp_pool.Pool):
