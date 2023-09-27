@@ -20,6 +20,7 @@ def calc_mean(
         f"{variable_collection.name}_alternate_allele_frequency"
         for variable_collection in variable_collections
     ]
+    columns.insert(0, "alternate_allele_frequency")
     if vcf_file.allele_frequency_columns == columns:
         return False
 
@@ -28,23 +29,22 @@ def calc_mean(
     variant_indices = vcf_file.variant_indices.copy()
     vcf_variant_count = len(variant_indices)
 
-    missing_value_pattern_count = len(variable_collections)
-    base_samples = [
-        sample
-        for sample in vcf_file.vcf_samples
-        if any(
-            sample in variable_collection.samples
-            for variable_collection in variable_collections
-        )
-    ]
-    vcf_file.set_samples(set(base_samples))
     base_samples = vcf_file.samples
-    sample_count = len(base_samples)
+    for variable_collection in variable_collections:
+        if not set(variable_collection.samples) <= set(base_samples):
+            difference = set(variable_collection.samples) - set(base_samples)
+            raise ValueError(
+                f"Variable collection contains additional samples {difference} "
+                "that are not selected to be read"
+            )
+    sample_count = vcf_file.sample_count
 
     sample_boolean_vectors = make_sample_boolean_vectors(
         base_samples,
         (variable_collection.samples for variable_collection in variable_collections),
     )
+    sample_boolean_vectors.insert(0, np.ones(sample_count, dtype=np.bool_))
+    missing_value_pattern_count = len(sample_boolean_vectors)
 
     name = SharedArray.get_name(sw, "alternate-allele-frequency")
     alternate_allele_frequency_array = sw.alloc(
@@ -58,9 +58,7 @@ def calc_mean(
     name = SharedArray.get_name(sw, "genotypes")
     genotypes_array = sw.alloc(name, sample_count, variant_count)
 
-    with vcf_file, tqdm(
-        total=variant_count, unit="variants", desc="calculating allele frequencies"
-    ) as progress_bar:
+    with vcf_file, tqdm(total=variant_count, unit="variants") as progress_bar:
         variant_offset = 0
         while len(variant_indices) > 0:
             # Read the genotypes
@@ -69,6 +67,7 @@ def calc_mean(
                 shape=(sample_count, vcf_file.variant_count)
             )
             vcf_file.read(genotypes_matrix.transpose())
+
             # Calculate the alternate allele frequency
             variant_slice = slice(
                 variant_offset, variant_offset + vcf_file.variant_count
@@ -78,6 +77,7 @@ def calc_mean(
                     axis=0, where=sample_boolean_vector[:, np.newaxis]
                 )
                 alternate_allele_frequency_matrix[variant_slice, i] = mean / 2
+
             # Remove already read variant indices
             progress_bar.update(vcf_file.variant_count)
             variant_offset += vcf_file.variant_count

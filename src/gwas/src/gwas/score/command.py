@@ -41,6 +41,13 @@ class GwasCommand:
     def chromosomes(self) -> Sequence[int | str]:
         return sorted(self.vcf_by_chromosome.keys(), key=chromosome_to_int)
 
+    @property
+    def selected_chromosomes(self) -> Sequence[int | str]:
+        chromosomes: Iterable[int | str] = self.chromosomes
+        if self.arguments.chromosome is not None:
+            chromosomes = map(parse_chromosome, self.arguments.chromosome)
+        return sorted(chromosomes, key=chromosome_to_int)
+
     def get_eigendecomposition(
         self, chromosome: int | str, vc: VariableCollection
     ) -> Eigendecomposition:
@@ -176,24 +183,17 @@ class GwasCommand:
         # Load VCF file metadata and cache it
         vcf_files = calc_vcf(vcf_paths, self.output_directory)
         self.set_vcf_files(vcf_files)
+
         # Update samples to only include those that are in all VCF files
-        vcf_sample_set: set[str] = set.intersection(
+        base_samples: set[str] = set.intersection(
             *(set(vcf_file.samples) for vcf_file in vcf_files)
         )
         for vcf_file in vcf_files:
-            vcf_file.set_samples(vcf_sample_set)
+            vcf_file.set_samples(base_samples)
+
         # Ensure that we have the samples in the correct order
         self.vcf_samples = vcf_files[0].samples
-        # Load or calculate triangularized genotype data
-        self.tri_paths_by_chromosome = calc_tri(
-            self.chromosomes,
-            self.vcf_by_chromosome,
-            self.output_directory,
-            self.sw,
-            tri_paths,
-            self.arguments.kinship_minor_allele_frequency_cutoff,
-            self.arguments.kinship_r_squared_cutoff,
-        )
+
         # Split into missing value chunks
         base_variable_collection = self.get_variable_collection()
         base_variable_collection.covariance_to_txt(
@@ -210,6 +210,31 @@ class GwasCommand:
                 "match between your phenotype/covariate files and the VCF files."
             )
         base_variable_collection.free()
+
+        # Update the VCF file allele frequencies based on variable collections
+        for chromosome in tqdm(
+            self.selected_chromosomes, desc="calculating allele frequencies"
+        ):
+            vcf_file = self.vcf_by_chromosome[chromosome]
+            if calc_mean(
+                vcf_file,
+                self.variable_collections,
+            ):
+                vcf_file.save_to_cache(self.output_directory)
+
+        # Load or calculate triangularized genotype data
+        for vcf_file in vcf_files:  # Use all available samples
+            vcf_file.set_samples(set(vcf_file.vcf_samples))
+        self.tri_paths_by_chromosome = calc_tri(
+            self.chromosomes,
+            self.vcf_by_chromosome,
+            self.output_directory,
+            self.sw,
+            tri_paths,
+            self.arguments.kinship_minor_allele_frequency_cutoff,
+            self.arguments.kinship_r_squared_cutoff,
+        )
+
         self.set_vcf_files(vcf_files)
 
     def set_vcf_files(self, vcf_files: list[VCFFile]) -> None:
@@ -218,12 +243,9 @@ class GwasCommand:
         }
 
     def run(self) -> None:
-        chromosomes: Iterable[int | str] = self.chromosomes
-        if self.arguments.chromosome is not None:
-            chromosomes = map(parse_chromosome, self.arguments.chromosome)
-        chromosomes = sorted(chromosomes, key=chromosome_to_int)
-        for chromosome in tqdm(chromosomes, desc="chromosomes"):
+        for chromosome in tqdm(self.selected_chromosomes, desc="chromosomes"):
             vcf_file = self.vcf_by_chromosome[chromosome]
+
             # Update the VCF file allele frequencies based on variable collections
             if calc_mean(
                 vcf_file,
@@ -236,20 +258,25 @@ class GwasCommand:
                 ),
                 r_squared_cutoff=self.arguments.score_r_squared_cutoff,
             )
+
             # We need to run the score calculation for each variable collection.
             variable_collections = self.variable_collections.copy()
+
             # Split the variable collections into chunks that fit efficiently
             # into memory
             chunks: list[list[VariableCollection]] = list()
+
             # Get available memory
             itemsize = np.float64().itemsize
             available_size = self.sw.unallocated_size // itemsize
+
             # Loop over the variable collections
             chunk_size: int = 0
             current_chunk: list[VariableCollection] = list()
             while len(variable_collections) > 0:
                 vc = variable_collections.pop()
                 current_chunk.append(vc)
+
                 # Predict memory usage
                 chunk_size += len(self.vcf_samples) * vc.sample_count
                 chunk_size += 2 * vc.sample_count * vc.phenotype_count
@@ -258,6 +285,7 @@ class GwasCommand:
                     # for just the model data. We need to split the chunk
                     chunks.append(current_chunk)
                     current_chunk = list()
+
             chunks.append(current_chunk)
 
             job_collection = JobCollection(
