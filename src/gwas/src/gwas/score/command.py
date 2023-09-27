@@ -196,6 +196,9 @@ class GwasCommand:
         )
         # Split into missing value chunks
         base_variable_collection = self.get_variable_collection()
+        base_variable_collection.covariance_to_txt(
+            self.output_directory / "covariance.txt.gz"
+        )
         self.variable_collections = self.split_by_missing_values(
             base_variable_collection,
             self.arguments.add_principal_components,

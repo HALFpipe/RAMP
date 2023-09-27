@@ -265,6 +265,20 @@ class VariableCollection:
             **kwargs,
         )
 
+    def covariance_to_txt(self, path: Path) -> None:
+        phenotype_array = self.phenotypes.to_numpy()
+        covariate_array = self.covariates.to_numpy()
+
+        data_frame = pd.DataFrame(
+            np.hstack((phenotype_array, covariate_array)),
+            index=self.samples,
+            columns=[
+                *self.phenotype_names,
+                *self.covariate_names,
+            ],
+        )
+        data_frame.cov().to_csv(path, sep="\t")
+
 
 @dataclass
 class VariableSummary:
