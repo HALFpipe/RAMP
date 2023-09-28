@@ -25,7 +25,11 @@ def scale(b: npt.NDArray):
     standard_deviation = np.sqrt(
         2 * minor_allele_frequency * (1 - minor_allele_frequency)
     )
-    standard_deviation[np.isclose(standard_deviation, 0)] = 1
+    if np.isclose(standard_deviation, 0).any():
+        raise ValueError(
+            "Some variants have zero standard deviation. "
+            "Please adjust the criteria for including variants"
+        )
     b /= standard_deviation[:, np.newaxis]
 
 
