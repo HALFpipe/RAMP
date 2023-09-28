@@ -4,7 +4,7 @@ GWAS Protocol (as a container)
 Usage
 -----
 
-The container comes with all the software needed to genrate summary statistics.
+The container comes with all the software needed to generate summary statistics.
 <ol>
 
 <li>
