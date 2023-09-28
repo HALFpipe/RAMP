@@ -132,7 +132,7 @@ class CompressedWriter(AbstractContextManager):
             )
 
         compress_commands: Mapping[str, list[str]] = {
-            ".zst": ["zstd", "-B0", f"-T{self.num_threads:d}", "-11"],
+            ".zst": ["zstd", "-B0", f"-T{self.num_threads:d}", "--ultra", "-22"],
             ".lrz": ["lrzip"],
             ".gz": ["bgzip", "--threads", f"{self.num_threads:d}"],
             ".xz": ["xz"],
