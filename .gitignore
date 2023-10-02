@@ -158,3 +158,6 @@ cython_debug/
 # Cython generated files
 src/gwas/src/gwas/mem/_os.c
 src/gwas/src/gwas/_matrix_functions.c
+
+# Direnv
+.direnv
