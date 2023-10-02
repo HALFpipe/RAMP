@@ -23,6 +23,7 @@ dependencies = [
 [project.scripts]
 score = "gwas.score.cli:main"
 stratify = "gwas.stratify.cli:main"
+transpose = "gwas.transpose.cli:main"
 tri = "gwas.tri.cli:main"
 
 [build-system]
@@ -51,10 +52,6 @@ markers = ["slow: marks tests that run much longer than most"]
 log_cli = true
 log_cli_level = "DEBUG"
 log_cli_format = "%(asctime)s [%(levelname)8s] %(funcName)s: %(message)s (%(filename)s:%(lineno)s)"
-
-# [[tool.setuptools-rust.ext-modules]]
-# target = "gwas._rust"
-# path = "src/rust/Cargo.toml"
 
 [tool.setuptools_scm]
 version_scheme = "no-guess-dev"

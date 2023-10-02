@@ -1,0 +1,12 @@
+include pyproject.toml
+recursive-include src py.typed *.pyi
+
+recursive-include src/rust Cargo.toml Cargo.lock *.rs
+exclude src/rust/target
+recursive-exclude src/rust/target *
+
+recursive-include tests *.py
+
+recursive-exclude .github *
+
+exclude mypy.ini .flake8

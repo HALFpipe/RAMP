@@ -4,6 +4,7 @@ import sys
 import numpy as np
 from Cython.Build import cythonize
 from setuptools import Extension, setup
+from setuptools_rust import Binding, RustExtension
 
 # Adapted from https://github.com/pandas-dev/pandas/blob/main/setup.py
 debugging_symbols_requested = "--with-debugging-symbols" in sys.argv
@@ -61,6 +62,9 @@ setup(
             extra_compile_args=extra_compile_args,
             extra_link_args=extra_link_args,
         ),
+    ],
+    rust_extensions=[
+        RustExtension("gwas._rust", path="src/rust/Cargo.toml", binding=Binding.PyO3)
     ],
     zip_safe=False,
 )
