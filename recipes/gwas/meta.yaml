@@ -22,6 +22,7 @@ requirements:
     - "setuptools_scm>=6.2"
     - "setuptools-rust"
     - wheel
+    - zlib
   run:
     - mkl
     # Python dependencies
