@@ -23,9 +23,7 @@ def classify_samples_by_mds(
 ) -> None:
     samples, sample_components, reference_components = mds
 
-    cutoff = scipy.stats.norm.logpdf(  # type: ignore
-        arguments.population_standard_deviations
-    )
+    cutoff = scipy.stats.norm.logpdf(arguments.population_standard_deviations).item()
     sample_populations = sample_classes["population"]
 
     for p, c in reference_components.items():
@@ -35,8 +33,8 @@ def classify_samples_by_mds(
         # with maximum likelihood estimation.
         mean = np.mean(c, axis=0)
         covariance = np.cov(c.transpose())
-        full_multivariate_normal = scipy.stats.multivariate_normal(  # type: ignore
-            mean=mean, cov=covariance
+        full_multivariate_normal = scipy.stats.multivariate_normal(
+            mean=mean, cov=covariance  # type: ignore
         )
 
         # Determine which samples are in the populations.

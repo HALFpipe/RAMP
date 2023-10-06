@@ -91,6 +91,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
         metavar=("NAME", "LOWER_BOUND", "UPPER_BOUND"),
     )
     argument_parser.add_argument("--minimum-sample-size", type=int, default=50)
+    argument_parser.add_argument("--minimum-subsample-size", type=int, default=10)
 
     # Covariate options
     argument_parser.add_argument(

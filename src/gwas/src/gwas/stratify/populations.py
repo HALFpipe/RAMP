@@ -151,7 +151,7 @@ def plot_populations(
             mean = np.mean(c, axis=0)
             covariance = np.cov(c.transpose())
             marginal_multivariate_normal = multivariate_normal(
-                mean=mean, cov=covariance
+                mean=mean, cov=covariance  # type: ignore
             )
             z[p] = marginal_multivariate_normal.logpdf(coordinates)
 

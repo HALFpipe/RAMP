@@ -131,36 +131,45 @@ def classify_samples_by_group(
             sample_classes[by][name].add(covariate_samples[i])
 
 
-def finalize_sample_classes(
-    arguments: Namespace,
-    sample_classes: dict[str, dict[str, set[SampleID]]],
+def prune_classes(
+    sample_classes: dict[str, dict[str, set[SampleID]]], minimum_class_size: int
 ) -> None:
-    # Convert defaultdicts to dicts.
-    for k in sample_classes.keys():
-        v = sample_classes[k]
-        sample_classes[k] = dict(v)
-
-    # Remove zero-length classes.
     for by, class_dict in sample_classes.items():
         keys = list(class_dict.keys())
         for k in keys:
-            if len(class_dict[k]) < arguments.minimum_sample_size:
+            if len(class_dict[k]) < minimum_class_size:
                 class_info = {by: k}
                 logger.info(
                     f"Will not output {class_info} because it has "
                     f"only {len(class_dict[k])} samples, which is less than "
-                    f"{arguments.minimum_sample_size}"
+                    f"{minimum_class_size}"
                 )
                 del class_dict[k]
 
-    # Create mixed sample classes.
+
+def finalize_sample_classes(
+    arguments: Namespace,
+    sample_classes: dict[str, dict[str, set[SampleID]]],
+) -> None:
+    # Convert defaultdicts to dicts
+    for k in sample_classes.keys():
+        v = sample_classes[k]
+        sample_classes[k] = dict(v)
+
+    # Remove small subsamples
+    prune_classes(sample_classes, arguments.minimum_subsample_size)
+
+    # Create mixed sample classes
     for _, class_dict in sample_classes.items():
         if len(class_dict) == 1:
             continue
         mixed = set.union(*class_dict.values())
         class_dict["mixed"] = mixed
 
-    # Create non-main ancestry group.
+    # Remove small samples
+    prune_classes(sample_classes, arguments.minimum_sample_size)
+
+    # Create non-main ancestry group
     sample_populations = sample_classes["population"]
     if arguments.by_population:
         main = arguments.main_population
