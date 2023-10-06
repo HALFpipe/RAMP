@@ -11,7 +11,7 @@ from numpy import typing as npt
 from ...log import logger
 from ...utils import to_str
 from ..pipe import CompressedTextWriter
-from .base import FileArray, T
+from .base import FileArray, T, ZstdTextCompressionMethod
 
 
 @dataclass
@@ -165,8 +165,13 @@ class TextFileArray(FileArray[T]):
                 / f"{file_path.name}.txt{self.compression_method.suffix}"
             )
             self.file_paths.add(file_path)
+            compression_level: int | None = None
+            if isinstance(self.compression_method, ZstdTextCompressionMethod):
+                compression_level = self.compression_method.level
             self.compressed_text_writer = CompressedTextWriter(
-                file_path, num_threads=self.num_threads
+                file_path,
+                num_threads=self.num_threads,
+                compression_level=compression_level,
             )
             self.file_handle = self.compressed_text_writer.open()
             self.write_header(col_start, col_stop)

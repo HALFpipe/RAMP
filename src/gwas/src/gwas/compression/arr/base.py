@@ -34,8 +34,14 @@ class TextCompressionMethod(CompressionMethod):
     suffix: str
 
 
+@dataclass(frozen=True, kw_only=True)
+class ZstdTextCompressionMethod(TextCompressionMethod):
+    level: int
+
+
 compression_methods: Mapping[str, CompressionMethod] = dict(
-    zstd_text=TextCompressionMethod(suffix=".zst"),
+    zstd_text=ZstdTextCompressionMethod(suffix=".zst", level=11),
+    zstd_ultra_text=ZstdTextCompressionMethod(suffix=".zst", level=22),
     gzip_text=TextCompressionMethod(suffix=".gz"),
     lrzip_text=TextCompressionMethod(suffix=".lrz"),
     xzip_text=TextCompressionMethod(suffix=".xz"),

@@ -129,7 +129,10 @@ def plot_stat(
     xlabel = xlabel[0].upper() + xlabel[1:]
     ylabel = ylabel[0].upper() + ylabel[1:]
 
-    (color,) = sns.color_palette("hls", 1)
+    colors = sns.color_palette("hls", n_colors=1)
+    if not isinstance(colors, list):
+        raise TypeError("Expected list of colors")
+    (color,) = colors
 
     figure, axes = plt.subplots(figsize=(6, 6), dpi=600)
     axes.set_title(title)

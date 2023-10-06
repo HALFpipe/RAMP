@@ -77,7 +77,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
         "--compression-method",
         required=False,
         choices=compression_methods.keys(),
-        default="zstd_text",
+        default="zstd_ultra_text",
     )
     argument_parser.add_argument(
         "--add-principal-components",
