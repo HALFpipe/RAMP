@@ -38,7 +38,7 @@ def calc_score(
     # Make sure that we can use all free memory.
     sw = ec.eigenvector_arrays[0].sw
     sw.squash()
-    # We re-use sample x genotype matrix across all jobs, so we need to use
+    # We reuse sample x genotype matrix across all jobs, so we need to use
     # the total number of samples.
     sample_count = vcf_file.sample_count
     phenotype_count = sum(
