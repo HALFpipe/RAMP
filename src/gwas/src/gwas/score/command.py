@@ -6,6 +6,7 @@ from pprint import pformat
 from typing import Callable, Iterable, Mapping, Sequence
 
 import numpy as np
+from threadpoolctl import threadpool_limits
 from tqdm.auto import tqdm
 
 from ..compression.arr.base import compression_methods
@@ -194,11 +195,14 @@ class GwasCommand:
         # Ensure that we have the samples in the correct order
         self.vcf_samples = vcf_files[0].samples
 
-        # Split into missing value chunks
+        # Load phenotypes and covariates
         base_variable_collection = self.get_variable_collection()
-        base_variable_collection.covariance_to_txt(
-            self.output_directory / "covariance.txt.gz"
-        )
+        with threadpool_limits(limits=self.arguments.num_threads):
+            base_variable_collection.covariance_to_txt(
+                self.output_directory / "covariance",
+                compression_methods[self.arguments.compression_method],
+            )
+        # Split into missing value chunks
         self.variable_collections = self.split_by_missing_values(
             base_variable_collection,
             self.arguments.add_principal_components,

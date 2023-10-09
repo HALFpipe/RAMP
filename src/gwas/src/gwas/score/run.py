@@ -75,7 +75,6 @@ def calc_score(
     writer_proc = ScoreWriter(
         t, stat_array, stat_file_array, phenotype_offset, variant_offset
     )
-
     # Start the loop.
     procs = [reader_proc, calc_proc, writer_proc]
     with tqdm(
