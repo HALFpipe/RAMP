@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from logging.handlers import QueueHandler
 from multiprocessing import Queue
 from pathlib import Path
@@ -9,6 +10,14 @@ from threading import Thread
 
 logger = logging.getLogger("gwas")
 logging_thread: LoggingThread | None = None
+
+
+def _showwarning(message, category, filename, lineno, file=None, line=None):
+    logger = logging.getLogger("py.warnings")
+    logger.warning(
+        warnings.formatwarning(message, category, filename, lineno, line),
+        stack_info=True,
+    )
 
 
 def setup_logging(level: str | int, log_path: Path) -> None:
@@ -28,7 +37,7 @@ def setup_logging(level: str | int, log_path: Path) -> None:
         handler.setFormatter(formatter)
         root.addHandler(handler)
 
-    logging.captureWarnings(True)
+    warnings.showwarning = _showwarning
 
     global logging_thread
     logging_thread = LoggingThread()
