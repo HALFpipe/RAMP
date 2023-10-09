@@ -16,6 +16,15 @@
         };
         compressionPackages = with pkgs; [ bcftools bzip2 htslib p7zip zstd ];
 
+        blosc2 =
+          pkgs.python311Packages.blosc2.overridePythonAttrs (old: rec {
+            pname = "blosc2";
+            version = "2.2.7";
+            src = pkgs.fetchPypi {
+              inherit version pname;
+              hash = "sha256-e22AVEbFYLJgA9H5B+e9No7dgtIygz6fO2F+LIgQjV4=";
+            };
+          });
         setuptools-rust =
           pkgs.python311Packages.setuptools-rust.overridePythonAttrs (old: rec {
             pname = "setuptools-rust";
@@ -49,6 +58,7 @@
           threadpoolctl
           torch
           tqdm
+          types-pyyaml
           zstandard
         ];
         rust = pkgs.rust-bin.beta.latest.default.override {
