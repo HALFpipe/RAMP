@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from numpy import typing as npt
 
+from .compression.arr.base import CompressionMethod, FileArray
 from .log import logger
 from .mem.arr import SharedArray
 from .mem.wkspace import SharedWorkspace
@@ -220,6 +221,7 @@ class VariableCollection:
         samples: list[str] | None = None,
         **kwargs,
     ) -> Self:
+        logger.debug("Reading phenotypes")
         phenotype_samples, phenotype_names, phenotype_array = read_and_combine(
             phenotype_paths
         )
@@ -228,6 +230,7 @@ class VariableCollection:
         if samples is None:
             raise RuntimeError("No samples found in phenotype files")
 
+        logger.debug("Reading covariates")
         covariate_samples, covariate_names, covariate_array = read_and_combine(
             covariate_paths
         )
@@ -265,19 +268,35 @@ class VariableCollection:
             **kwargs,
         )
 
-    def covariance_to_txt(self, path: Path) -> None:
+    def covariance_to_txt(
+        self, path: Path, compression_method: CompressionMethod
+    ) -> None:
+        path = path.with_suffix(compression_method.suffix)
+        if path.is_file():
+            logger.debug("Skip writing covariance matrix because it already exists")
+            return
+
         phenotype_array = self.phenotypes.to_numpy()
         covariate_array = self.covariates.to_numpy()
 
-        data_frame = pd.DataFrame(
-            np.hstack((phenotype_array, covariate_array)),
-            index=self.samples,
-            columns=[
-                *self.phenotype_names,
-                *self.covariate_names,
-            ],
+        array = np.hstack((phenotype_array, covariate_array))
+        names = [*self.phenotype_names, *self.covariate_names]
+
+        data_frame = pd.DataFrame(array, index=self.samples, columns=names)
+
+        logger.debug("Calculating covariance matrix")
+        covariance = data_frame.cov()
+
+        file_array = FileArray.create(
+            path,
+            covariance.shape,
+            covariance.values.dtype,
+            compression_method,
         )
-        data_frame.cov().to_csv(path, sep="\t")
+        with file_array:
+            file_array.set_axis_metadata(0, pd.Series(names))
+            file_array.set_axis_metadata(1, pd.Series(names))
+            file_array[:, :] = covariance.values
 
 
 @dataclass
