@@ -51,8 +51,13 @@ class TextFileArray(FileArray[T]):
         row_metadata, column_metadata = self.axis_metadata
         if column_metadata is not None:
             header = list()
-            if row_metadata is not None:
+            if isinstance(row_metadata, pd.DataFrame):
                 header.extend(row_metadata.columns.astype(str))
+            elif isinstance(row_metadata, pd.Series):
+                name = row_metadata.name
+                if name is None:
+                    name = ""
+                header.append(name)
             header.extend(column_metadata.iloc[column_start:column_stop].astype(str))
             self.file_handle.write(self.delimiter.join(header) + "\n")
         else:
@@ -160,10 +165,11 @@ class TextFileArray(FileArray[T]):
                     file_path.parent
                     / f"{file_path.name}.part-{self.current_part_index + 1:d}"
                 )
-            file_path = (
-                file_path.parent
-                / f"{file_path.name}.txt{self.compression_method.suffix}"
-            )
+            if not str(file_path).endswith(self.compression_method.suffix):
+                file_path = (
+                    file_path.parent
+                    / f"{file_path.name}{self.compression_method.suffix}"
+                )
             self.file_paths.add(file_path)
             compression_level: int | None = None
             if isinstance(self.compression_method, ZstdTextCompressionMethod):

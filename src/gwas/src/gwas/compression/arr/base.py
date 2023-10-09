@@ -40,13 +40,13 @@ class ZstdTextCompressionMethod(TextCompressionMethod):
 
 
 compression_methods: Mapping[str, CompressionMethod] = dict(
-    zstd_text=ZstdTextCompressionMethod(suffix=".zst", level=11),
-    zstd_ultra_text=ZstdTextCompressionMethod(suffix=".zst", level=22),
-    gzip_text=TextCompressionMethod(suffix=".gz"),
-    lrzip_text=TextCompressionMethod(suffix=".lrz"),
-    xzip_text=TextCompressionMethod(suffix=".xz"),
-    bzip2_text=TextCompressionMethod(suffix=".bz2"),
-    lz4_text=TextCompressionMethod(suffix=".lz4"),
+    zstd_text=ZstdTextCompressionMethod(suffix=".txt.zst", level=11),
+    zstd_ultra_text=ZstdTextCompressionMethod(suffix=".txt.zst", level=22),
+    gzip_text=TextCompressionMethod(suffix=".txt.gz"),
+    lrzip_text=TextCompressionMethod(suffix=".txt.lrz"),
+    xzip_text=TextCompressionMethod(suffix=".txt.xz"),
+    bzip2_text=TextCompressionMethod(suffix=".txt.bz2"),
+    lz4_text=TextCompressionMethod(suffix=".txt.lz4"),
     blosc2_zstd=Blosc2CompressionMethod(
         codec=blosc2.Codec.ZSTD,
         clevel=9,

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import pickle
 from dataclasses import dataclass
 from math import prod
 from multiprocessing import cpu_count
@@ -11,6 +12,7 @@ import numpy as np
 from numpy import typing as npt
 
 from ...log import logger
+from ..pipe import CompressedBytesWriter
 from .base import Blosc2CompressionMethod, FileArray, T
 
 
@@ -41,7 +43,7 @@ class Blosc2FileArray(FileArray[T]):
         shape: tuple[int, ...],
         max_size: int,
     ) -> tuple[int, ...]:
-        max_size //= self.dtype().itemsize
+        max_size //= np.dtype(self.dtype).itemsize
         axis_count = len(shape)
         reduced_shape: Sequence[int | None] = [None] * axis_count
         while any(s is None for s in reduced_shape):
@@ -78,9 +80,10 @@ class Blosc2FileArray(FileArray[T]):
         blosc2.set_nthreads(cpu_count())
 
         file_path = self.file_path
-        file_path = (
-            file_path.parent / f"{file_path.name}{self.compression_method.suffix}"
-        )
+        if not str(file_path).endswith(self.compression_method.suffix):
+            file_path = (
+                file_path.parent / f"{file_path.name}{self.compression_method.suffix}"
+            )
         self.file_paths.add(file_path)
 
         if not file_path.is_file():
@@ -113,7 +116,11 @@ class Blosc2FileArray(FileArray[T]):
                 ),
                 **kwargs,
             )
-            array.vlmeta["axis_metadata"] = self.axis_metadata
+            axis_metadata_path = (
+                file_path.parent / f"{file_path.name}.axis-metadata.pkl"
+            )
+            with CompressedBytesWriter(axis_metadata_path) as file_handle:
+                pickle.dump(self.axis_metadata, file_handle)
         else:
             array = blosc2.open(
                 urlpath=str(file_path),
