@@ -64,7 +64,7 @@ class ProfileMaximumLikelihood:
     grid_search_size: int = 100
 
     enable_softplus_penalty: bool = True
-    softplus_beta: float = 1e4
+    softplus_beta: int = 10000
 
     requires_grad: ClassVar[bool] = True
 
