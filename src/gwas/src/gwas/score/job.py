@@ -167,7 +167,7 @@ class JobCollection:
         self.sw = next(
             chain.from_iterable(self.variable_collection_chunks)
         ).phenotypes.sw
-        # Create an array proxy.
+        # Create an array proxy
         self.stat_file_array = FileArray.create(
             self.file_path,
             (self.vcf_file.variant_count, self.phenotype_count * 2),

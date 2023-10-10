@@ -4,6 +4,7 @@ from contextlib import AbstractContextManager
 from multiprocessing import cpu_count
 from pathlib import Path
 from subprocess import DEVNULL, PIPE, Popen
+from threading import Thread
 from types import TracebackType
 from typing import IO, Any, Mapping, Type, TypeVar
 
@@ -25,6 +26,23 @@ decompress_commands: Mapping[str, list[str]] = {
     ".lz4": ["lz4", "-c", "-d"],
 }
 T = TypeVar("T", bytes, str)
+
+
+class StderrThread(Thread):
+    def __init__(self, process_handle: Popen):
+        super().__init__(daemon=True)
+        self.process_handle = process_handle
+
+    def run(self) -> None:
+        stderr = self.process_handle.stderr
+        if stderr is None:
+            raise IOError
+        data: str | bytes = stderr.read()
+        stderr.close()
+        if isinstance(data, bytes):
+            data = data.decode("utf-8", errors="replace")
+        if data:
+            logger.warning(data)
 
 
 class CompressedReader(AbstractContextManager[IO[T]]):
@@ -52,7 +70,7 @@ class CompressedReader(AbstractContextManager[IO[T]]):
         bufsize = 1 if self.is_text else -1
         self.process_handle = Popen(
             [*decompress_command, str(self.file_path)],
-            stderr=DEVNULL,
+            stderr=PIPE,
             stdin=DEVNULL,
             stdout=PIPE,
             text=self.is_text,
@@ -62,6 +80,9 @@ class CompressedReader(AbstractContextManager[IO[T]]):
 
         if self.process_handle.stdout is None:
             raise IOError
+
+        stderr_thread = StderrThread(self.process_handle)
+        stderr_thread.start()
 
         self.file_handle = self.process_handle.stdout
         return self.file_handle
@@ -80,10 +101,10 @@ class CompressedReader(AbstractContextManager[IO[T]]):
         value: BaseException | None = None,
         traceback: TracebackType | None = None,
     ) -> None:
+        if self.file_handle is not None:
+            self.file_handle.close()
         if self.process_handle is not None:
             self.process_handle.__exit__(exc_type, value, traceback)
-        elif self.file_handle is not None:
-            self.file_handle.close()
         self.process_handle = None
         self.file_handle = None
 
@@ -144,10 +165,10 @@ class CompressedWriter(AbstractContextManager[IO[T]]):
         compress_commands: Mapping[str, list[str]] = {
             ".zst": [
                 "zstd",
-                "-B0",
-                f"-T{self.num_threads:d}",
+                f"--threads={self.num_threads:d}",
                 "--ultra",
                 zstd_compression_level_flag,
+                "--no-progress",
             ],
             ".gz": ["bgzip", "--threads", f"{self.num_threads:d}"],
             ".xz": ["xz"],
@@ -159,10 +180,12 @@ class CompressedWriter(AbstractContextManager[IO[T]]):
         executable = unwrap_which(compress_command[0])
         compress_command[0] = executable
 
+        logger.debug(f'Compressing to "{self.file_path}" with "{compress_command}"')
+
         bufsize = 1 if self.is_text else -1
         self.process_handle = Popen(
             compress_command,
-            stderr=DEVNULL,
+            stderr=PIPE,
             stdin=PIPE,
             stdout=self.output_file_handle,
             text=self.is_text,
@@ -172,6 +195,9 @@ class CompressedWriter(AbstractContextManager[IO[T]]):
 
         if self.process_handle.stdin is None:
             raise IOError
+
+        stderr_thread = StderrThread(self.process_handle)
+        stderr_thread.start()
 
         self.input_file_handle = self.process_handle.stdin
         return self.input_file_handle
@@ -190,10 +216,10 @@ class CompressedWriter(AbstractContextManager[IO[T]]):
         value: BaseException | None = None,
         traceback: TracebackType | None = None,
     ) -> None:
+        if self.input_file_handle is not None:
+            self.input_file_handle.close()
         if self.process_handle is not None:
             self.process_handle.__exit__(exc_type, value, traceback)
-        elif self.input_file_handle is not None:
-            self.input_file_handle.close()
         self.process_handle = None
         self.input_file_handle = None
         self.output_file_handle = None
