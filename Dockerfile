@@ -88,26 +88,26 @@ FROM conda as install
 
 COPY --from=builder /usr/local/mambaforge/conda-bld /usr/local/mambaforge/conda-bld
 RUN mamba install --yes --use-local \
-    "python>=3.11" \
+    "python=3.11" \
     "pytorch=*=cpu*" \
-        "bcftools>=1.17" \
+    "bcftools>=1.17" \
     "gemma" \
-        "plink" \
-        "plink2" \
-        "r-skat" \
-        "tabix" \
+    "plink" \
+    "plink2" \
+    "r-skat" \
+    "tabix" \
     "bzip2" \
     "p7zip>=15.09" \
     "parallel" \
-        "bolt-lmm" \
-        "dosage-convertor" \
-        "gcta" \
-        "gwas" \
-        "python-blosc2" \
-        "qctool" \
-        "raremetal" \
-        "r-gmmat" \
-        "r-saige" && \
+    "bolt-lmm" \
+    "dosage-convertor" \
+    "gcta" \
+    "gwas" \
+    "python-blosc2" \
+    "qctool" \
+    "raremetal" \
+    "r-gmmat" \
+    "r-saige" && \
     sync && \
     rm -rf /usr/local/mambaforge/conda-bld && \
     mamba clean --yes --all --force-pkgs-dirs && \
