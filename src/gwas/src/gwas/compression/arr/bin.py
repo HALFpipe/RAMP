@@ -117,7 +117,7 @@ class Blosc2FileArray(FileArray[T]):
                 **kwargs,
             )
             axis_metadata_path = (
-                file_path.parent / f"{file_path.name}.axis-metadata.pkl"
+                file_path.parent / f"{file_path.stem}.axis-metadata.pkl.zst"
             )
             with CompressedBytesWriter(axis_metadata_path) as file_handle:
                 pickle.dump(self.axis_metadata, file_handle)
