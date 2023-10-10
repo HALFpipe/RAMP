@@ -43,7 +43,6 @@ compression_methods: Mapping[str, CompressionMethod] = dict(
     zstd_text=ZstdTextCompressionMethod(suffix=".txt.zst", level=11),
     zstd_ultra_text=ZstdTextCompressionMethod(suffix=".txt.zst", level=22),
     gzip_text=TextCompressionMethod(suffix=".txt.gz"),
-    lrzip_text=TextCompressionMethod(suffix=".txt.lrz"),
     xzip_text=TextCompressionMethod(suffix=".txt.xz"),
     bzip2_text=TextCompressionMethod(suffix=".txt.bz2"),
     lz4_text=TextCompressionMethod(suffix=".txt.lz4"),

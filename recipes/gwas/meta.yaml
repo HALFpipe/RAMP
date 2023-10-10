@@ -42,7 +42,6 @@ requirements:
     - typing_extensions
     # Compression tools
     - zstd
-    - lrzip
     - htslib
     - xz
     - bzip2

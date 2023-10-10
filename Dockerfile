@@ -97,7 +97,6 @@ RUN mamba install --yes --use-local \
         "r-skat" \
         "tabix" \
     "bzip2" \
-    "lrzip" \
     "p7zip>=15.09" \
     "parallel" \
         "bolt-lmm" \

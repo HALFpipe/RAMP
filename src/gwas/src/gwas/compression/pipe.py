@@ -12,8 +12,13 @@ from ..utils import unwrap_which
 
 pipe_max_size: int = int(Path("/proc/sys/fs/pipe-max-size").read_text())
 decompress_commands: Mapping[str, list[str]] = {
-    ".zst": ["zstd", "--long=31", "-c", "-d"],
-    ".lrz": ["lrzcat", "--quiet"],
+    ".zst": [
+        "zstd",
+        "--long=31",
+        "--decompress",
+        "--stdout",
+        "--no-progress",
+    ],
     ".gz": ["bgzip", "-c", "-d"],
     ".xz": ["xz", "--decompress", "--stdout"],
     ".bz2": ["bzip2", "--decompress", "--stdout"],
@@ -144,7 +149,6 @@ class CompressedWriter(AbstractContextManager[IO[T]]):
                 "--ultra",
                 zstd_compression_level_flag,
             ],
-            ".lrz": ["lrzip"],
             ".gz": ["bgzip", "--threads", f"{self.num_threads:d}"],
             ".xz": ["xz"],
             ".bz2": ["bzip2", "-c"],
