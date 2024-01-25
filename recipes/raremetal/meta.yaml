@@ -21,7 +21,8 @@ requirements:
     - curl
     - make
     - zlib
-  run: []
+  run:
+    - zlib
 
 test:
   commands:

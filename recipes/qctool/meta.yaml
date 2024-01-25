@@ -16,7 +16,8 @@ requirements:
   host:
     - make
     - zlib
-  run: []
+  run:
+    - zlib
 
 test:
   commands:
