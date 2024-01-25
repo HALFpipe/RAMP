@@ -84,7 +84,10 @@ class FaSTLMM(ProfileMaximumLikelihood):
                     pass
 
         if best_optimize_result is None:
-            raise RuntimeError
+            return OptimizeResult(
+                x=np.full((2,), np.nan),
+                fun=np.nan,
+            )
 
         log_variance_ratio = best_optimize_result.x
         variance_ratio = np.power(10, log_variance_ratio)
