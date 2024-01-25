@@ -88,15 +88,15 @@ class Blosc2FileArray(FileArray[T]):
 
         if not file_path.is_file():
             kwargs: dict[str, Any] = dict()
-            # Chunk size of 512 megabytes
-            max_chunk_size = 2**29
+            # Chunk size of 1024 megabytes
+            max_chunk_size = 2**30
             if self.chunk_shape is not None:
                 chunk_shape = self.reduce_shape(self.chunk_shape, max_chunk_size)
             else:
                 chunk_shape = self.reduce_shape(self.shape, max_chunk_size)
             kwargs["chunks"] = chunk_shape
-            # Block size of 16 megabytes
-            max_block_size = 2**24
+            # Block size of 32 megabytes
+            max_block_size = 2**25
             block_shape = self.reduce_shape(chunk_shape, max_block_size)
             kwargs["blocks"] = block_shape
             logger.debug(f"Creating Blosc2 array with kwargs {kwargs}")
