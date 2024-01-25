@@ -85,7 +85,7 @@ jobs:
     strategy:
       matrix:
         singularity_version:
-          - "v4.0.1"
+          - "v3.11.5"
           - "v2.6"
     container:
       image: quay.io/singularity/docker2singularity:${{ matrix.singularity_version }}
