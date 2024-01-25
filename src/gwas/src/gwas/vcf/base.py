@@ -56,13 +56,13 @@ class Variant(NamedTuple):
             info[token] = value
 
         is_imputed = "IMPUTED" in info_tokens
-        alternate_allele_frequency = float(info["AF"])
-        minor_allele_frequency = float(info["MAF"])
+        alternate_allele_frequency = float(info.get("AF", np.nan))
+        minor_allele_frequency = float(info.get("MAF", np.nan))
 
         if is_imputed:
-            r_squared = float(info["R2"])
+            r_squared = float(info.get("R2", np.nan))
         else:
-            r_squared = float(info["ER2"])
+            r_squared = float(info.get("ER2", np.nan))
 
         return cls(
             chromosome_to_int(chromosome),
@@ -205,7 +205,7 @@ class VCFFile(CompressedTextReader):
     ):
         def greater_or_close(series: pd.Series, cutoff: float) -> npt.NDArray[np.bool_]:
             value = np.asanyarray(series.values)
-            return (value >= cutoff) | np.isclose(value, cutoff)
+            return (value >= cutoff) | np.isclose(value, cutoff) | np.isnan(value)
 
         allele_frequency_frame = self.vcf_variants[self.allele_frequency_columns].copy()
         is_major = allele_frequency_frame.values > 0.5
