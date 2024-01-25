@@ -58,11 +58,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          buildkitd-flags: --debug
-          config-inline: |
-            [worker.oci]
-              max-parallelism = 1
 
       - name: Build and push to container registry
         uses: docker/build-push-action@v5
@@ -70,9 +65,12 @@ jobs:
           context: "."
           file: "./Dockerfile"
           platforms: linux/amd64
-          cache-from: type=registry,ref=${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.repo }}:buildcache
-          cache-to: type=registry,ref=${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.repo }}:buildcache,compression=zstd,mode=max
-          outputs: type=image,name=${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.tag }},push=true,compression=gzip,compression-level=9,force-compression=true
+          cache-from: |
+            type=registry,ref=${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.repo }}:buildcache
+          cache-to: |
+            type=registry,ref=${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.repo }}:buildcache,compression=zstd,mode=max
+          outputs: |
+            type=image,name=${{ secrets.REGISTRY }}/${{ steps.build_tag.outputs.tag }},push=true,compression=gzip,compression-level=9,force-compression=true
           labels: |
             org.opencontainers.image.title=${{ github.event.repository.name }}
             org.opencontainers.image.url=${{ github.event.repository.html_url }}
