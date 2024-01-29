@@ -103,6 +103,7 @@ RUN mamba install --yes --use-local \
     "dosage-convertor" \
     "gcta" \
     "gwas" \
+    "perl-vcftools-vcf" \
     "python-blosc2" \
     "qctool" \
     "raremetal" \
