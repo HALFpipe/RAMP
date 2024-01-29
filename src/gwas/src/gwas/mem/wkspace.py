@@ -229,9 +229,7 @@ class SharedWorkspace(AbstractContextManager):
         # ])
 
     @classmethod
-    def create(
-        cls, size: int | None = None, dict_size: int = 2**20
-    ) -> SharedWorkspace:
+    def create(cls, size: int | None = None, dict_size: int = 2**20) -> SharedWorkspace:
         """Creates a shared workspace that is stored in an anonymous file,
         allocated via `memfd_create`. Adapted from
         https://github.com/ska-sa/katgpucbf/blob/main/src/katgpucbf/dsim/shared_array.py
