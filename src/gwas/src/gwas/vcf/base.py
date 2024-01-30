@@ -244,8 +244,7 @@ class VCFFile(CompressedTextReader):
     def read(
         self,
         dosages: npt.NDArray,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @staticmethod
     def cache_key(vcf_path: Path) -> str:

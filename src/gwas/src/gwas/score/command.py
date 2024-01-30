@@ -74,10 +74,9 @@ class GwasCommand:
     def split_by_missing_values(
         base_variable_collection: VariableCollection,
         add_principal_components: int = 0,
-        get_eigendecomposition: Callable[
-            [int | str, VariableCollection], Eigendecomposition
-        ]
-        | None = None,
+        get_eigendecomposition: (
+            Callable[[int | str, VariableCollection], Eigendecomposition] | None
+        ) = None,
     ) -> list[VariableCollection]:
         # Load phenotype and covariate data for all samples that have genetic data and
         # count missing values.
