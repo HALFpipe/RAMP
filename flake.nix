@@ -1,7 +1,7 @@
 {
   description = "A basic flake with a shell";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs?ref=pull/259068/head";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
