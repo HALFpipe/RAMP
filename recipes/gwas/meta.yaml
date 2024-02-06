@@ -9,14 +9,15 @@ requirements:
   build:
     - {{ compiler("c") }}
     - {{ compiler("cxx") }}
-    - {{ compiler('rust') }}
+    - {{ compiler("rust") }}
     - "sysroot_linux-64>=2.17"
   host:
+    - python
     - "cython>=3b1"
     - mkl
     - mkl-include
     - "numpy>=1.22"
-    - "python>=3.11"
+    - "python"
     - pip
     - "setuptools>=62"
     - "setuptools_scm>=6.2"
@@ -24,9 +25,8 @@ requirements:
     - wheel
     - zlib
   run:
-    - mkl
+    - python
     # Python dependencies
-    - "python=3.11"
     - "numpy>=1.22"
     - scipy
     - pandas
@@ -40,6 +40,7 @@ requirements:
     - pyyaml
     - more-itertools
     - typing_extensions
+    - mkl
     # Compression tools
     - zstd
     - htslib
