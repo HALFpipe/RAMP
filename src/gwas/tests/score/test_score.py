@@ -42,7 +42,7 @@ def test_rotate_demeaned_genotypes(
         ec.eigenvector_arrays,
         ec.sample_boolean_vectors,
         rotated_genotypes_arrays,
-        strict=False,
+        strict=True,
     ):
         eigenvectors = eigenvector_array.to_numpy()
 

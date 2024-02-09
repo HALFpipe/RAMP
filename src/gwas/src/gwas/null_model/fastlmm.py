@@ -69,7 +69,7 @@ class FaSTLMM(ProfileMaximumLikelihood):
         fmin = np.inf
         best_optimize_result: OptimizeResult | None = None
         with np.errstate(all="ignore"):
-            for bounds in zip(xa, xa + self.step, strict=False):
+            for bounds in zip(xa, xa + self.step, strict=True):
                 try:
                     optimize_result = scipy.optimize.minimize_scalar(  # type: ignore
                         func,

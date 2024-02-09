@@ -61,7 +61,7 @@ class SampleRenamer:
                 sample_indices[i] = underscored.index(sample)
 
         self.removed_samples |= {
-            c for c, i in zip(array_samples, sample_indices, strict=False) if i == -1
+            c for c, i in zip(array_samples, sample_indices, strict=True) if i == -1
         }
         array_samples_new = [samples[i] for i in sample_indices if i >= 0]
         array = array[sample_indices >= 0, :]

@@ -80,7 +80,7 @@ class VariableCollectionSummary:
                     self.covariates.keys(),
                     regression_weights[i],
                     standard_errors[i],
-                    strict=False,
+                    strict=True,
                 )
             }
 
@@ -108,7 +108,7 @@ class SummaryCollection:
         for summary, vc in zip(
             chain.from_iterable(chunk.values() for chunk in self.chunks.values()),
             chain.from_iterable(variable_collections),
-            strict=False,
+            strict=True,
         ):
             phenotype_names = list(summary.phenotypes.keys())
             if phenotype_names != vc.phenotype_names:
@@ -219,7 +219,7 @@ class JobCollection:
         for variable_collections, summaries in zip(
             self.variable_collection_chunks,
             self.summary_collection.chunks.values(),
-            strict=False,
+            strict=True,
         ):
             eigendecompositions = [
                 self.get_eigendecomposition(self.chromosome, vc)
@@ -235,7 +235,7 @@ class JobCollection:
                 eigendecompositions,
                 variable_collections,
                 summaries.values(),
-                strict=False,
+                strict=True,
             ):
                 nm = NullModelCollection.from_eig(
                     eig,

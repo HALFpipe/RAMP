@@ -46,7 +46,7 @@ def test_fastlmm(
         rmw_debug.log_likelihood,
         rmw_debug.beta,
         rmw_debug.factor,
-        strict=False,
+        strict=True,
     ):
         terms = torch.tensor([variance_ratio, 1], dtype=torch.float64)
 
@@ -130,7 +130,7 @@ def test_optimize(
     logger.info(f"heritability is {heritability} (rmw is {rmw_heritability})")
     log_likelihood = -0.5 * ml.minus_two_log_likelihood(terms, optimize_input)
     logger.info(
-        f"log likelihood is {log_likelihood} " f"(rmw is {rmw_debug.log_likelihood_hat})"
+        f"log likelihood is {log_likelihood} (rmw is {rmw_debug.log_likelihood_hat})"
     )
     if ml_class == ProfileMaximumLikelihood:
         pass

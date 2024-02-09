@@ -207,7 +207,7 @@ class Scorefile:
 
     @classmethod
     def get_dtype(cls, _: ScorefileHeader):
-        return np.dtype(list(zip(cls.names, cls.types, strict=False)))
+        return np.dtype(list(zip(cls.names, cls.types, strict=True)))
 
     @classmethod
     def read(

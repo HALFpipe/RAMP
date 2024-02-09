@@ -161,7 +161,7 @@ class Calc(Worker):
             for start, end in zip(
                 np.concatenate(([0], phenotype_indices[:-1])),
                 phenotype_indices,
-                strict=False,
+                strict=True,
             )
         ]
 

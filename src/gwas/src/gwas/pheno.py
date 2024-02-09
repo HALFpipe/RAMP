@@ -131,7 +131,7 @@ class VariableCollection:
             removed_covariates = [
                 name
                 for name, zero in zip(
-                    self.covariate_names[1:], zero_variance, strict=False
+                    self.covariate_names[1:], zero_variance, strict=True
                 )
                 if zero
             ]
@@ -141,7 +141,7 @@ class VariableCollection:
             )
             self.covariate_names = [
                 name
-                for name, zero in zip(self.covariate_names, zero_variance, strict=False)
+                for name, zero in zip(self.covariate_names, zero_variance, strict=True)
                 if not zero
             ]
             new_covariates = new_covariates[:, ~zero_variance]
@@ -209,7 +209,7 @@ class VariableCollection:
         else:
             raise ValueError(f"Unknown missing value strategy: {missing_value_strategy}")
 
-        samples = [sample for sample, c in zip(samples, criterion, strict=False) if c]
+        samples = [sample for sample, c in zip(samples, criterion, strict=True) if c]
         phenotypes = phenotypes[criterion, :]
         covariates = covariates[criterion, :]
 
