@@ -56,12 +56,12 @@ class Blosc2FileArray(FileArray[T]):
             edge_size = int(np.floor(np.power(available_size, 1 / unknown_count)))
             if any(
                 s < edge_size
-                for c, s in zip(reduced_shape, shape, strict=False)
+                for c, s in zip(reduced_shape, shape, strict=True)
                 if c is None
             ):
                 reduced_shape = [
                     s if s < edge_size else r
-                    for r, s in zip(reduced_shape, shape, strict=False)
+                    for r, s in zip(reduced_shape, shape, strict=True)
                 ]
                 continue
             reduced_shape = [edge_size if r is None else r for r in reduced_shape]

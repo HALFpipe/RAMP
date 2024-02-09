@@ -101,7 +101,7 @@ def variable_collections(
         vc = vc_by_phenotype[phenotype_name]
         phenotype_samples = [
             sample
-            for sample, missing in zip(samples, should_be_missing[:, i], strict=False)
+            for sample, missing in zip(samples, should_be_missing[:, i], strict=True)
             if not missing
         ]
         assert vc.samples == phenotype_samples
@@ -143,7 +143,7 @@ def null_model_collections(
             eigendecomposition, variable_collection, method="fastlmm"
         )
         for variable_collection, eigendecomposition in zip(
-            variable_collections, eigendecompositions, strict=False
+            variable_collections, eigendecompositions, strict=True
         )
     ]
 
@@ -192,7 +192,7 @@ def rmw_commands(
         pass  # Truncate file
 
     for variable_collection, eigendecomposition in zip(
-        variable_collections, eigendecompositions, strict=False
+        variable_collections, eigendecompositions, strict=True
     ):
         kinship = (
             eigendecomposition.eigenvectors * eigendecomposition.eigenvalues
@@ -349,7 +349,7 @@ def rotated_genotypes_arrays(
 
     rotated_genotypes_arrays: list[SharedArray] = list()
     for eig, sample_boolean_vector in zip(
-        eigendecompositions, sample_boolean_vectors, strict=False
+        eigendecompositions, sample_boolean_vectors, strict=True
     ):
         sample_count = eig.sample_count
 

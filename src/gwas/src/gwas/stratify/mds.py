@@ -82,13 +82,13 @@ def parse_mds(arguments: Namespace, rename_sample: Callable[[str], str]) -> MDS:
     types = [object, object, int]
     component_count = len(header) - len(types)
     types += [float] * component_count
-    dtype = np.dtype(list(zip(header, types, strict=False)))
+    dtype = np.dtype(list(zip(header, types, strict=True)))
 
     matrix = np.loadtxt(arguments.mds, skiprows=1, delimiter=",", dtype=dtype)
     is_sample = ~np.isin(matrix["FID"], populations)
     samples: list[SampleID] = [
         SampleID(fid, iid)
-        for fid, iid in zip(matrix["FID"], matrix["IID"], strict=False)
+        for fid, iid in zip(matrix["FID"], matrix["IID"], strict=True)
         if fid not in populations
     ]
 

@@ -89,10 +89,10 @@ def test_run(
     command = GwasCommand(arguments, tmp_path, sw)
     command.run()
 
-    for a, b in zip(command.variable_collections, variable_collections, strict=False):
+    for a, b in zip(command.variable_collections, variable_collections, strict=True):
         assert a.phenotype_names == b.phenotype_names
         assert a.samples == b.samples
-    for eig, b in zip(eigendecompositions, variable_collections, strict=False):
+    for eig, b in zip(eigendecompositions, variable_collections, strict=True):
         assert eig.samples == b.samples
 
     sc = SummaryCollection.from_file(tmp_path / f"chr{chromosome}.metadata.yaml.gz")
@@ -104,7 +104,7 @@ def test_run(
     }
 
     for variable_collection, null_model_collection in zip(
-        variable_collections, null_model_collections, strict=False
+        variable_collections, null_model_collections, strict=True
     ):
         for i, phenotype_name in enumerate(variable_collection.phenotype_names):
             summary = summaries_by_phenotype[phenotype_name]

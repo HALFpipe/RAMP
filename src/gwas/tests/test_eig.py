@@ -255,9 +255,9 @@ def test_eig_rmw(
         samples = header.split()
         assert set(samples) == set(vcf_file.samples)
         sample_indices = [vcf_file.samples.index(s) for s in samples]
-        for i, line in zip(sample_indices, kinship_lines, strict=False):
+        for i, line in zip(sample_indices, kinship_lines, strict=True):
             tokens = line.split()
-            for j, token in zip(sample_indices, tokens, strict=False):
+            for j, token in zip(sample_indices, tokens, strict=True):
                 kinship[i, j] = float(token)
                 kinship[j, i] = float(token)
 

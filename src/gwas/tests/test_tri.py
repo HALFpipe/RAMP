@@ -133,40 +133,40 @@ def test_tri_file(tmp_path: Path, numpy_tri: npt.NDArray, sw: SharedWorkspace):
 def test_tri_subset_samples(sw: SharedWorkspace):
     k = 100
 
-    A = np.random.rand(10000, k)
+    a = np.random.rand(10000, k)
     indices: list[int] = sorted(sample(range(k), 80))
 
-    B = A[:, indices]
-    C = A.transpose() @ A
+    b = a[:, indices]
+    c = a.transpose() @ a
     x, y = np.meshgrid(indices, indices)
-    D = C[x, y]
+    d = c[x, y]
     # Sanity check.
-    assert np.allclose(B.transpose() @ B, D)
+    assert np.allclose(b.transpose() @ b, d)
 
     samples = [f"sample_{i:02d}" for i in range(k)]
     subset_samples = [samples[i] for i in indices]
     assert len(subset_samples) < len(samples)
 
-    R = np.linalg.qr(A, mode="r")
-    assert isinstance(R, np.ndarray) and not isinstance(R, tuple)
-    R = R.transpose()  # Ensure that we have a lower triangular matrix
-    assert is_lower_triangular(R)
+    r = np.linalg.qr(a, mode="r")
+    assert isinstance(r, np.ndarray) and not isinstance(r, tuple)
+    r = r.transpose()  # Ensure that we have a lower triangular matrix
+    assert is_lower_triangular(r)
 
-    R1 = np.linalg.qr(B, mode="r")
-    assert isinstance(R1, np.ndarray) and not isinstance(R1, tuple)
-    R1 = R1.transpose()  # Ensure that we have a lower triangular matrix
-    assert is_lower_triangular(R1)
-    assert np.allclose(R1 @ R1.transpose(), D)
+    r1 = np.linalg.qr(b, mode="r")
+    assert isinstance(r1, np.ndarray) and not isinstance(r1, tuple)
+    r1 = r1.transpose()  # Ensure that we have a lower triangular matrix
+    assert is_lower_triangular(r1)
+    assert np.allclose(r1 @ r1.transpose(), d)
 
-    R2 = np.linalg.qr(R[indices, :].transpose(), mode="r")
-    assert isinstance(R2, np.ndarray)
-    R2 = R2.transpose()  # Ensure that we have a lower triangular matrix
-    assert is_lower_triangular(R2)
-    assert np.allclose(np.abs(R2), np.abs(R1))
-    assert np.allclose(R2 @ R2.transpose(), D)
+    r2 = np.linalg.qr(r[indices, :].transpose(), mode="r")
+    assert isinstance(r2, np.ndarray)
+    r2 = r2.transpose()  # Ensure that we have a lower triangular matrix
+    assert is_lower_triangular(r2)
+    assert np.allclose(np.abs(r2), np.abs(r1))
+    assert np.allclose(r2 @ r2.transpose(), d)
 
     tri = Triangular.from_numpy(
-        R,
+        r,
         sw,
         chromosome=1,
         samples=samples,
@@ -176,17 +176,17 @@ def test_tri_subset_samples(sw: SharedWorkspace):
     )
     assert isinstance(tri, Triangular)
     assert is_lower_triangular(tri.to_numpy())
-    assert np.allclose(tri.to_numpy(), R)
+    assert np.allclose(tri.to_numpy(), r)
 
     tri.subset_samples(subset_samples)
-    R3 = tri.to_numpy()
-    assert np.allclose(R3 @ R3.transpose(), D)
+    r3 = tri.to_numpy()
+    assert np.allclose(r3 @ r3.transpose(), d)
 
-    R4 = np.linalg.qr(R3.transpose(), mode="r")
-    assert isinstance(R4, np.ndarray)
-    R4 = R4.transpose()  # Ensure that we have a lower triangular matrix
-    assert is_lower_triangular(R4)
-    assert np.allclose(np.abs(R4), np.abs(R1))
+    r4 = np.linalg.qr(r3.transpose(), mode="r")
+    assert isinstance(r4, np.ndarray)
+    r4 = r4.transpose()  # Ensure that we have a lower triangular matrix
+    assert is_lower_triangular(r4)
+    assert np.allclose(np.abs(r4), np.abs(r1))
 
     tri.free()
     assert len(sw.allocations) == 1

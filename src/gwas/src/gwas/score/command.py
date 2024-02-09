@@ -99,14 +99,14 @@ class GwasCommand:
             missing_value_pattern = missing_value_patterns[:, i]
             pattern_samples: list[str] = [
                 sample
-                for sample, has_data in zip(samples, missing_value_pattern, strict=False)
+                for sample, has_data in zip(samples, missing_value_pattern, strict=True)
                 if has_data
             ]
             pattern_phenotypes: list[str] = sorted(
                 [
                     phenotype_name
                     for phenotype_name, j in zip(
-                        phenotype_names, missing_value_pattern_indices, strict=False
+                        phenotype_names, missing_value_pattern_indices, strict=True
                     )
                     if i == j
                 ]
