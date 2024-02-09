@@ -3,7 +3,7 @@
 from collections import OrderedDict
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import IO, Any, ClassVar, Iterable
+from typing import IO, Any, ClassVar
 
 import numpy as np
 import pandas as pd
@@ -207,7 +207,7 @@ class Scorefile:
 
     @classmethod
     def get_dtype(cls, _: ScorefileHeader):
-        return np.dtype(list(zip(cls.names, cls.types)))
+        return np.dtype(list(zip(cls.names, cls.types, strict=False)))
 
     @classmethod
     def read(
@@ -412,9 +412,9 @@ class Scorefile:
 
     @staticmethod
     def make_metadata(
-        variant: pd.Series,
+        variant,
         **kwargs,
-    ) -> Iterable[str]:
+    ) -> list[str]:
         # RareMetalWorker only calculates these for genotype data, not dosage data,
         # so we just set them to pre-defined values.
         hwe_pvalue = 1.0
@@ -439,7 +439,7 @@ class Scorefile:
             n_het,
             n_alt,
         )
-        return map(to_str, metadata)
+        return list(map(to_str, metadata))
 
     @classmethod
     def write_score(
@@ -477,7 +477,8 @@ class Scorefile:
 
         phenotype_count = u_stat.shape[1]
         for i, variant in enumerate(variants.itertuples()):
-            file_handle.write("\t".join(cls.make_metadata(variant, **kwargs)))
+            metadata = cls.make_metadata(variant, **kwargs)
+            file_handle.write("\t".join(metadata))
 
             for j in range(phenotype_count):
                 file_handle.write("\t")

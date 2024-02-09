@@ -9,7 +9,6 @@ from typing import Mapping, Sequence
 import numpy as np
 import pytest
 import scipy
-
 from gwas.eig import Eigendecomposition
 from gwas.log import logger
 from gwas.mem.arr import SharedArray
@@ -188,21 +187,21 @@ def test_eig_rmw(
 
     variants_path = tmp_path / f"chr{c}.variants.txt"
     with variants_path.open("wt") as file_handle:
-        file_handle.write(
-            "\n".join(
-                (
-                    ":".join(
-                        (
-                            str(vcf_file.chromosome),
-                            str(row.position),
-                            row.reference_allele,
-                            row.alternate_allele,
-                        )
-                    )
-                    for row in vcf_file.variants.itertuples()
+        variants_lines = (
+            ":".join(
+                map(
+                    str,
+                    (
+                        vcf_file.chromosome,
+                        row.position,
+                        row.reference_allele,
+                        row.alternate_allele,
+                    ),
                 )
             )
+            for row in vcf_file.variants.itertuples()
         )
+        file_handle.write("\n".join(variants_lines))
 
     with chdir(tmp_path):
         filtered_vcf_path = tmp_path / f"chr{c}.filt.vcf.gz"
@@ -251,14 +250,14 @@ def test_eig_rmw(
     sample_count = vcf_file.sample_count
     kinship = np.zeros((sample_count, sample_count))
     with gzip.open(tmp_path / "Empirical.Kinship.gz", "rt") as file_handle:
-        lines = file_handle.readlines()
-        header = lines.pop(0)
+        kinship_lines = file_handle.readlines()
+        header = kinship_lines.pop(0)
         samples = header.split()
         assert set(samples) == set(vcf_file.samples)
         sample_indices = [vcf_file.samples.index(s) for s in samples]
-        for i, line in zip(sample_indices, lines):
+        for i, line in zip(sample_indices, kinship_lines, strict=False):
             tokens = line.split()
-            for j, token in zip(sample_indices, tokens):
+            for j, token in zip(sample_indices, tokens, strict=False):
                 kinship[i, j] = float(token)
                 kinship[j, i] = float(token)
 

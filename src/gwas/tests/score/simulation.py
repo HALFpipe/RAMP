@@ -6,9 +6,8 @@ from subprocess import check_call
 
 import numpy as np
 import pytest
-from numpy import typing as npt
-
 from gwas.utils import Pool
+from numpy import typing as npt
 
 from ..conftest import DirectoryFactory
 from ..utils import gcta64, is_bfile, is_pfile, plink2
