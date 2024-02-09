@@ -16,13 +16,13 @@ jobs:
       tag: ${{ steps.build_tag.outputs.tag }}
     steps:
       - name: Login to DockerHub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: hippocampusgirl
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to container registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ${{ secrets.REGISTRY }}
           username: ${{ secrets.REGISTRY_USERNAME }}
