@@ -77,6 +77,9 @@ class VariableCollection:
             and np.isfinite(self.covariates.to_numpy()).all()
         )
 
+    def __post_init__(self) -> None:
+        self.remove_zero_variance_covariates()
+
     def copy(self) -> Self:
         phenotypes = self.phenotypes.to_numpy()
         covariates = self.covariates.to_numpy()
@@ -115,6 +118,39 @@ class VariableCollection:
             f"Subsetting variable collection to have {self.phenotype_count} phenotypes"
         )
 
+    def remove_zero_variance_covariates(self) -> None:
+        sw = self.covariates.sw
+
+        old_covariates = self.covariates
+
+        new_covariates = old_covariates.to_numpy()
+        zero_variance: npt.NDArray[np.bool_] = np.isclose(new_covariates.var(axis=0), 0)
+        zero_variance[0] = False  # Do not remove intercept
+
+        if np.any(zero_variance):
+            removed_covariates = [
+                name
+                for name, zero in zip(
+                    self.covariate_names[1:], zero_variance, strict=False
+                )
+                if zero
+            ]
+            logger.debug(
+                f"Removing covariates {removed_covariates} because they have zero "
+                "variance"
+            )
+            self.covariate_names = [
+                name
+                for name, zero in zip(self.covariate_names, zero_variance, strict=False)
+                if not zero
+            ]
+            new_covariates = new_covariates[:, ~zero_variance]
+
+            self.covariates = SharedArray.from_numpy(
+                new_covariates, sw, prefix="covariates"
+            )
+            old_covariates.free()
+
     def subset_samples(self, samples: list[str]) -> None:
         if samples == self.samples:
             # Nothing to do.
@@ -122,42 +158,22 @@ class VariableCollection:
 
         sw = self.phenotypes.sw
 
+        old_phenotypes = self.phenotypes
+        old_covariates = self.covariates
+
         sample_indices = [self.samples.index(sample) for sample in samples]
         self.samples = samples
 
-        new_phenotypes = self.phenotypes.to_numpy()[sample_indices, :]
-        self.phenotypes.free()
-        self.phenotypes = SharedArray.from_numpy(
-            new_phenotypes, sw, prefix="phenotypes"
-        )
+        new_phenotypes = old_phenotypes.to_numpy()[sample_indices, :]
+        self.phenotypes = SharedArray.from_numpy(new_phenotypes, sw, prefix="phenotypes")
+        old_phenotypes.free()
 
-        new_covariates = self.covariates.to_numpy()[sample_indices, :]
-        zero_variance: npt.NDArray[np.bool_] = np.isclose(
-            new_covariates[:, 1:].var(axis=0), 0
-        )
-        if np.any(zero_variance):
-            removed_covariates = [
-                name
-                for name, zero in zip(self.covariate_names[1:], zero_variance)
-                if zero
-            ]
-            logger.debug(
-                f"Removing covariates {removed_covariates} because they have zero "
-                "variance after subsetting samples"
-            )
-            self.covariate_names = [
-                name
-                for name, zero in zip(self.covariate_names, zero_variance)
-                if not zero
-            ]
-            new_covariates = new_covariates[:, ~zero_variance]
+        new_covariates = old_covariates.to_numpy()[sample_indices, :]
+        self.covariates = SharedArray.from_numpy(new_covariates, sw, prefix="covariates")
+        old_covariates.free()
+        self.remove_zero_variance_covariates()
 
-        self.covariates.free()
-        self.covariates = SharedArray.from_numpy(
-            new_covariates, sw, prefix="covariates"
-        )
-
-        logger.debug(
+        logger.info(
             f"Subsetting variable collection to have {len(samples)} samples, "
             f"{self.covariate_count} covariates, and {self.phenotype_count} phenotypes."
         )
@@ -191,11 +207,9 @@ class VariableCollection:
                 covariates
             ).any(axis=1)
         else:
-            raise ValueError(
-                f"Unknown missing value strategy: {missing_value_strategy}"
-            )
+            raise ValueError(f"Unknown missing value strategy: {missing_value_strategy}")
 
-        samples = [sample for sample, c in zip(samples, criterion) if c]
+        samples = [sample for sample, c in zip(samples, criterion, strict=False) if c]
         phenotypes = phenotypes[criterion, :]
         covariates = covariates[criterion, :]
 
