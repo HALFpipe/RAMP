@@ -70,6 +70,7 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
             (vcf_file,) = calc_vcf(
                 [Path(arguments.vcf)],
                 output_directory,
+                num_threads=arguments.num_threads,
             )
             vcf_file.set_samples(set(vcf_file.vcf_samples))
             vcf_file.set_variants_from_cutoffs(

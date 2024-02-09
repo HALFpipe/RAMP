@@ -9,7 +9,8 @@ import numpy as np
 from numpy import typing as npt
 
 from ..utils import chromosome_from_int
-from .base import Variant, VCFFile
+from .base import VCFFile
+from .variant import Variant
 
 
 class CppVCFFile(VCFFile):

@@ -1,24 +1,23 @@
 # -*- coding: utf-8 -*-
 from pathlib import Path
-from typing import Literal, NamedTuple
+from typing import NamedTuple, Sequence
 
 import numpy as np
 import pandas as pd
 import pytest
+from gwas.compression.pipe import CompressedTextReader
+from gwas.vcf.base import Engine, Variant, VCFFile
 from numpy import typing as npt
 from tqdm.auto import tqdm
 
-from gwas.compression.pipe import CompressedTextReader
-from gwas.vcf.base import Variant, VCFFile
-
 sample_size_label = "small"
 chromosome: int = 22
+engines: Sequence[Engine] = list(Engine.__members__.values())
 
 
-@pytest.mark.parametrize("engine", ["cpp", "python"])
+@pytest.mark.parametrize("engine", engines)
 def test_vcf_file(
-    tmp_path: Path,
-    engine: Literal["cpp", "python"],
+    engine: Engine,
     vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
 ):
     vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
@@ -46,9 +45,7 @@ def test_vcf_file(
 
 
 @pytest.fixture(scope="session")
-def vcf_path(
-    vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]]
-) -> Path:
+def vcf_path(vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]]) -> Path:
     vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
     return vcf_path
 
@@ -78,7 +75,7 @@ def numpy_read_result(vcf_path: Path) -> ReadResult:
     return ReadResult(VCFFile.make_data_frame(vcf_variants), vcf_dosages)
 
 
-def vcf_read(engine: str, vcf_path: Path) -> ReadResult:
+def vcf_read(engine: Engine, vcf_path: Path) -> ReadResult:
     vcf_file = VCFFile.from_path(vcf_path, engine=engine)
     dosages = np.zeros((vcf_file.variant_count, vcf_file.sample_count))
     with vcf_file:
@@ -87,19 +84,17 @@ def vcf_read(engine: str, vcf_path: Path) -> ReadResult:
     return ReadResult(vcf_file.vcf_variants, dosages)
 
 
-@pytest.mark.parametrize("engine", ["cpp", "python"])
-def test_read(benchmark, vcf_path: Path, numpy_read_result: ReadResult, engine: str):
+@pytest.mark.parametrize("engine", engines)
+def test_read(benchmark, vcf_path: Path, numpy_read_result: ReadResult, engine: Engine):
     read_result = benchmark(vcf_read, engine, vcf_path)
 
     assert np.all(numpy_read_result.variants == read_result.variants)
     assert np.allclose(numpy_read_result.dosages, read_result.dosages)
 
 
-def test_cpp(
-    vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]]
-) -> None:
+def test_cpp(vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]]) -> None:
     vcf_path = vcf_paths_by_size_and_chromosome["small"][chromosome]
-    vcf_file = VCFFile.from_path(vcf_path, engine="cpp")
+    vcf_file = VCFFile.from_path(vcf_path, engine=Engine.cpp)
 
     # from pympler import muppy, summary
 

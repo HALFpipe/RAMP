@@ -3,78 +3,25 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from enum import Enum, auto
 from functools import partial
-from multiprocessing import cpu_count
 from pathlib import Path
-from typing import ClassVar, NamedTuple, Self
+from typing import ClassVar
 
 import numpy as np
 import pandas as pd
 from numpy import typing as npt
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from ..compression.pipe import CompressedTextReader, load_from_cache, save_to_cache
 from ..log import logger
-from ..utils import Pool, chromosome_to_int
+from ..utils import IterationOrder, make_pool_or_null_context
+from .variant import Variant
 
 
-class Variant(NamedTuple):
-    chromosome_int: int
-    position: int
-    reference_allele: str
-    alternate_allele: str
-
-    is_imputed: bool
-    alternate_allele_frequency: float
-    minor_allele_frequency: float
-    r_squared: float
-
-    format_str: str
-
-    @classmethod
-    def from_metadata_columns(
-        cls,
-        chromosome_str: str,
-        position_str: str,
-        reference_allele: str,
-        alternate_allele: str,
-        info_str: str,
-        format_str: str,
-    ) -> Self:
-        chromosome: int | str = chromosome_str
-        if isinstance(chromosome, str) and chromosome.isdigit():
-            chromosome = int(chromosome)
-
-        position: int = int(position_str)
-
-        info_tokens = info_str.split(";")
-        info: dict[str, str] = dict()
-        for token in info_tokens:
-            if "=" not in token:
-                continue
-            token, value = token.split("=")
-            info[token] = value
-
-        is_imputed = "IMPUTED" in info_tokens
-        alternate_allele_frequency = float(info.get("AF", np.nan))
-        minor_allele_frequency = float(info.get("MAF", np.nan))
-
-        if is_imputed:
-            r_squared = float(info.get("R2", np.nan))
-        else:
-            r_squared = float(info.get("ER2", np.nan))
-
-        return cls(
-            chromosome_to_int(chromosome),
-            position,
-            reference_allele,
-            alternate_allele,
-            is_imputed,
-            alternate_allele_frequency,
-            minor_allele_frequency,
-            r_squared,
-            format_str,
-        )
+class Engine(Enum):
+    python = auto()
+    cpp = auto()
 
 
 variant_columns = [
@@ -244,7 +191,8 @@ class VCFFile(CompressedTextReader):
     def read(
         self,
         dosages: npt.NDArray,
-    ) -> None: ...
+    ) -> None:
+        ...
 
     @staticmethod
     def cache_key(vcf_path: Path) -> str:
@@ -260,13 +208,13 @@ class VCFFile(CompressedTextReader):
     def from_path(
         file_path: Path | str,
         samples: set[str] | None = None,
-        engine: str = "cpp",
+        engine: Engine = Engine.cpp,
     ) -> VCFFile:
-        if engine == "python":
+        if engine == Engine.python:
             from .python import PyVCFFile
 
             vcf_file: VCFFile = PyVCFFile(file_path)
-        elif engine == "cpp":
+        elif engine == Engine.cpp:
             from .cpp import CppVCFFile
 
             vcf_file = CppVCFFile(file_path)
@@ -298,10 +246,11 @@ class VCFFile(CompressedTextReader):
 def load_vcf(
     cache_path: Path,
     vcf_path: Path,
+    engine: Engine = Engine.cpp,
 ) -> VCFFile:
     vcf_file: VCFFile | None = VCFFile.load_from_cache(cache_path, vcf_path)
     if vcf_file is None:
-        vcf_file = VCFFile.from_path(vcf_path)
+        vcf_file = VCFFile.from_path(vcf_path, engine=engine)
         vcf_file.save_to_cache(cache_path)
     else:
         logger.debug(f'Cached VCF file metadata for "{VCFFile.cache_key(vcf_path)}"')
@@ -311,13 +260,19 @@ def load_vcf(
 def calc_vcf(
     vcf_paths: list[Path],
     cache_path: Path,
+    num_threads: int = 1,
+    engine: Engine = Engine.cpp,
 ) -> list[VCFFile]:
-    processes = cpu_count() // 3
-    processes = min(processes, len(vcf_paths))
-    with Pool(processes=processes, maxtasksperchild=1) as pool:
+    pool, iterator = make_pool_or_null_context(
+        vcf_paths,
+        partial(load_vcf, cache_path, engine=engine),
+        num_threads=num_threads,
+        iteration_order=IterationOrder.UNORDERED,
+    )
+    with pool:
         vcf_files = list(
             tqdm(
-                pool.imap(partial(load_vcf, cache_path), vcf_paths),
+                iterator,
                 total=len(vcf_paths),
                 unit="files",
                 desc="loading vcf metadata",

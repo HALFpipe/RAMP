@@ -18,6 +18,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
     from gwas.compression.arr.base import compression_methods
     from gwas.null_model.base import NullModelCollection
     from gwas.utils import chromosomes_set
+    from gwas.vcf.base import Engine
 
     argument_parser = ArgumentParser()
 
@@ -99,6 +100,12 @@ def parse_arguments(argv: list[str]) -> Namespace:
     argument_parser.add_argument("--debug", action="store_true", default=False)
     argument_parser.add_argument("--mem-gb", type=float)
     argument_parser.add_argument("--num-threads", type=int, default=mp.cpu_count())
+    argument_parser.add_argument(
+        "--vcf-engine",
+        choices=Engine,
+        type=Engine.__getitem__,
+        default=Engine.cpp,
+    )
 
     return argument_parser.parse_args(argv)
 

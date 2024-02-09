@@ -99,14 +99,14 @@ class GwasCommand:
             missing_value_pattern = missing_value_patterns[:, i]
             pattern_samples: list[str] = [
                 sample
-                for sample, has_data in zip(samples, missing_value_pattern)
+                for sample, has_data in zip(samples, missing_value_pattern, strict=False)
                 if has_data
             ]
             pattern_phenotypes: list[str] = sorted(
                 [
                     phenotype_name
                     for phenotype_name, j in zip(
-                        phenotype_names, missing_value_pattern_indices
+                        phenotype_names, missing_value_pattern_indices, strict=False
                     )
                     if i == j
                 ]
@@ -118,9 +118,7 @@ class GwasCommand:
                 )
                 continue
             if len(pattern_phenotypes) == 0:
-                raise RuntimeError(
-                    f"No phenotypes in chunk {i}. This should not happen"
-                )
+                raise RuntimeError(f"No phenotypes in chunk {i}. This should not happen")
 
             variable_collection = base_variable_collection.copy()
             variable_collection.subset_phenotypes(pattern_phenotypes)
@@ -181,7 +179,12 @@ class GwasCommand:
         self.covariate_paths: list[Path] = [Path(p) for p in self.arguments.covariates]
 
         # Load VCF file metadata and cache it
-        vcf_files = calc_vcf(vcf_paths, self.output_directory)
+        vcf_files = calc_vcf(
+            vcf_paths,
+            self.output_directory,
+            num_threads=self.arguments.num_threads,
+            engine=self.arguments.vcf_engine,
+        )
         self.set_vcf_files(vcf_files)
 
         # Update samples to only include those that are in all VCF files
