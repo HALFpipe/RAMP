@@ -75,6 +75,7 @@ mamba create --name "gwas" \
   "bzip2" "p7zip>=15.09" \
   "python-blosc2" "msgpack-python" "ndindex" \
   "bcftools>=1.17" "plink" "plink2" "tabix" \
-  "cython>=3b1" "mkl-include" "mypy" "pytest-benchmark" "threadpoolctl" \
+  "cython>=3b1" "mkl-include" "zlib" \
+  "mypy" "pytest-benchmark" "threadpoolctl" \
   "gcc" "gxx" "rust" "sysroot_linux-64>=2.17"
 ```
