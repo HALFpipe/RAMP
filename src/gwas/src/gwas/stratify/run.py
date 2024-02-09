@@ -200,11 +200,11 @@ def apply_classes_to_phenotypes(
         class_samples = set.intersection(
             *(
                 sample_classes[variable][value]
-                for variable, value in zip(variables, value_tuple)
+                for variable, value in zip(variables, value_tuple, strict=False)
             )
         )
 
-        class_info = dict(zip(variables, value_tuple))
+        class_info = dict(zip(variables, value_tuple, strict=False))
         if len(class_samples) < arguments.minimum_sample_size:
             logger.info(
                 f"Will not output {class_info} because it has "
@@ -225,7 +225,8 @@ def apply_classes_to_phenotypes(
         phenotype_arrays.append(class_phenotype_array)
 
         prefix = "_".join(
-            f"{variable}-{value}" for variable, value in zip(variables, value_tuple)
+            f"{variable}-{value}"
+            for variable, value in zip(variables, value_tuple, strict=False)
         )
 
         phenotype_names_new.extend(f"{prefix}_{name}" for name in phenotype_names_base)

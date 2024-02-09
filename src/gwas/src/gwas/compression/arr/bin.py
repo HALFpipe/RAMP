@@ -54,9 +54,14 @@ class Blosc2FileArray(FileArray[T]):
             # Use the n-th root to determine the ideal shape of the unknown axes
             unknown_count = sum(s is None for s in reduced_shape)
             edge_size = int(np.floor(np.power(available_size, 1 / unknown_count)))
-            if any(s < edge_size for c, s in zip(reduced_shape, shape) if c is None):
+            if any(
+                s < edge_size
+                for c, s in zip(reduced_shape, shape, strict=False)
+                if c is None
+            ):
                 reduced_shape = [
-                    s if s < edge_size else r for r, s in zip(reduced_shape, shape)
+                    s if s < edge_size else r
+                    for r, s in zip(reduced_shape, shape, strict=False)
                 ]
                 continue
             reduced_shape = [edge_size if r is None else r for r in reduced_shape]

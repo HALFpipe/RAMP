@@ -4,12 +4,11 @@ from pathlib import Path
 from typing import Literal, Mapping
 
 import pytest
-from psutil import virtual_memory
-
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri.calc import calc_tri
 from gwas.utils import chromosome_to_int, chromosomes_set
 from gwas.vcf.base import VCFFile, calc_vcf
+from psutil import virtual_memory
 
 base_path: Path = Path(os.environ["DATA_PATH"])
 dataset: str = "opensnp"

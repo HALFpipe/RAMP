@@ -2,7 +2,6 @@
 from pathlib import Path
 
 import numpy as np
-
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 

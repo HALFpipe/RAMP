@@ -7,11 +7,10 @@ from typing import Any
 
 import numpy as np
 import pytest
-from more_itertools import peekable
-from numpy import typing as npt
-
 from gwas.log import logger
 from gwas.utils import unwrap_which
+from more_itertools import peekable
+from numpy import typing as npt
 
 field_mapping: dict[str, str] = {
     "X:": "x",

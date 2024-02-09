@@ -4,12 +4,11 @@ from random import sample
 
 import numpy as np
 import pytest
-from numpy import typing as npt
-
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri.base import Triangular, is_lower_triangular
 from gwas.tri.tsqr import scale
 from gwas.vcf.base import VCFFile
+from numpy import typing as npt
 
 sample_size_label = "large"
 chromosome = 22
@@ -18,7 +17,7 @@ minor_allele_frequency_cutoff = 0.05
 
 @pytest.fixture(scope="module")
 def vcf_file(
-    vcf_files_by_size_and_chromosome: dict[str, dict[int | str, VCFFile]]
+    vcf_files_by_size_and_chromosome: dict[str, dict[int | str, VCFFile]],
 ) -> VCFFile:
     return vcf_files_by_size_and_chromosome[sample_size_label][chromosome]
 

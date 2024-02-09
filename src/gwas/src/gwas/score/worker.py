@@ -161,6 +161,7 @@ class Calc(Worker):
             for start, end in zip(
                 np.concatenate(([0], phenotype_indices[:-1])),
                 phenotype_indices,
+                strict=False,
             )
         ]
 
@@ -237,9 +238,7 @@ class Calc(Worker):
                 # Calculate the score statistics
                 u_stat = stat[0, phenotype_slice, :].transpose()
                 v_stat = stat[1, phenotype_slice, :].transpose()
-                logger.debug(
-                    f"Calculating U statistic for phenotypes {phenotype_slice}"
-                )
+                logger.debug(f"Calculating U statistic for phenotypes {phenotype_slice}")
 
                 calc_u_stat(scaled_residuals_matrix, rotated_genotypes, u_stat)
                 # np.set_printoptions(linewidth=1000)
@@ -321,9 +320,9 @@ class ScoreWriter(Worker):
                 two_dimensional_stat = stat.transpose().reshape(
                     (variant_count, 2 * phenotype_count)
                 )
-                self.stat_file_array[variant_slice, phenotype_slice] = (
-                    two_dimensional_stat
-                )
+                self.stat_file_array[
+                    variant_slice, phenotype_slice
+                ] = two_dimensional_stat
 
                 # Allow the calculation to continue
                 for i in range(job_count):

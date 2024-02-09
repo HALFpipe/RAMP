@@ -7,9 +7,6 @@ import numpy as np
 import pytest
 import scipy
 import seaborn as sns
-from matplotlib import pyplot as plt
-from numpy import typing as npt
-
 from gwas.eig import Eigendecomposition, EigendecompositionCollection
 from gwas.log import logger
 from gwas.mem.arr import SharedArray
@@ -17,6 +14,8 @@ from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection
 from gwas.score.calc import calc_u_stat, calc_v_stat
 from gwas.vcf.base import VCFFile
+from matplotlib import pyplot as plt
+from numpy import typing as npt
 
 from ..utils import check_bias
 from .conftest import RmwScore
@@ -40,7 +39,10 @@ def test_rotate_demeaned_genotypes(
 
     genotypes = genotypes_array.to_numpy()
     for eigenvector_array, sample_boolean_vector, rotated_genotypes_array in zip(
-        ec.eigenvector_arrays, ec.sample_boolean_vectors, rotated_genotypes_arrays
+        ec.eigenvector_arrays,
+        ec.sample_boolean_vectors,
+        rotated_genotypes_arrays,
+        strict=False,
     ):
         eigenvectors = eigenvector_array.to_numpy()
 

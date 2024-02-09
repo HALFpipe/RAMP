@@ -233,7 +233,9 @@ class EigendecompositionCollection:
         )
         eigenvector_arrays: list[SharedArray] = list()
 
-        for eig, sample_boolean_vector in zip(eigs, sample_boolean_vectors):
+        for eig, sample_boolean_vector in zip(
+            eigs, sample_boolean_vectors, strict=False
+        ):
             sample_count = len(eig.samples)
 
             prefix = eig.get_prefix(chromosome=eig.chromosome)
