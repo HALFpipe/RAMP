@@ -40,12 +40,18 @@ build-backend = "setuptools.build_meta"
 [project.optional-dependencies]
 test = ["pytest", "pytest-benchmark"]
 
-[tool.isort]
-line_length = 88
-profile = "black"
+[tool.ruff]
+line-length = 89
 
-[tool.pylint.format]
-max-line-length = "88"
+[tool.ruff.lint]
+select = [
+    "F", # pyflakes
+    "E", # pycodestyle
+    "W", # pycodestyle
+    "I", # isort
+    "B", # bugbears
+    "N", # pep8-naming
+]
 
 [tool.pytest.ini_options]
 markers = ["slow: marks tests that run much longer than most"]
