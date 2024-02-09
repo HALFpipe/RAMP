@@ -104,7 +104,7 @@ def plot_populations(
     if not isinstance(color_palette, list):
         raise ValueError
     sample_colors = list()
-    for i, sample in enumerate(samples):
+    for sample in samples:
         matches = {p for p in populations_to_plot if sample in sample_populations[p]}
         if len(matches) == 1:
             (p,) = matches
@@ -141,42 +141,51 @@ def plot_populations(
         coordinates = np.dstack((x, y))
 
         z: dict[str, npt.NDArray] = dict()
-        for j, p in enumerate(populations):
-            q = super_populations[p]
-            if len(sample_populations[p]) == 0 and len(sample_populations[q]) == 0:
+        for population in populations:
+            super_population = super_populations[population]
+            if (
+                len(sample_populations[population]) == 0
+                and len(sample_populations[super_population]) == 0
+            ):
                 continue
 
             # Plot contours.
-            c = reference_components[p][:, [c1, c2]]
+            c = reference_components[population][:, [c1, c2]]
             mean = np.mean(c, axis=0)
             covariance = np.cov(c.transpose())
             marginal_multivariate_normal = multivariate_normal(
-                mean=mean, cov=covariance  # type: ignore
+                mean=mean,
+                cov=covariance,  # type: ignore
             )
-            z[p] = marginal_multivariate_normal.logpdf(coordinates)
+            z[population] = marginal_multivariate_normal.logpdf(coordinates)
 
         if populations_to_plot != populations:
-            for p, q in super_populations.items():
-                if p not in z:
+            for population, super_population in super_populations.items():
+                if population not in z:
                     continue
-                if q not in z:
-                    z[q] = z.pop(p)
+                if super_population not in z:
+                    z[super_population] = z.pop(population)
                 else:
-                    z[q] = np.minimum(z[q], z.pop(p))
+                    z[super_population] = np.minimum(
+                        z[super_population], z.pop(population)
+                    )
 
         artists = list()
-        for j, q in enumerate(populations_to_plot):
-            if q not in z:
+        for j, super_population in enumerate(populations_to_plot):
+            if super_population not in z:
                 artists.append(None)
                 continue
             contour_set = ax.contour(
-                x, y, z[q], levels=[cutoff], colors=[color_palette[j]]
+                x, y, z[super_population], levels=[cutoff], colors=[color_palette[j]]
             )
             (artist,), _ = contour_set.legend_elements()
+            if artist is None:
+                continue
             artists.append(artist)
 
     population_labels = [
-        f"{p} ({population_descriptions[p]})" for p in populations_to_plot
+        f"{population} ({population_descriptions[population]})"
+        for population in populations_to_plot
     ]
     ax_bottom_left.legend(
         handles=artists,
