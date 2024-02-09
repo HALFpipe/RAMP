@@ -34,7 +34,8 @@ def classify_samples_by_mds(
         mean = np.mean(c, axis=0)
         covariance = np.cov(c.transpose())
         full_multivariate_normal = scipy.stats.multivariate_normal(
-            mean=mean, cov=covariance  # type: ignore
+            mean=mean,
+            cov=covariance,  # type: ignore
         )
 
         # Determine which samples are in the populations.
@@ -81,13 +82,13 @@ def parse_mds(arguments: Namespace, rename_sample: Callable[[str], str]) -> MDS:
     types = [object, object, int]
     component_count = len(header) - len(types)
     types += [float] * component_count
-    dtype = np.dtype(list(zip(header, types)))
+    dtype = np.dtype(list(zip(header, types, strict=False)))
 
     matrix = np.loadtxt(arguments.mds, skiprows=1, delimiter=",", dtype=dtype)
     is_sample = ~np.isin(matrix["FID"], populations)
     samples: list[SampleID] = [
         SampleID(fid, iid)
-        for fid, iid in zip(matrix["FID"], matrix["IID"])
+        for fid, iid in zip(matrix["FID"], matrix["IID"], strict=False)
         if fid not in populations
     ]
 

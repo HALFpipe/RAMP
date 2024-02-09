@@ -5,7 +5,6 @@ from typing import Mapping
 
 import numpy as np
 import pandas as pd
-
 from gwas.compression.pipe import CompressedTextReader
 from gwas.eig import Eigendecomposition
 from gwas.mem.wkspace import SharedWorkspace
@@ -90,10 +89,10 @@ def test_run(
     command = GwasCommand(arguments, tmp_path, sw)
     command.run()
 
-    for a, b in zip(command.variable_collections, variable_collections):
+    for a, b in zip(command.variable_collections, variable_collections, strict=False):
         assert a.phenotype_names == b.phenotype_names
         assert a.samples == b.samples
-    for eig, b in zip(eigendecompositions, variable_collections):
+    for eig, b in zip(eigendecompositions, variable_collections, strict=False):
         assert eig.samples == b.samples
 
     sc = SummaryCollection.from_file(tmp_path / f"chr{chromosome}.metadata.yaml.gz")
@@ -105,7 +104,7 @@ def test_run(
     }
 
     for variable_collection, null_model_collection in zip(
-        variable_collections, null_model_collections
+        variable_collections, null_model_collections, strict=False
     ):
         for i, phenotype_name in enumerate(variable_collection.phenotype_names):
             summary = summaries_by_phenotype[phenotype_name]
@@ -156,9 +155,7 @@ def test_run(
         finite = ~(np.isclose(u_stat[:, i], 0) & np.isclose(v_stat[:, i], 1))
         missing_rate = (~finite).mean()
 
-        assert missing_rate <= max(
-            rmw_missing_rate * 2, 0.1
-        ), "Missing rate is too high"
+        assert missing_rate <= max(rmw_missing_rate * 2, 0.1), "Missing rate is too high"
 
         to_compare = finite & rmw_finite
 

@@ -119,9 +119,7 @@ class TextFileArray(FileArray[T]):
 
         # Validate key
         if row_step is not None and row_step != 1:
-            raise ValueError(
-                "Can only write text file sequentially, row step must be 1"
-            )
+            raise ValueError("Can only write text file sequentially, row step must be 1")
         if col_step is not None and col_step != 1:
             raise ValueError(
                 "Can only write text file sequentially, column step must be 1"

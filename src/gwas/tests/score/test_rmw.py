@@ -4,7 +4,6 @@ from time import time
 
 import blosc2
 import numpy as np
-
 from gwas.compression.arr.base import FileArray, compression_methods
 from gwas.log import logger
 

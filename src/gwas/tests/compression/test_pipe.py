@@ -4,7 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
 from gwas.compression.pipe import (
     CompressedBytesReader,
     CompressedBytesWriter,

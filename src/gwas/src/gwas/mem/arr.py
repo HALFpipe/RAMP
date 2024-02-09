@@ -301,12 +301,12 @@ class SharedArray:
         self.sw.allocations = allocations
 
     @overload
-    def triangularize(
-        self, pivoting: Literal[True] = True
-    ) -> npt.NDArray[np.uint32]: ...
+    def triangularize(self, pivoting: Literal[True] = True) -> npt.NDArray[np.uint32]:
+        ...
 
     @overload
-    def triangularize(self, pivoting: Literal[False]) -> None: ...
+    def triangularize(self, pivoting: Literal[False]) -> None:
+        ...
 
     def triangularize(self, pivoting: bool = True):
         """Triangularize to upper triangular matrix via the LAPACK routine GEQRF or

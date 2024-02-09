@@ -8,8 +8,6 @@ from typing import IO, Mapping
 
 import numpy as np
 import pytest
-from numpy import typing as npt
-
 from gwas.eig import Eigendecomposition
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
@@ -25,6 +23,7 @@ from gwas.utils import (
     to_str,
 )
 from gwas.vcf.base import VCFFile
+from numpy import typing as npt
 
 from ..conftest import DirectoryFactory
 from ..utils import rmw, to_bgzip
@@ -102,7 +101,7 @@ def variable_collections(
         vc = vc_by_phenotype[phenotype_name]
         phenotype_samples = [
             sample
-            for sample, missing in zip(samples, should_be_missing[:, i])
+            for sample, missing in zip(samples, should_be_missing[:, i], strict=False)
             if not missing
         ]
         assert vc.samples == phenotype_samples
@@ -144,7 +143,7 @@ def null_model_collections(
             eigendecomposition, variable_collection, method="fastlmm"
         )
         for variable_collection, eigendecomposition in zip(
-            variable_collections, eigendecompositions
+            variable_collections, eigendecompositions, strict=False
         )
     ]
 
@@ -193,7 +192,7 @@ def rmw_commands(
         pass  # Truncate file
 
     for variable_collection, eigendecomposition in zip(
-        variable_collections, eigendecompositions
+        variable_collections, eigendecompositions, strict=False
     ):
         kinship = (
             eigendecomposition.eigenvectors * eigendecomposition.eigenvalues
@@ -349,7 +348,9 @@ def rotated_genotypes_arrays(
     )
 
     rotated_genotypes_arrays: list[SharedArray] = list()
-    for eig, sample_boolean_vector in zip(eigendecompositions, sample_boolean_vectors):
+    for eig, sample_boolean_vector in zip(
+        eigendecompositions, sample_boolean_vectors, strict=False
+    ):
         sample_count = eig.sample_count
 
         name = SharedArray.get_name(sw, "rotated-genotypes")

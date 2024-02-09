@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import pytest
-
 from gwas.eig import Eigendecomposition, EigendecompositionCollection
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace

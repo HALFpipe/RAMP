@@ -5,7 +5,6 @@ from typing import Type
 import numpy as np
 import pytest
 import torch
-
 from gwas.log import logger
 from gwas.null_model.fastlmm import FaSTLMM
 from gwas.null_model.ml import (
@@ -47,6 +46,7 @@ def test_fastlmm(
         rmw_debug.log_likelihood,
         rmw_debug.beta,
         rmw_debug.factor,
+        strict=False,
     ):
         terms = torch.tensor([variance_ratio, 1], dtype=torch.float64)
 
@@ -58,9 +58,7 @@ def test_fastlmm(
         sigma = float(torch.square(r.scaled_residuals).mean())
         assert np.isclose(sigma, rmw_sigma, atol=1e-3)
 
-        (weights, _, residuals, variance) = ml.get_standard_errors(
-            terms, optimize_input
-        )
+        (weights, _, residuals, variance) = ml.get_standard_errors(terms, optimize_input)
         # Sanity check as these values should just be passed through
         assert np.allclose(weights, r.regression_weights, atol=1e-3)
         assert np.allclose(residuals, r.scaled_residuals, atol=1e-3)
@@ -132,8 +130,7 @@ def test_optimize(
     logger.info(f"heritability is {heritability} (rmw is {rmw_heritability})")
     log_likelihood = -0.5 * ml.minus_two_log_likelihood(terms, optimize_input)
     logger.info(
-        f"log likelihood is {log_likelihood} "
-        f"(rmw is {rmw_debug.log_likelihood_hat})"
+        f"log likelihood is {log_likelihood} " f"(rmw is {rmw_debug.log_likelihood_hat})"
     )
     if ml_class == ProfileMaximumLikelihood:
         pass

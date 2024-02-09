@@ -116,9 +116,7 @@ class FileArray(Generic[T], AbstractContextManager):
         if isinstance(compression_method, Blosc2CompressionMethod):
             from .bin import Blosc2FileArray
 
-            return Blosc2FileArray(
-                file_path, shape, dtype, compression_method, **kwargs
-            )
+            return Blosc2FileArray(file_path, shape, dtype, compression_method, **kwargs)
         elif isinstance(compression_method, TextCompressionMethod):
             from .text import TextFileArray
 

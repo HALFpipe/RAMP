@@ -5,10 +5,9 @@ from pathlib import Path
 from subprocess import check_call
 
 import numpy as np
-from numpy import typing as npt
-
 from gwas.log import logger
 from gwas.utils import unwrap_which
+from numpy import typing as npt
 
 bcftools = unwrap_which("bcftools")
 gcta64 = unwrap_which("gcta64")

@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 import scipy
 import torch
-
 from gwas.null_model.ml import (
     MaximumLikelihood,
     OptimizeInput,

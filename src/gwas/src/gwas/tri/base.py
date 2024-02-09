@@ -48,9 +48,7 @@ class Triangular(SharedArray):
             # Nothing to do
             return
 
-        new_sample_indices = np.array(
-            [self.samples.index(sample) for sample in samples]
-        )
+        new_sample_indices = np.array([self.samples.index(sample) for sample in samples])
         # Remove samples
         self.compress(new_sample_indices)
         self.samples = samples

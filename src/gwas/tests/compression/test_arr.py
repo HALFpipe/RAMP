@@ -3,7 +3,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
 from gwas.compression.arr.base import FileArray, compression_methods
 from gwas.compression.pipe import CompressedTextReader
 
@@ -21,9 +20,7 @@ def test_text_file_array(tmp_path: Path):
 
     row_names = [f"row_{i + 1:04d}" for i in range(array_proxy.shape[0])]
     row_data = np.random.rand(array_proxy.shape[0])
-    array_proxy.set_axis_metadata(
-        0, pd.DataFrame({"name": row_names, "data": row_data})
-    )
+    array_proxy.set_axis_metadata(0, pd.DataFrame({"name": row_names, "data": row_data}))
 
     with array_proxy:
         array_proxy[0 : array_proxy.shape[0], 0 : array_proxy.shape[1]] = np.full(
@@ -52,9 +49,7 @@ def test_text_file_array_chunks(tmp_path: Path):
 
     row_names = [f"row_{i + 1:04d}" for i in range(array_proxy.shape[0])]
     row_data = np.random.rand(array_proxy.shape[0])
-    array_proxy.set_axis_metadata(
-        0, pd.DataFrame({"name": row_names, "data": row_data})
-    )
+    array_proxy.set_axis_metadata(0, pd.DataFrame({"name": row_names, "data": row_data}))
 
     with array_proxy:
         array_proxy[0 : array_proxy.shape[0], 0 : array_proxy.shape[1]] = np.full(

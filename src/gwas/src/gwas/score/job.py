@@ -80,6 +80,7 @@ class VariableCollectionSummary:
                     self.covariates.keys(),
                     regression_weights[i],
                     standard_errors[i],
+                    strict=False,
                 )
             }
 
@@ -107,6 +108,7 @@ class SummaryCollection:
         for summary, vc in zip(
             chain.from_iterable(chunk.values() for chunk in self.chunks.values()),
             chain.from_iterable(variable_collections),
+            strict=False,
         ):
             phenotype_names = list(summary.phenotypes.keys())
             if phenotype_names != vc.phenotype_names:
@@ -147,9 +149,7 @@ class SummaryCollection:
 @dataclass
 class JobCollection:
     vcf_file: VCFFile
-    get_eigendecomposition: Callable[
-        [int | str, VariableCollection], Eigendecomposition
-    ]
+    get_eigendecomposition: Callable[[int | str, VariableCollection], Eigendecomposition]
     null_model_method: str
     output_directory: Path
     compression_method: CompressionMethod
@@ -217,7 +217,9 @@ class JobCollection:
     def run(self) -> None:
         phenotype_offset: int = 0
         for variable_collections, summaries in zip(
-            self.variable_collection_chunks, self.summary_collection.chunks.values()
+            self.variable_collection_chunks,
+            self.summary_collection.chunks.values(),
+            strict=False,
         ):
             eigendecompositions = [
                 self.get_eigendecomposition(self.chromosome, vc)
@@ -230,7 +232,10 @@ class JobCollection:
             inverse_variance_arrays: list[SharedArray] = list()
             scaled_residuals_arrays: list[SharedArray] = list()
             for eig, vc, summary in zip(
-                eigendecompositions, variable_collections, summaries.values()
+                eigendecompositions,
+                variable_collections,
+                summaries.values(),
+                strict=False,
             ):
                 nm = NullModelCollection.from_eig(
                     eig,
