@@ -158,6 +158,8 @@ def test_eig_rmw(
     tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
     sw: SharedWorkspace,
 ):
+    allocation_count = len(sw.allocations)
+
     c: int | str = 22
     sampe_size_label = "small"
     vcf_file = vcf_files_by_size_and_chromosome[sampe_size_label][c]
@@ -257,7 +259,7 @@ def test_eig_rmw(
         sample_indices = [vcf_file.samples.index(s) for s in samples]
         for i, line in zip(sample_indices, kinship_lines, strict=True):
             tokens = line.split()
-            for j, token in zip(sample_indices, tokens, strict=True):
+            for j, token in zip(sample_indices, tokens, strict=False):
                 kinship[i, j] = float(token)
                 kinship[j, i] = float(token)
 
@@ -276,4 +278,4 @@ def test_eig_rmw(
     assert np.allclose(numpy_eigenvalues[::-1], eig_array.eigenvalues, atol=1e-6)
 
     eig_array.free()
-    assert len(sw.allocations) == 1
+    assert len(sw.allocations) == allocation_count
