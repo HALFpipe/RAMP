@@ -51,6 +51,8 @@ select = [
     "I", # isort
     "B", # bugbears
     "N", # pep8-naming
+    "C90", # McCabe complexity
+    "PD", # pandas-vet
 ]
 
 [tool.pytest.ini_options]
