@@ -53,6 +53,7 @@ select = [
     "N", # pep8-naming
     "C90", # McCabe complexity
     "PD", # pandas-vet
+    "PTH", # flake8-use-pathlib
 ]
 
 [tool.pytest.ini_options]

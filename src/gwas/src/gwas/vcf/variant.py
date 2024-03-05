@@ -6,6 +6,7 @@ from typing import NamedTuple, Self
 
 import numpy as np
 
+# from ..log import logger
 from ..utils import chromosome_to_int
 
 
@@ -32,6 +33,14 @@ class Variant(NamedTuple):
         info_str: str,
         format_str: str,
     ) -> Self:
+        # logger.debug(
+        #     f"Reading variant "
+        #     f"chromosome_str: {chromosome_str}, position_str: {position_str}, "
+        #     f"reference_allele: {reference_allele}, "
+        #     f"alternate_allele: {alternate_allele}, info_str: {info_str}, "
+        #     f"format_str: {format_str}"
+        # )
+
         chromosome: int | str = chromosome_str
         if isinstance(chromosome, str) and chromosome.isdigit():
             chromosome = int(chromosome)

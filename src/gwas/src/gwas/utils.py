@@ -97,27 +97,29 @@ def underscore(x: str) -> str:
     return re.sub(r"([a-z\d])([A-Z])", r"\1_\2", x).lower()
 
 
-def get_initargs() -> tuple[set[int], Queue[LogRecord], int | str]:
+def get_initargs() -> tuple[set[int], Queue[LogRecord] | None, int | str]:
     from .log import logging_thread
 
-    if logging_thread is None:
-        raise ValueError("Cannot get initargs before logging is set up")
+    logging_queue: Queue[LogRecord] | None = None
+    if logging_thread is not None:
+        logging_queue = logging_thread.logging_queue
 
     return (
         os.sched_getaffinity(0),
-        logging_thread.logging_queue,
+        logging_queue,
         logger.getEffectiveLevel(),
     )
 
 
 def initializer(
     sched_affinity: set[int],
-    logging_queue: Queue[LogRecord],
+    logging_queue: Queue[LogRecord] | None,
     log_level: int | str,
 ) -> None:
     os.sched_setaffinity(0, sched_affinity)
 
-    worker_configurer(logging_queue, log_level)
+    if logging_queue is not None:
+        worker_configurer(logging_queue, log_level)
 
 
 class Pool(mp_pool.Pool):

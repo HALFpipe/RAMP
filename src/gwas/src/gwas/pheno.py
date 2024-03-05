@@ -25,7 +25,7 @@ def read_and_combine(paths: list[Path]) -> tuple[list[str], list[str], npt.NDArr
     data_frames: list[pd.DataFrame] = list()
     for path in paths:
         data_frame = pd.read_table(path, sep="\t", header=0, index_col=False, dtype=str)
-        data_frame.set_index(data_frame.columns[0], inplace=True)
+        data_frame = data_frame.set_index(data_frame.columns[0])
         data_frames.append(data_frame)
 
     data_frame = combine(data_frames)
@@ -33,7 +33,7 @@ def read_and_combine(paths: list[Path]) -> tuple[list[str], list[str], npt.NDArr
     return (
         list(data_frame.index),
         list(data_frame.columns),
-        data_frame.values.astype(np.float64),
+        data_frame.to_numpy(dtype=np.float64),
     )
 
 
@@ -130,9 +130,7 @@ class VariableCollection:
         if np.any(zero_variance):
             removed_covariates = [
                 name
-                for name, zero in zip(
-                    self.covariate_names[1:], zero_variance, strict=True
-                )
+                for name, zero in zip(self.covariate_names, zero_variance, strict=True)
                 if zero
             ]
             logger.debug(
@@ -299,18 +297,18 @@ class VariableCollection:
         data_frame = pd.DataFrame(array, index=self.samples, columns=names)
 
         logger.debug("Calculating covariance matrix")
-        covariance = data_frame.cov()
+        covariance = data_frame.cov().to_numpy(dtype=np.float64)
 
         file_array = FileArray.create(
             path,
             covariance.shape,
-            covariance.values.dtype,
+            covariance.dtype,
             compression_method,
         )
         with file_array:
             file_array.set_axis_metadata(0, pd.Series(names))
             file_array.set_axis_metadata(1, pd.Series(names))
-            file_array[:, :] = covariance.values
+            file_array[:, :] = covariance
 
 
 @dataclass

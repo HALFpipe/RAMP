@@ -30,6 +30,11 @@ def test_run(
     chromosome: int | str,
     rmw_score: RmwScore,
 ) -> None:
+    for eig, b in zip(eigendecompositions, variable_collections, strict=True):
+        assert eig.samples == b.samples
+
+    allocation_count = len(sw.allocations)
+
     vcf_paths = [str(vcf_paths_by_chromosome[c]) for c in chromosomes]
     tri_paths = [str(tri_paths_by_chromosome[c]) for c in chromosomes if c != "X"]
 
@@ -87,13 +92,16 @@ def test_run(
         ]
     )
     command = GwasCommand(arguments, tmp_path, sw)
-    command.run()
-
-    for a, b in zip(command.variable_collections, variable_collections, strict=True):
+    command_variable_collections = command.setup_variable_collections()
+    for a, b in zip(command_variable_collections, variable_collections, strict=True):
         assert a.phenotype_names == b.phenotype_names
         assert a.samples == b.samples
-    for eig, b in zip(eigendecompositions, variable_collections, strict=True):
-        assert eig.samples == b.samples
+        a.free()
+    del command
+
+    command = GwasCommand(arguments, tmp_path, sw)
+    command.run()
+    del command
 
     sc = SummaryCollection.from_file(tmp_path / f"chr{chromosome}.metadata.yaml.gz")
     (summaries,) = sc.chunks.values()
@@ -140,11 +148,11 @@ def test_run(
         data_frame = pd.read_table(file_handle)
 
     u_stat_columns = [f"{name}_stat-u" for name in phenotype_names]
-    u_stat = data_frame[u_stat_columns].values
+    u_stat = data_frame[u_stat_columns].to_numpy()
     rmw_u_stat = rmw_score.array["U_STAT"]
 
     v_stat_columns = [f"{name}_stat-v" for name in phenotype_names]
-    v_stat = data_frame[v_stat_columns].values
+    v_stat = data_frame[v_stat_columns].to_numpy()
     sqrt_v_stat = np.sqrt(v_stat)
     rmw_sqrt_v_stat = rmw_score.array["SQRT_V_STAT"]
 
@@ -166,3 +174,5 @@ def test_run(
         is_ok = is_ok and has_no_bias
 
     assert is_ok
+
+    assert len(sw.allocations) == allocation_count

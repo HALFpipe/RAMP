@@ -10,9 +10,11 @@ import seaborn as sns
 from gwas.eig import Eigendecomposition, EigendecompositionCollection
 from gwas.log import logger
 from gwas.mem.arr import SharedArray
+from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection
 from gwas.score.calc import calc_u_stat, calc_v_stat
+from gwas.utils import make_sample_boolean_vectors
 from gwas.vcf.base import VCFFile
 from matplotlib import pyplot as plt
 from numpy import typing as npt
@@ -21,6 +23,45 @@ from ..utils import check_bias
 from .conftest import RmwScore
 from .rmw_debug import RmwDebug
 from .simulation import simulation_count
+
+
+@pytest.fixture(scope="module")
+def rotated_genotypes_arrays(
+    vcf_file: VCFFile,
+    genotypes_array: SharedArray,
+    eigendecompositions: list[Eigendecomposition],
+    sw: SharedWorkspace,
+    request,
+) -> list[SharedArray]:
+    allocation_count = len(sw.allocations)
+
+    genotypes = genotypes_array.to_numpy()
+    _, variant_count = genotypes.shape
+
+    sample_boolean_vectors = make_sample_boolean_vectors(
+        vcf_file.samples, (eig.samples for eig in eigendecompositions)
+    )
+
+    rotated_genotypes_arrays: list[SharedArray] = list()
+    for eig, sample_boolean_vector in zip(
+        eigendecompositions, sample_boolean_vectors, strict=True
+    ):
+        sample_count = eig.sample_count
+
+        name = SharedArray.get_name(sw, "rotated-genotypes")
+        rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
+        request.addfinalizer(rotated_genotypes_array.free)
+
+        mean = genotypes.mean(axis=0, where=sample_boolean_vector[:, np.newaxis])
+        demeaned_genotypes = genotypes[sample_boolean_vector, :] - mean
+
+        rotated_genotypes = rotated_genotypes_array.to_numpy()
+        rotated_genotypes[:] = eig.eigenvectors.transpose() @ demeaned_genotypes
+
+        rotated_genotypes_arrays.append(rotated_genotypes_array)
+
+    assert len(sw.allocations) == allocation_count + len(rotated_genotypes_arrays)
+    return rotated_genotypes_arrays
 
 
 @pytest.mark.parametrize("chromosome", [22], indirect=True)
@@ -311,76 +352,3 @@ def test_score(
             )
 
     assert is_ok
-
-
-# def test_calc_score(
-#     tmp_path: Path,
-#     vcf_by_chromosome: dict[int | str, VCFFile],
-#     vc: VariableCollection,
-#     nm: NullModelCollection,
-#     sw: SharedWorkspace,
-#     eig: Eigendecomposition,
-#     rmw_score: RmwScore,
-# ):
-#     vcf_file = vcf_by_chromosome[chromosome]
-
-#     score_path = tmp_path / "score.txt.zst"
-
-#     calc_score(
-#         vcf_file,
-#         vc,
-#         nm,
-#         eig,
-#         sw,
-#         score_path,
-#     )
-
-#     header, array = CombinedScorefile.read(score_path)
-
-#     def compare_summaries(a, b, compare_name=True):
-#         if compare_name:
-#             assert a.name == b.name
-#         assert np.isclose(a.mean, b.mean)
-#         assert np.isclose(a.variance, b.variance)
-#         assert np.isclose(a.minimum, b.minimum)
-#         assert np.isclose(a.maximum, b.maximum)
-
-#     for rmw_header in rmw_score.header:
-#         for rmw_summary, summary in zip(
-#             rmw_header.covariate_summaries, header.covariate_summaries
-#         ):
-#             compare_summaries(rmw_summary, summary)
-
-#     for i, rmw_header in enumerate(rmw_score.header):
-#         summary = header.trait_summaries[i]
-#         compare_summaries(rmw_header.trait_summaries[0], summary)
-#         compare_summaries(rmw_header.analyzed_trait, summary, compare_name=False)
-
-#         assert rmw_header.samples == header.samples
-#         assert rmw_header.analyzed_samples == header.analyzed_samples
-#         assert rmw_header.covariates == header.covariates
-
-#     rmw_u_stat = rmw_score.array["U_STAT"]
-#     u_stat = np.vstack(
-#         [array[f"U_STAT[{phenotype_name}]"] for phenotype_name in vc.phenotype_names]
-#     ).transpose()
-
-#     rmw_v_stat = np.square(rmw_score.array["SQRT_V_STAT"])
-#     v_stat = np.vstack(
-#         [array[f"V_STAT[{phenotype_name}]"] for phenotype_name in vc.phenotype_names]
-#     ).transpose()
-
-#     finite = np.isfinite(rmw_u_stat).all(axis=1)
-#     finite &= np.isfinite(rmw_v_stat).all(axis=1)
-#     to_compare = finite[:, np.newaxis] & ~(u_stat == 0)
-
-#     atol = 1e-2
-#     if vc.sample_count < 2**10:
-#         atol = 5e-2
-
-#     check_slope = True
-#     if nm.method in {"pml", "reml", "fastlmm"}:
-#         check_slope = False
-
-#     check_bias(u_stat, rmw_u_stat, to_compare, atol, check_slope)
-#     check_bias(v_stat, rmw_v_stat, to_compare, atol, check_slope)

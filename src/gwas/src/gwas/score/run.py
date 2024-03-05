@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from queue import Empty
+from typing import Callable
 
 import numpy as np
 from tqdm import tqdm
@@ -10,7 +11,14 @@ from ..eig import Eigendecomposition, EigendecompositionCollection
 from ..log import logger
 from ..mem.arr import SharedArray
 from ..vcf.base import VCFFile
-from .worker import Calc, GenotypeReader, ScoreWriter, TaskProgress, TaskSyncCollection
+from .worker import (
+    Calc,
+    GenotypeReader,
+    ScoreWriter,
+    TaskProgress,
+    TaskSyncCollection,
+    Worker,
+)
 
 
 def calc_score(
@@ -89,30 +97,7 @@ def calc_score(
                 pass
 
         try:
-            for proc in procs:
-                proc.start()
-            # Allow use of genotypes_array and stat_array.
-            t.can_read.set()
-            for can_calc in t.can_calc:
-                can_calc.set()
-            while True:
-                # Error handling
-                try:
-                    raise t.exception_queue.get_nowait()
-                except Empty:
-                    pass
-                for proc in procs:
-                    if proc.exitcode is not None and proc.exitcode != 0:
-                        raise RuntimeError(
-                            f'Process "{proc.name}" exited with code {proc.exitcode}'
-                        )
-                # Check if we are done
-                update_progress_bar()
-                for proc in procs:
-                    proc.join(timeout=1)
-                if all(not proc.is_alive() for proc in procs):
-                    break
-            update_progress_bar()
+            check_procs(t, procs, update_progress_bar)
         finally:
             t.should_exit.set()
             for proc in procs:
@@ -122,7 +107,37 @@ def calc_score(
                     proc.kill()
                 proc.join()
                 proc.close()
+            ec.free()
             genotypes_array.free()
             rotated_genotypes_array.free()
             stat_array.free()
             update_progress_bar()
+
+
+def check_procs(
+    t: TaskSyncCollection, procs: list[Worker], update_progress_bar: Callable[[], None]
+) -> None:
+    for proc in procs:
+        proc.start()
+        # Allow use of genotypes_array and stat_array.
+    t.can_read.set()
+    for can_calc in t.can_calc:
+        can_calc.set()
+    while True:
+        # Error handling
+        try:
+            raise t.exception_queue.get_nowait()
+        except Empty:
+            pass
+        for proc in procs:
+            if proc.exitcode is not None and proc.exitcode != 0:
+                raise RuntimeError(
+                    f'Process "{proc.name}" exited with code {proc.exitcode}'
+                )
+                # Check if we are done
+        update_progress_bar()
+        for proc in procs:
+            proc.join(timeout=1)
+        if all(not proc.is_alive() for proc in procs):
+            break
+    update_progress_bar()

@@ -14,6 +14,7 @@ from threadpoolctl import threadpool_limits
 from tqdm.auto import tqdm
 
 from ..eig import Eigendecomposition
+from ..log import logger
 from ..pheno import VariableCollection
 from ..utils import Pool
 from .base import NullModelCollection, NullModelResult
@@ -253,21 +254,31 @@ class ProfileMaximumLikelihood:
 
     def apply(self, optimize_job: OptimizeJob, **kwargs) -> tuple[int, NullModelResult]:
         (phenotype_index, num_nested_threads, o) = optimize_job
-        with threadpool_limits(limits=num_nested_threads):
-            optimize_result = self.optimize(o, **kwargs)
-            terms = torch.tensor(optimize_result.x)
-            weights, errors, residuals, variance = self.get_standard_errors(
-                terms,
-                o,
+        try:
+            with threadpool_limits(limits=num_nested_threads):
+                optimize_result = self.optimize(o, **kwargs)
+                terms = torch.tensor(optimize_result.x)
+                weights, errors, residuals, variance = self.get_standard_errors(
+                    terms,
+                    o,
+                )
+                minus_two_log_likelihood = float(optimize_result.fun)
+                null_model_result = NullModelResult(
+                    -0.5 * minus_two_log_likelihood,
+                    *self.get_heritability(terms),
+                    weights.detach().numpy(),
+                    errors.detach().numpy(),
+                    residuals.detach().numpy(),
+                    variance.detach().numpy(),
+                )
+                return phenotype_index, null_model_result
+        except Exception as exception:
+            logger.error(
+                f"Failed to fit null model for phenotype {phenotype_index}",
+                exc_info=exception,
             )
-            minus_two_log_likelihood = float(optimize_result.fun)
             return phenotype_index, NullModelResult(
-                -0.5 * minus_two_log_likelihood,
-                *self.get_heritability(terms),
-                weights.detach().numpy(),
-                errors.detach().numpy(),
-                residuals.detach().numpy(),
-                variance.detach().numpy(),
+                np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
             )
 
     @classmethod
@@ -296,7 +307,7 @@ class ProfileMaximumLikelihood:
         # Fit null model for each phenotype.
         num_processes = min(num_threads, vc.phenotype_count)
         num_nested_threads = num_threads // num_processes
-        optimize_jobs = (
+        optimize_jobs = list(
             OptimizeJob(
                 phenotype_index,
                 num_nested_threads,

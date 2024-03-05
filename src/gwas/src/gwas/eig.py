@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Self
+from typing import Self, Sequence
 
 import numpy as np
 from numpy import typing as npt
@@ -112,19 +112,7 @@ class Eigendecomposition(SharedArray):
 
         sw = arrays[0].sw
 
-        if chromosome is None:
-            # Determine which chromosomes we are leaving out
-            chromosomes = chromosomes_set()
-            for tri in arrays:
-                chromosomes -= {tri.chromosome}
-            if len(chromosomes) > 1:
-                if "X" in chromosomes:
-                    # When leaving out an autosome, we usually only
-                    # consider the other autosomes, so also leaving
-                    # out the X chromosome is valid
-                    chromosomes -= {"X"}
-            if len(chromosomes) == 1:
-                (chromosome,) = chromosomes
+        chromosome = cls.get_chromosome(arrays, chromosome)
 
         if samples is None:
             samples = arrays[0].samples
@@ -177,6 +165,25 @@ class Eigendecomposition(SharedArray):
         return eig
 
     @classmethod
+    def get_chromosome(
+        cls, arrays: Sequence[Triangular], chromosome: int | str | None = None
+    ):
+        if chromosome is None:
+            # Determine which chromosomes we are leaving out
+            chromosomes = chromosomes_set()
+            for tri in arrays:
+                chromosomes -= {tri.chromosome}
+            if len(chromosomes) > 1:
+                if "X" in chromosomes:
+                    # When leaving out an autosome, we usually only
+                    # consider the other autosomes, so also leaving
+                    # out the X chromosome is valid
+                    chromosomes -= {"X"}
+            if len(chromosomes) == 1:
+                (chromosome,) = chromosomes
+        return chromosome
+
+    @classmethod
     def from_files(
         cls,
         *tri_paths: Path,
@@ -205,6 +212,10 @@ class EigendecompositionCollection:
     @property
     def job_count(self) -> int:
         return len(self.eigenvector_arrays)
+
+    def free(self) -> None:
+        for array in self.eigenvector_arrays:
+            array.free()
 
     @classmethod
     def from_eigendecompositions(

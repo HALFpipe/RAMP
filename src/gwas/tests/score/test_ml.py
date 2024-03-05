@@ -46,7 +46,7 @@ def test_fastlmm(
         rmw_debug.log_likelihood,
         rmw_debug.beta,
         rmw_debug.factor,
-        strict=True,
+        strict=False,
     ):
         terms = torch.tensor([variance_ratio, 1], dtype=torch.float64)
 

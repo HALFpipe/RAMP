@@ -28,6 +28,8 @@ def load_genotypes(
     chromosomes: Sequence[int | str],
     sw: SharedWorkspace,
 ) -> SharedArray:
+    allocation_count = len(sw.allocations)
+
     vcf_file = vcf_files[0]
     sample_count = vcf_file.sample_count
 
@@ -62,6 +64,7 @@ def load_genotypes(
     a[:, :sample_count] = a[:, sample_indices]
     array.resize(variant_count, sample_count)
 
+    assert len(sw.allocations) == allocation_count + 1
     return array
 
 
@@ -73,6 +76,8 @@ def test_eig(
     tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
     sw: SharedWorkspace,
 ):
+    allocation_count = len(sw.allocations)
+
     sampe_size_label = "small"
     chromosomes: Sequence[int | str] = [7, 8, 9, 10]
 
@@ -149,7 +154,7 @@ def test_eig(
     array.free()
     eig_array.free()
     tri_array.free()
-    assert len(sw.allocations) == 1
+    assert len(sw.allocations) == allocation_count
 
 
 def test_eig_rmw(

@@ -117,7 +117,12 @@ class TextFileArray(FileArray[T]):
         if row_stop is None:
             row_stop = self.shape[0]
 
-        # Validate key
+        self.validate_key(row_start, row_step, col_start, col_step, col_stop)
+        return row_start, row_stop, col_start, col_stop
+
+    def validate_key(
+        self, row_start: int, row_step: int, col_start: int, col_step: int, col_stop: int
+    ) -> None:
         if row_step is not None and row_step != 1:
             raise ValueError("Can only write text file sequentially, row step must be 1")
         if col_step is not None and col_step != 1:
@@ -141,7 +146,6 @@ class TextFileArray(FileArray[T]):
                 raise ValueError(
                     "Cannot change a single part TextFileArray to a multi-part one"
                 )
-        return row_start, row_stop, col_start, col_stop
 
     def __setitem__(self, key: tuple[slice, ...], value: npt.NDArray[T]) -> None:
         row_start, row_stop, col_start, col_stop = self.unpack_key(key)

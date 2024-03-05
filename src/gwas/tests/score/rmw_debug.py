@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass, fields
 from pathlib import Path
 from subprocess import DEVNULL, PIPE, Popen
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import pytest
@@ -133,37 +135,7 @@ def rmw_debug(
             data[key] = float(value)
 
     field_count = len(fields(RmwDebug))
-    for line in peekable_stdout:
-        line = line.strip()
-
-        evaluate_match = evaluate_pattern.fullmatch(line)
-        sigma_hat_match = sigma_hat_pattern.fullmatch(line)
-        fraction_match = fraction_pattern.fullmatch(line)
-        hat_match = hat_pattern.fullmatch(line)
-        if evaluate_match is not None:
-            for key, value in evaluate_match.groupdict().items():
-                data[key].append(float(value))
-        elif sigma_hat_match is not None:
-            put_match(sigma_hat_match.groupdict())
-        elif fraction_match is not None:
-            put_match(fraction_match.groupdict())
-        elif hat_match is not None:
-            for key, value in hat_match.groupdict().items():
-                if key not in data:
-                    logger.debug(f'Found "{key}"')
-                data[key] = float(value)
-        elif line in field_mapping:
-            field = field_mapping[line]
-            if field in data:
-                if isinstance(data[field], list):
-                    data[field].append(read_matrix(peekable_stdout))
-                else:
-                    raise ValueError(f'Field "{field}" has already been set')
-            else:
-                logger.debug(f'Found "{field}"')
-                data[field] = read_matrix(peekable_stdout)
-        if len(data) == field_count:
-            break
+    process_data(peekable_stdout, data, put_match, field_count)
 
     process_handle.terminate()
 
@@ -217,3 +189,51 @@ def rmw_debug(
     )
 
     return rmw_debug
+
+
+def process_data(
+    peekable_stdout: peekable[str],
+    data: dict[str, Any],
+    put_match: Callable[[dict[str, str]], None],
+    field_count: int,
+):
+    for line in peekable_stdout:
+        line = line.strip()
+
+        evaluate_match = evaluate_pattern.fullmatch(line)
+        sigma_hat_match = sigma_hat_pattern.fullmatch(line)
+        fraction_match = fraction_pattern.fullmatch(line)
+        hat_match = hat_pattern.fullmatch(line)
+
+        if evaluate_match is not None:
+            for key, value in evaluate_match.groupdict().items():
+                data[key].append(float(value))
+        elif sigma_hat_match is not None:
+            put_match(sigma_hat_match.groupdict())
+        elif fraction_match is not None:
+            put_match(fraction_match.groupdict())
+        elif hat_match is not None:
+            process_hat(data, hat_match)
+        elif line in field_mapping:
+            process_matrix(peekable_stdout, data, line)
+        if len(data) == field_count:
+            break
+
+
+def process_hat(data, hat_match: re.Match[str]) -> None:
+    for key, value in hat_match.groupdict().items():
+        if key not in data:
+            logger.debug(f'Found "{key}"')
+        data[key] = float(value)
+
+
+def process_matrix(peekable_stdout: peekable[str], data: dict[str, Any], line: str):
+    field = field_mapping[line]
+    if field in data:
+        if isinstance(data[field], list):
+            data[field].append(read_matrix(peekable_stdout))
+        else:
+            raise ValueError(f'Field "{field}" has already been set')
+    else:
+        logger.debug(f'Found "{field}"')
+        data[field] = read_matrix(peekable_stdout)

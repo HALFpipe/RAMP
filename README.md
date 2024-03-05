@@ -77,5 +77,5 @@ mamba create --name "gwas" \
   "bcftools>=1.17" "plink" "plink2" "tabix" \
   "cython>=3b1" "mkl-include" "zlib" \
   "mypy" "pytest-benchmark" "threadpoolctl" \
-  "gcc" "gxx" "rust" "sysroot_linux-64>=2.17"
-```
+  "compilers" "rust" "sysroot_linux-64>=2.17"
+```\

@@ -18,6 +18,8 @@ def test_calc_worker(
     nm: NullModelCollection,
     request,
 ) -> None:
+    allocation_count = len(sw.allocations)
+
     sample_count, variant_count = genotypes_array.shape
     phenotype_count = nm.phenotype_count
 
@@ -58,3 +60,5 @@ def test_calc_worker(
         stat_array,
     )
     calc_worker.func()
+
+    assert len(sw.allocations) == allocation_count + 2

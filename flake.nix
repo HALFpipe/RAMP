@@ -52,9 +52,12 @@
       in {
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs;
-            [ mkl plink-ng python rust rust-analyzer-unwrapped ]
+            [ clang-tools git mkl plink-ng python rust rust-analyzer-unwrapped ]
             ++ compressionPackages;
           RUST_SRC_PATH = "${rust}/lib/rustlib/src/rust/library";
+          shellHook = ''
+            export PYTHONPATH=$(${pkgs.git}/bin/git rev-parse --show-toplevel)/src/gwas/src:$PYTHONPATH
+          '';
         };
       });
 }

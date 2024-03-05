@@ -6,7 +6,7 @@ from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 
 
-def test_sa(tmp_path: Path, sw: SharedWorkspace):
+def test_sa(tmp_path: Path):
     sw = SharedWorkspace.create(size=2**30)
 
     shape = (5, 7)

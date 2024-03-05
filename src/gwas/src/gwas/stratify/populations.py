@@ -74,7 +74,6 @@ def plot_populations(
         sample_populations (dict[str, set[SampleID]]): The samples classified by
             population.
     """
-    import seaborn as sns
     from matplotlib import pyplot as plt
 
     component_count = sample_components.shape[1]
@@ -96,21 +95,13 @@ def plot_populations(
 
     populations_in_sample = {p for p, s in sample_populations.items() if len(s) > 0}
     if populations_in_sample.issubset(populations):
-        populations_to_plot = populations
+        populations_to_plot: list[str] = populations
     else:
         populations_to_plot = sorted(set(super_populations.values()))
 
-    color_palette = sns.color_palette("husl", len(populations_to_plot))
-    if not isinstance(color_palette, list):
-        raise ValueError
-    sample_colors = list()
-    for sample in samples:
-        matches = {p for p in populations_to_plot if sample in sample_populations[p]}
-        if len(matches) == 1:
-            (p,) = matches
-            sample_colors.append(color_palette[populations_to_plot.index(p)])
-        else:
-            sample_colors.append("black")
+    color_palette, sample_colors = calc_sample_colors(
+        samples, sample_populations, populations_to_plot
+    )
 
     artists: list = list()
     for c1, c2 in product(range(component_count), repeat=2):
@@ -140,35 +131,10 @@ def plot_populations(
         )
         coordinates = np.dstack((x, y))
 
-        z: dict[str, npt.NDArray] = dict()
-        for population in populations:
-            super_population = super_populations[population]
-            if (
-                len(sample_populations[population]) == 0
-                and len(sample_populations[super_population]) == 0
-            ):
-                continue
-
-            # Plot contours.
-            c = reference_components[population][:, [c1, c2]]
-            mean = np.mean(c, axis=0)
-            covariance = np.cov(c.transpose())
-            marginal_multivariate_normal = multivariate_normal(
-                mean=mean,
-                cov=covariance,  # type: ignore
-            )
-            z[population] = marginal_multivariate_normal.logpdf(coordinates)
-
-        if populations_to_plot != populations:
-            for population, super_population in super_populations.items():
-                if population not in z:
-                    continue
-                if super_population not in z:
-                    z[super_population] = z.pop(population)
-                else:
-                    z[super_population] = np.minimum(
-                        z[super_population], z.pop(population)
-                    )
+        z: dict[str, npt.NDArray] = calc_z(
+            reference_components, sample_populations, c1, c2, coordinates
+        )
+        prune_z(populations_to_plot, z)
 
         artists = list()
         for j, super_population in enumerate(populations_to_plot):
@@ -195,3 +161,63 @@ def plot_populations(
 
     figure.savefig("populations.pdf")
     plt.close("all")
+
+
+def calc_sample_colors(
+    samples: list[SampleID],
+    sample_populations: dict[str, set[SampleID]],
+    populations_to_plot: list[str],
+) -> tuple[list, list]:
+    import seaborn as sns
+
+    color_palette = sns.color_palette("husl", len(populations_to_plot))
+    if not isinstance(color_palette, list):
+        raise ValueError
+    sample_colors = list()
+    for sample in samples:
+        matches = {p for p in populations_to_plot if sample in sample_populations[p]}
+        if len(matches) == 1:
+            (p,) = matches
+            sample_colors.append(color_palette[populations_to_plot.index(p)])
+        else:
+            sample_colors.append("black")
+    return color_palette, sample_colors
+
+
+def calc_z(
+    reference_components: dict[str, npt.NDArray],
+    sample_populations: dict[str, set[SampleID]],
+    c1: int,
+    c2: int,
+    coordinates: npt.NDArray,
+) -> dict[str, npt.NDArray]:
+    z: dict[str, npt.NDArray] = dict()
+    for population in populations:
+        super_population = super_populations[population]
+        if (
+            len(sample_populations[population]) == 0
+            and len(sample_populations[super_population]) == 0
+        ):
+            continue
+
+            # Plot contours.
+        c = reference_components[population][:, [c1, c2]]
+        mean = np.mean(c, axis=0)
+        covariance = np.cov(c.transpose())
+        marginal_multivariate_normal = multivariate_normal(
+            mean=mean,
+            cov=covariance,  # type: ignore
+        )
+        z[population] = marginal_multivariate_normal.logpdf(coordinates)
+    return z
+
+
+def prune_z(populations_to_plot: list[str], z: dict[str, npt.NDArray]):
+    if populations_to_plot != populations:
+        for population, super_population in super_populations.items():
+            if population not in z:
+                continue
+            if super_population not in z:
+                z[super_population] = z.pop(population)
+            else:
+                z[super_population] = np.minimum(z[super_population], z.pop(population))

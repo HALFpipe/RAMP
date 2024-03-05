@@ -231,6 +231,7 @@ class JobCollection:
             ]
             inverse_variance_arrays: list[SharedArray] = list()
             scaled_residuals_arrays: list[SharedArray] = list()
+
             for eig, vc, summary in zip(
                 eigendecompositions,
                 variable_collections,
@@ -253,7 +254,10 @@ class JobCollection:
                 scaled_residuals_arrays.append(scaled_residuals_array)
                 # Free the nm.
                 nm.free()
+
+            # Write null model results to disk
             self.dump()
+
             calc_score(
                 self.vcf_file,
                 eigendecompositions,
@@ -262,9 +266,14 @@ class JobCollection:
                 self.stat_file_array,
                 phenotype_offset,
             )
+            for array in [*inverse_variance_arrays, *scaled_residuals_arrays]:
+                array.free()
+
+            # Update status
             for summary in summaries.values():
                 summary.status = "score_complete"
             self.dump()
+
             phenotype_offset += sum(vc.phenotype_count for vc in variable_collections)
 
     @property

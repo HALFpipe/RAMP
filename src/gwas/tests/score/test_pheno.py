@@ -28,6 +28,7 @@ def test_pheno(
     request: FixtureRequest,
 ) -> None:
     np.random.seed(47)
+    allocation_count = len(sw.allocations)
 
     phenotypes = np.random.rand(sample_count, phenotype_count)
     phenotypes[
@@ -84,12 +85,16 @@ def test_pheno(
         variable_collection.covariates.to_numpy()[:, 1:], covariates[1:, :]
     )
 
+    assert len(sw.allocations) == allocation_count + 2
+
 
 def test_pheno_zero_variance(
     sw: SharedWorkspace,
     request: FixtureRequest,
 ) -> None:
     np.random.seed(47)
+
+    allocation_count = len(sw.allocations)
 
     phenotypes = np.random.rand(sample_count, phenotype_count)
     covariates = np.random.rand(sample_count, covariate_count)
@@ -108,3 +113,5 @@ def test_pheno_zero_variance(
         "covariate_02",
         "covariate_04",
     ]
+
+    assert len(sw.allocations) == allocation_count + 1

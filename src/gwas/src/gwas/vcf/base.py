@@ -155,14 +155,13 @@ class VCFFile(CompressedTextReader):
             return (value >= cutoff) | np.isclose(value, cutoff) | np.isnan(value)
 
         allele_frequency_frame = self.vcf_variants[self.allele_frequency_columns].copy()
-        is_major = allele_frequency_frame.values > 0.5
-        allele_frequency_frame.values[is_major] = (
-            1 - allele_frequency_frame.values[is_major]
-        )
-        allele_frequency = allele_frequency_frame.max(axis="columns")
+        allele_frequencies = allele_frequency_frame
+        is_major = allele_frequencies > 0.5
+        allele_frequencies[is_major] = 1 - allele_frequencies[is_major]
+        max_allele_frequency = allele_frequencies.max(axis="columns")
         self.variant_indices = np.flatnonzero(
             greater_or_close(
-                allele_frequency,
+                max_allele_frequency,
                 minor_allele_frequency_cutoff,
             )
             & greater_or_close(self.vcf_variants.r_squared, r_squared_cutoff)

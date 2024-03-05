@@ -94,6 +94,8 @@ def test_tri(
 
 @pytest.mark.slow
 def test_tri_file(tmp_path: Path, numpy_tri: npt.NDArray, sw: SharedWorkspace):
+    allocation_count = len(sw.allocations)
+
     sw = SharedWorkspace.create()
     n = numpy_tri.shape[0]
 
@@ -127,10 +129,13 @@ def test_tri_file(tmp_path: Path, numpy_tri: npt.NDArray, sw: SharedWorkspace):
 
     b.free()
     tri.free()
-    assert len(sw.allocations) == 1
+
+    assert len(sw.allocations) == allocation_count
 
 
 def test_tri_subset_samples(sw: SharedWorkspace):
+    allocation_count = len(sw.allocations)
+
     k = 100
 
     a = np.random.rand(10000, k)
@@ -189,4 +194,4 @@ def test_tri_subset_samples(sw: SharedWorkspace):
     assert np.allclose(np.abs(r4), np.abs(r1))
 
     tri.free()
-    assert len(sw.allocations) == 1
+    assert len(sw.allocations) == allocation_count

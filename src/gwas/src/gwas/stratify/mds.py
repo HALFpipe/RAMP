@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from argparse import Namespace
+from pathlib import Path
 from typing import Callable, NamedTuple
 
 import numpy as np
@@ -71,7 +72,7 @@ def classify_samples_by_mds(
 
 def parse_mds(arguments: Namespace, rename_sample: Callable[[str], str]) -> MDS:
     header: list[str] | None = None
-    with open(arguments.mds) as file_handle:
+    with Path(arguments.mds).open("rt") as file_handle:
         for line in file_handle:
             header = line.strip().split(",")
             break

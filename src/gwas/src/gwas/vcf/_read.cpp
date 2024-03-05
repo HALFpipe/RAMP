@@ -37,7 +37,12 @@ struct RingBuffer
     {
         const size_t index = std::min(read_index_, proc_index_);
 
+        // std::cout << "push_from_pipe read_index_ " << read_index_ << std::endl;
+        // std::cout << "push_from_pipe index " << index << std::endl;
+
         const size_t write_loop_count = write_index_ / data_.size();
+
+        /* Counts how many times we have looped around the ring buffer */
         const size_t loop_count = index / data_.size();
 
         // std::cout << "push_from_pipe write_loop_count " << write_loop_count << std::endl;
@@ -46,7 +51,8 @@ struct RingBuffer
         const size_t actual_write_index = write_index_ % data_.size();
         const size_t actual_index = index % data_.size();
 
-        const size_t read_size = (write_loop_count == loop_count)
+        const bool can_overwrite_from_start = write_loop_count <= loop_count;
+        const size_t read_size = can_overwrite_from_start
                                      ? data_.size() - actual_write_index
                                      : actual_index - actual_write_index;
 
@@ -57,6 +63,12 @@ struct RingBuffer
         // std::cout << "push_from_pipe data_.size " << data_.size() << std::endl;
         // std::cout << "push_from_pipe read_size " << read_size << std::endl;
 
+        if (read_size == 0)
+        {
+            PyErr_SetString(PyExc_RuntimeError, "Read length is zero");
+            throw error_already_set();
+        }
+
         /* Read as much as we can from the pipe. */
         const ssize_t bytes_read = read(
             file_descriptor,
@@ -64,7 +76,7 @@ struct RingBuffer
             read_size);
         if (bytes_read < 0)
         {
-            std::cerr << "Error reading from file descriptor" << std::endl;
+            // std::cerr << "Error reading from file descriptor" << std::endl;
             PyErr_SetString(PyExc_IOError, "Error reading from file descriptor");
             throw error_already_set();
         }
@@ -213,7 +225,7 @@ struct RingBuffer
     {
         if (size % page_size != 0)
         {
-            std::cerr << "`RingBuffer` size must be a multiple of page size" << std::endl;
+            // std::cerr << "`RingBuffer` size must be a multiple of page size" << std::endl;
             PyErr_SetString(PyExc_ValueError, "`RingBuffer` size must be a multiple of page size");
             throw error_already_set();
         }
@@ -247,6 +259,7 @@ struct Reader : RingBuffer
           column_index_count_(column_index_count)
     {
         read_index_ = skip_bytes_;
+        proc_index_ = skip_bytes_;
 
         if (column_count_ == 0)
         {
@@ -425,6 +438,7 @@ struct Reader : RingBuffer
             }
         }
         remainder_loop(start);
+        // std::cout << "avx2_bmi_loop read_index_ " << read_index_ << " write_index_ " << write_index_ << " start " << start << std::endl;
     }
 };
 
@@ -502,6 +516,13 @@ struct StrReader : public Reader<StrReader>
           parser_(parser),
           rows_(rows)
     {
+        // std::cout << "StrReader"
+        //           << " file_descriptor " << file_descriptor
+        //           << " skip_bytes " << skip_bytes
+        //           << " column_count " << column_count
+        //           << " column_index_count " << column_index_count
+        //           << " ring_buffer_size " << ring_buffer_size
+        //           << std::endl;
     }
     virtual ~StrReader() = default;
 };
@@ -560,7 +581,7 @@ struct FloatReader : public Reader<FloatReader>
                 size_t float_index = column_indices_index_ + row_indices_index_ * column_index_count_;
                 if (std::from_chars(begin, token.end(), float_array_[float_index]).ec != std::errc{})
                 {
-                    std::cerr << "Could not parse float " << token << std::endl;
+                    // std::cerr << "Could not parse float " << token << std::endl;
                     PyErr_SetString(PyExc_ValueError, "Could not parse float");
                     throw error_already_set();
                 }
@@ -634,6 +655,8 @@ static PyObject *ReadStr(
     PyObject *arguments,
     Py_ssize_t argument_count)
 {
+    // std::cout << "ReadStr" << std::endl;
+
     PyObject *row_list;
     PyObject *row_parser;
     int file_descriptor = 0;
@@ -649,11 +672,13 @@ static PyObject *ReadStr(
             &column_count,                           // I
             &(PyArray_Type), &column_indices_array)) // O!
     {
+        // std::cerr << "Error parsing arguments" << std::endl;
         return nullptr;
     }
 
     if (!CheckIndexArray(column_indices_array))
     {
+        // std::cerr << "Error checking index array" << std::endl;
         return nullptr;
     }
 

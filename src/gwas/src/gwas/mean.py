@@ -87,8 +87,8 @@ def calc_mean(
         alternate_allele_frequency_matrix, columns=columns
     )
     vcf_variants = vcf_file.vcf_variants
-    vcf_variants.drop(
-        axis="columns", inplace=True, labels=vcf_file.allele_frequency_columns
+    vcf_variants = vcf_variants.drop(
+        axis="columns", labels=vcf_file.allele_frequency_columns
     )
     vcf_variants = pd.concat(
         [vcf_variants, alternate_allele_frequency_frame],

@@ -36,8 +36,6 @@ class GwasCommand:
     vcf_by_chromosome: Mapping[int | str, VCFFile] = field(init=False)
     tri_paths_by_chromosome: Mapping[int | str, Path] = field(init=False)
 
-    variable_collections: list[VariableCollection] = field(init=False)
-
     @property
     def chromosomes(self) -> Sequence[int | str]:
         return sorted(self.vcf_by_chromosome.keys(), key=chromosome_to_int)
@@ -169,7 +167,7 @@ class GwasCommand:
 
         return variable_collections
 
-    def __post_init__(self) -> None:
+    def setup_variable_collections(self) -> list[VariableCollection]:
         logger.debug("Arguments are %s", pformat(vars(self.arguments)))
 
         # Convert command line arguments to `Path` objects
@@ -205,12 +203,12 @@ class GwasCommand:
                 compression_methods[self.arguments.compression_method],
             )
         # Split into missing value chunks
-        self.variable_collections = self.split_by_missing_values(
+        variable_collections: list[VariableCollection] = self.split_by_missing_values(
             base_variable_collection,
             self.arguments.add_principal_components,
             self.get_eigendecomposition,
         )
-        if len(self.variable_collections) == 0:
+        if len(variable_collections) == 0:
             raise ValueError(
                 "No phenotypes to analyze. Please check if the sample IDs "
                 "match between your phenotype/covariate files and the VCF files."
@@ -224,7 +222,7 @@ class GwasCommand:
             vcf_file = self.vcf_by_chromosome[chromosome]
             if calc_mean(
                 vcf_file,
-                self.variable_collections,
+                variable_collections,
             ):
                 vcf_file.save_to_cache(self.output_directory)
 
@@ -243,65 +241,86 @@ class GwasCommand:
 
         self.set_vcf_files(vcf_files)
 
+        return variable_collections
+
     def set_vcf_files(self, vcf_files: list[VCFFile]) -> None:
         self.vcf_by_chromosome = {
             vcf_file.chromosome: vcf_file for vcf_file in vcf_files
         }
 
+    def split_into_chunks(
+        self, variable_collections: list[VariableCollection]
+    ) -> list[list[VariableCollection]]:
+        chunks: list[list[VariableCollection]] = list()
+
+        # Get available memory
+        itemsize = np.float64().itemsize
+        available_size = self.sw.unallocated_size // itemsize
+
+        # Loop over the variable collections
+        chunk_size: int = 0
+        current_chunk: list[VariableCollection] = list()
+        while len(variable_collections) > 0:
+            variable_collection = variable_collections.pop()
+            current_chunk.append(variable_collection)
+
+            # Predict memory usage
+            chunk_size += len(self.vcf_samples) * variable_collection.sample_count
+            chunk_size += (
+                2
+                * variable_collection.sample_count
+                * variable_collection.phenotype_count
+            )
+            if chunk_size / available_size > 0.5:
+                # We are using more than half of the available memory
+                # for just the input data, so we split the chunk
+                chunks.append(current_chunk)
+                current_chunk = list()
+
+        chunks.append(current_chunk)
+        return chunks
+
+    def run_chunk(
+        self, chromosome: int | str, variable_collections: list[VariableCollection]
+    ) -> None:
+        vcf_file = self.vcf_by_chromosome[chromosome]
+
+        # Update the VCF file allele frequencies based on variable collections
+        if calc_mean(
+            vcf_file,
+            variable_collections,
+        ):
+            vcf_file.save_to_cache(self.output_directory)
+        vcf_file.set_variants_from_cutoffs(
+            minor_allele_frequency_cutoff=(
+                self.arguments.score_minor_allele_frequency_cutoff
+            ),
+            r_squared_cutoff=self.arguments.score_r_squared_cutoff,
+        )
+
+        # We need to run the score calculation for each variable collection
+        # Split the variable collections into chunks that fit efficiently
+        # into memory
+        chunks = self.split_into_chunks(variable_collections)
+
+        job_collection = JobCollection(
+            vcf_file,
+            self.get_eigendecomposition,
+            self.arguments.null_model_method,
+            self.output_directory,
+            compression_methods[self.arguments.compression_method],
+            self.arguments.num_threads,
+            chunks,
+        )
+        job_collection.dump()
+        job_collection.run()
+
     def run(self) -> None:
+        variable_collections = self.setup_variable_collections()
+
         for chromosome in tqdm(self.selected_chromosomes, desc="chromosomes"):
-            vcf_file = self.vcf_by_chromosome[chromosome]
+            self.run_chunk(chromosome, variable_collections.copy())
 
-            # Update the VCF file allele frequencies based on variable collections
-            if calc_mean(
-                vcf_file,
-                self.variable_collections,
-            ):
-                vcf_file.save_to_cache(self.output_directory)
-            vcf_file.set_variants_from_cutoffs(
-                minor_allele_frequency_cutoff=(
-                    self.arguments.score_minor_allele_frequency_cutoff
-                ),
-                r_squared_cutoff=self.arguments.score_r_squared_cutoff,
-            )
-
-            # We need to run the score calculation for each variable collection.
-            variable_collections = self.variable_collections.copy()
-
-            # Split the variable collections into chunks that fit efficiently
-            # into memory
-            chunks: list[list[VariableCollection]] = list()
-
-            # Get available memory
-            itemsize = np.float64().itemsize
-            available_size = self.sw.unallocated_size // itemsize
-
-            # Loop over the variable collections
-            chunk_size: int = 0
-            current_chunk: list[VariableCollection] = list()
-            while len(variable_collections) > 0:
-                vc = variable_collections.pop()
-                current_chunk.append(vc)
-
-                # Predict memory usage
-                chunk_size += len(self.vcf_samples) * vc.sample_count
-                chunk_size += 2 * vc.sample_count * vc.phenotype_count
-                if chunk_size / available_size > 0.5:
-                    # We are using more than half of the available memory
-                    # for just the model data. We need to split the chunk
-                    chunks.append(current_chunk)
-                    current_chunk = list()
-
-            chunks.append(current_chunk)
-
-            job_collection = JobCollection(
-                vcf_file,
-                self.get_eigendecomposition,
-                self.arguments.null_model_method,
-                self.output_directory,
-                compression_methods[self.arguments.compression_method],
-                self.arguments.num_threads,
-                chunks,
-            )
-            job_collection.dump()
-            job_collection.run()
+        # Clean up
+        for variable_collection in variable_collections:
+            variable_collection.free()

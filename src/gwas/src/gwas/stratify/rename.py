@@ -2,6 +2,7 @@
 import re
 from argparse import Namespace
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 from numpy import typing as npt
@@ -19,7 +20,8 @@ class SampleRenamer:
     def __post_init__(self) -> None:
         header: list[str] | None = None
         for from_column, to_column, path in self.arguments.rename_samples_from_file:
-            with open(path) as file_handle:
+            path = Path(path)
+            with path.open("rt") as file_handle:
                 for line in file_handle:
                     header = line.strip().split(",")
                     break
@@ -29,7 +31,7 @@ class SampleRenamer:
             from_index = header.index(from_column)
             to_index = header.index(to_column)
 
-            with open(path) as file_handle:
+            with path.open("rt") as file_handle:
                 for line in file_handle:
                     tokens = line.strip().split(",")
                     from_token = self.rename_sample(tokens[from_index])

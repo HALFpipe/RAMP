@@ -19,7 +19,6 @@ from gwas.utils import (
     Pool,
     chromosome_to_int,
     chromosomes_set,
-    make_sample_boolean_vectors,
     to_str,
 )
 from gwas.vcf.base import VCFFile
@@ -59,6 +58,7 @@ def variable_collections(
     request,
 ) -> list[VariableCollection]:
     np.random.seed(47)
+    allocation_count = len(sw.allocations)
 
     samples = list(simulation.phen[:, 1])
     phenotype_names = [f"phenotype_{i + 1:02d}" for i in range(simulation_count)]
@@ -106,6 +106,7 @@ def variable_collections(
         ]
         assert vc.samples == phenotype_samples
 
+    assert len(sw.allocations) == allocation_count + 2 * len(variable_collections)
     return variable_collections
 
 
@@ -117,6 +118,8 @@ def eigendecompositions(
     sw: SharedWorkspace,
     request,
 ) -> list[Eigendecomposition]:
+    allocation_count = len(sw.allocations)
+
     eigendecompositions = [
         Eigendecomposition.from_files(
             *(tri_paths_by_chromosome[c] for c in other_chromosomes),
@@ -129,6 +132,7 @@ def eigendecompositions(
     for eigendecomposition in eigendecompositions:
         request.addfinalizer(eigendecomposition.free)
 
+    assert len(sw.allocations) == allocation_count + len(eigendecompositions)
     return eigendecompositions
 
 
@@ -313,6 +317,8 @@ def genotypes_array(
     sw: SharedWorkspace,
     request,
 ) -> SharedArray:
+    allocation_count = len(sw.allocations)
+
     sample_count = len(vcf_file.samples)
     variant_count = sw.unallocated_size // (
         np.float64().itemsize * (1 + missing_value_pattern_count) * sample_count
@@ -329,40 +335,5 @@ def genotypes_array(
     with vcf_file:
         vcf_file.read(genotypes.transpose())
 
+    assert len(sw.allocations) == allocation_count + 1
     return genotypes_array
-
-
-@pytest.fixture(scope="session")
-def rotated_genotypes_arrays(
-    vcf_file: VCFFile,
-    genotypes_array: SharedArray,
-    eigendecompositions: list[Eigendecomposition],
-    sw: SharedWorkspace,
-    request,
-) -> list[SharedArray]:
-    genotypes = genotypes_array.to_numpy()
-    _, variant_count = genotypes.shape
-
-    sample_boolean_vectors = make_sample_boolean_vectors(
-        vcf_file.samples, (eig.samples for eig in eigendecompositions)
-    )
-
-    rotated_genotypes_arrays: list[SharedArray] = list()
-    for eig, sample_boolean_vector in zip(
-        eigendecompositions, sample_boolean_vectors, strict=True
-    ):
-        sample_count = eig.sample_count
-
-        name = SharedArray.get_name(sw, "rotated-genotypes")
-        rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
-        request.addfinalizer(rotated_genotypes_array.free)
-
-        mean = genotypes.mean(axis=0, where=sample_boolean_vector[:, np.newaxis])
-        demeaned_genotypes = genotypes[sample_boolean_vector, :] - mean
-
-        rotated_genotypes = rotated_genotypes_array.to_numpy()
-        rotated_genotypes[:] = eig.eigenvectors.transpose() @ demeaned_genotypes
-
-        rotated_genotypes_arrays.append(rotated_genotypes_array)
-
-    return rotated_genotypes_arrays

@@ -165,76 +165,8 @@ def calc_tri(
     logger.debug(f"Will run {len(tasks)} triangularize tasks")
 
     running: list[TriWorker] = list()
-    barrier: bool = True
     try:
-        while True:
-            # Check if an error has occurred.
-            try:
-                raise t.exception_queue.get_nowait()
-            except Empty:
-                pass
-
-            # Sleep for one second if a process is running.
-            for proc in running:
-                proc.join(timeout=1)
-                if proc.is_alive():
-                    break
-
-            # Update list of running processes.
-            running = [proc for proc in running if proc.is_alive()]
-
-            # Check if we can exit.
-            if len(running) == 0 and len(tasks) == 0:
-                # All tasks have been completed.
-                break
-
-            # Update the barrier.
-            if len(running) == 0:
-                # All processes have exited so we can start more.
-                barrier = True
-
-            # Check if we can start another task.
-            if not t.can_run.is_set():
-                # The most recently started task has not yet initialized.
-                continue
-            if len(tasks) == 0:
-                # No more tasks to run.
-                continue
-            if not barrier:
-                # We are still waiting for processes to finish.
-                continue
-
-            # Calculate the amount of memory required to run the next task in parallel.
-            unallocated_size = sw.unallocated_size
-            sample_count = tasks[-1].proc.tsqr.vcf_file.sample_count
-            extra_required_size = (
-                (len(running) + 1) * np.float64().itemsize * sample_count**2
-            )
-            required_size = tasks[-1].required_size + extra_required_size
-            logger.debug(
-                f"We have {unallocated_size} bytes left in the shared "
-                f"workspace. The next task requires {required_size} bytes to "
-                "run in parallel."
-            )
-
-            if unallocated_size < required_size and len(running) > 0:
-                # We have already started a task, but we don't have enough memory
-                # to run the next task in parallel.
-                # Set the barrier to wait for the all running tasks to complete before
-                # starting next batch.
-                logger.debug(
-                    "Waiting for running tasks to complete before starting next batch."
-                )
-                barrier = False
-                continue
-
-            proc = tasks.pop().proc
-            proc.start()
-            running.append(proc)
-
-            # Reset the event so that we don't start another task before
-            # this one has initialized.
-            t.can_run.clear()
+        check_running(sw, t, tasks, running)
     finally:
         t.should_exit.set()
 
@@ -251,3 +183,85 @@ def calc_tri(
             raise ValueError(f'Could not find output file "{tri_path}"')
 
     return tri_paths_by_chromosome
+
+
+def check_running(
+    sw: SharedWorkspace,
+    t: TaskSyncCollection,
+    tasks: list[Task],
+    running: list[TriWorker],
+) -> None:
+    barrier: bool = True
+
+    while True:
+        # Check if an error has occurred.
+        try:
+            raise t.exception_queue.get_nowait()
+        except Empty:
+            pass
+
+        # Sleep for one second if a process is running
+        wait(running)
+
+        # Update list of running processes
+        running = [proc for proc in running if proc.is_alive()]
+
+        # Check if we can exit
+        if len(running) == 0 and len(tasks) == 0:
+            # All tasks have been completed
+            break
+
+        # Update the barrier
+        if len(running) == 0:
+            # All processes have exited so we can start more
+            barrier = True
+
+        # Check if we can start another task
+        if not t.can_run.is_set():
+            # The most recently started task has not yet initialized.
+            continue
+        if len(tasks) == 0:
+            # No more tasks to run.
+            continue
+        if not barrier:
+            # We are still waiting for processes to finish.
+            continue
+
+        # Calculate the amount of memory required to run the next task in parallel.
+        unallocated_size = sw.unallocated_size
+        sample_count = tasks[-1].proc.tsqr.vcf_file.sample_count
+        extra_required_size = (
+            (len(running) + 1) * np.float64().itemsize * sample_count**2
+        )
+        required_size = tasks[-1].required_size + extra_required_size
+        logger.debug(
+            f"We have {unallocated_size} bytes left in the shared "
+            f"workspace. The next task requires {required_size} bytes to "
+            "run in parallel."
+        )
+
+        if unallocated_size < required_size and len(running) > 0:
+            # We have already started a task, but we don't have enough memory
+            # to run the next task in parallel.
+            # Set the barrier to wait for the all running tasks to complete before
+            # starting next batch.
+            logger.debug(
+                "Waiting for running tasks to complete before starting next batch."
+            )
+            barrier = False
+            continue
+
+        proc = tasks.pop().proc
+        proc.start()
+        running.append(proc)
+
+        # Reset the event so that we don't start another task before
+        # this one has initialized.
+        t.can_run.clear()
+
+
+def wait(running):
+    for proc in running:
+        proc.join(timeout=1)
+        if proc.is_alive():
+            break

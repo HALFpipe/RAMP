@@ -100,7 +100,7 @@ class FaSTLMM(ProfileMaximumLikelihood):
 
         return OptimizeResult(
             x=terms.numpy(),
-            fun=fmin,
+            fun=float(fmin),
         )
 
 

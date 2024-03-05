@@ -7,6 +7,7 @@ from subprocess import check_call
 import numpy as np
 import pytest
 from gwas.utils import Pool
+from gwas.vcf.base import VCFFile
 from numpy import typing as npt
 
 from ..conftest import DirectoryFactory
@@ -23,13 +24,18 @@ missing_value_pattern_count: int = 3
 
 @pytest.fixture(scope="session")
 def pfile_paths(
-    directory_factory: DirectoryFactory, sample_size: int, vcf_paths: list[Path]
+    directory_factory: DirectoryFactory, sample_size: int, vcf_files: list[VCFFile]
 ):
     tmp_path = Path(directory_factory.get("pfile", sample_size))
 
     pfiles: list[Path] = list()
     commands: list[list[str]] = list()
-    for vcf_path in vcf_paths:
+    for vcf_file in vcf_files:
+        if vcf_file.chromosome == "X":
+            continue
+
+        vcf_path = vcf_file.file_path
+
         pfile_path = tmp_path / vcf_path.name.split(".")[0]
         pfiles.append(pfile_path)
 

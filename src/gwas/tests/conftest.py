@@ -135,7 +135,10 @@ def tri_paths_by_size_and_chromosome(
     ],
     sw: SharedWorkspace,
 ) -> Mapping[SampleSizeLabel, Mapping[str | int, Path]]:
-    return {
+    allocation_count = len(sw.allocations)
+    tri_paths_by_size_and_chromosome: Mapping[
+        SampleSizeLabel, Mapping[str | int, Path]
+    ] = {
         sample_size_label: calc_tri(
             chromosomes,
             v,
@@ -144,6 +147,8 @@ def tri_paths_by_size_and_chromosome(
         )
         for sample_size_label, v in vcf_files_by_size_and_chromosome.items()
     }
+    assert len(sw.allocations) == allocation_count
+    return tri_paths_by_size_and_chromosome
 
 
 @pytest.fixture(scope="session")
