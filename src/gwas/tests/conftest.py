@@ -90,9 +90,9 @@ def vcf_files_by_size_and_chromosome(
             base_path / dataset / "pytest" / str(sample_sizes[sample_size_label]),
         )
         for vcf_file in vcf_files:
-            vcf_files_by_size_and_chromosome[sample_size_label][
-                vcf_file.chromosome
-            ] = vcf_file
+            vcf_files_by_size_and_chromosome[sample_size_label][vcf_file.chromosome] = (
+                vcf_file
+            )
 
     return vcf_files_by_size_and_chromosome
 
