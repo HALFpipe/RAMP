@@ -320,9 +320,9 @@ class ScoreWriter(Worker):
                 two_dimensional_stat = stat.transpose().reshape(
                     (variant_count, 2 * phenotype_count)
                 )
-                self.stat_file_array[
-                    variant_slice, phenotype_slice
-                ] = two_dimensional_stat
+                self.stat_file_array[variant_slice, phenotype_slice] = (
+                    two_dimensional_stat
+                )
 
                 # Allow the calculation to continue
                 for i in range(job_count):
