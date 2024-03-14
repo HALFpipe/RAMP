@@ -63,8 +63,16 @@ Next, start an interactive shell inside the container using one of the following
 Development
 -----------
 
-To create a local development environment run:
+To create a local development environment install [Miniforge](https://github.com/conda-forge/miniforge) and create a `.condarc` file in your home directory with the following contents:
+```
+channels:
+  - conda-forge
+  - bioconda
+```
 
+Then update your `.bashrc` or `.zshrc` with `mamba init`. This will allow you to use the `conda` command.
+
+Next, install `mamba` using `conda install mamba` and then create the environment using the following command:
 ```bash
 mamba create --name "gwas" \
   "mamba" "boa" "conda-verify" \
@@ -78,4 +86,9 @@ mamba create --name "gwas" \
   "cython>=3b1" "mkl-include" "zlib" \
   "mypy" "pytest-benchmark" "threadpoolctl" \
   "compilers" "rust" "sysroot_linux-64>=2.17"
-```\
+```
+
+Finally, install the `gwas` package using the following command:
+```bash
+pip install --no-deps --editable "src/gwas"
+```
