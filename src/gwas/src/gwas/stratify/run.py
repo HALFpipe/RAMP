@@ -97,6 +97,17 @@ def stratify(arguments: Namespace, output_directory: Path) -> None:
         phenotype_samples,
     )
 
+    if len(phenotype_samples) == 0:
+        raise ValueError(
+            "No samples remaining. Please check that the sample IDs in the "
+            "phenotypes and covariates files are correctly matched to the "
+            "sample IDs in the MDS file and genotypes"
+        )
+    if len(phenotype_names_new) == 0:
+        raise ValueError("No phenotypes remaining")
+    if len(covariate_names) == 0:
+        raise ValueError("No covariates remaining")
+
     write_table(
         str(output_directory / "stratified_phenotypes"),
         phenotype_samples,

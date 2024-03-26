@@ -1,0 +1,33 @@
+{% set name = "upload" %}
+{% set version = "0.4.1" %}
+
+package:
+  name: {{ name }}
+  version: {{ version }}
+
+source:
+  url: https://github.com/hippocampusgirl/{{ name }}/archive/v{{ version }}.tar.gz
+  sha256: 395f336fa2dc913e84899f1f1fee8a2f57b650f4b6536c079ddba8ca48af7e62
+
+build:
+  noarch: generic
+
+requirements:
+  build:
+    - {{ compiler('c') }}
+    - {{ compiler('cxx') }}
+    - nodejs
+    - make
+  host:
+    - nodejs
+  run:
+    - nodejs
+
+test:
+  requires:
+    - nodejs
+  commands:
+    - upload --help
+
+about:
+  home: https://github.com/hippocampusgirl/upload

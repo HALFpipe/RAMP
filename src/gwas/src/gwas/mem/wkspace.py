@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from itertools import pairwise
 from mmap import MAP_SHARED, mmap
 from multiprocessing import reduction as mp_reduction
+from pprint import pformat
 from typing import Callable
 
 import numpy as np
@@ -87,7 +88,9 @@ class SharedWorkspace(AbstractContextManager):
         # check for overflow
         end = start + size - 1
         if end >= self.size:
-            raise MemoryError
+            raise MemoryError(
+                f"No space left in shared memory buffer: {pformat(allocations)}"
+            )
 
         allocations[name] = Allocation(start, size, shape, dtype)
 

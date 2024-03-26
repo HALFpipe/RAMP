@@ -27,7 +27,7 @@ FROM base as conda
 
 RUN curl --silent --show-error --location \
     "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh" \
-    --output "conda.sh" &&  \
+    --output "conda.sh" && \
     bash conda.sh -b -p /opt/conda && \
     rm conda.sh && \
     conda config --system --append channels "bioconda" && \
@@ -70,12 +70,16 @@ RUN --mount=source=recipes/r-saige,target=/r-saige \
     conda mambabuild --no-anaconda-upload "r-saige" && \
     conda build purge
 
+RUN --mount=source=recipes/upload,target=/upload \
+    conda mambabuild --no-anaconda-upload "upload" && \
+    conda build purge
+
 # mount .git folder too for setuptools_scm
 RUN --mount=source=recipes/gwas,target=/gwas-protocol/recipes/gwas \
     --mount=source=src/gwas,target=/gwas-protocol/src/gwas \
     --mount=source=.git,target=/gwas-protocol/.git \
     cd gwas-protocol/recipes && \
-    conda mambabuild --no-anaconda-upload "gwas" && \
+    conda mambabuild --no-anaconda-upload --use-local "gwas" && \
     conda build purge
 
 RUN conda index /opt/conda/conda-bld
@@ -94,7 +98,6 @@ RUN mamba install --yes --use-local \
     "plink2" \
     "r-skat" \
     "tabix" \
-    "bzip2" \
     "p7zip>=15.09" \
     "parallel" \
     "bolt-lmm" \
@@ -113,7 +116,6 @@ RUN mamba install --yes --use-local \
     sync && \
     find /opt/conda/ -follow -type f -name "*.a" -delete && \
     sync
-
 
 # Final
 # =====

@@ -76,6 +76,7 @@ class GwasCommand:
             Callable[[int | str, VariableCollection], Eigendecomposition] | None
         ) = None,
     ) -> list[VariableCollection]:
+        sw = base_variable_collection.sw
         # Load phenotype and covariate data for all samples that have genetic data and
         # count missing values.
         phenotype_names = base_variable_collection.phenotype_names
@@ -157,6 +158,7 @@ class GwasCommand:
                 )
 
             variable_collections.append(variable_collection)
+            sw.squash()
 
         # Sort by number of phenotypes
         variable_collections.sort(key=lambda vc: -vc.phenotype_count)
