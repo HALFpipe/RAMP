@@ -20,7 +20,7 @@ def _showwarning(message, category, filename, lineno, file=None, line=None):
     )
 
 
-def setup_logging(level: str | int, log_path: Path) -> None:
+def setup_logging(level: str | int, log_path: Path | None = None) -> None:
     root = logging.getLogger()
     root.setLevel(level)
 
@@ -31,8 +31,11 @@ def setup_logging(level: str | int, log_path: Path) -> None:
 
     handlers: list[logging.Handler] = [
         logging.StreamHandler(),
-        logging.FileHandler(log_path / "log.txt", "a", errors="backslashreplace"),
     ]
+    if log_path is not None:
+        handlers.append(
+            logging.FileHandler(log_path / "log.txt", "a", errors="backslashreplace")
+        )
     for handler in handlers:
         handler.setFormatter(formatter)
         root.addHandler(handler)

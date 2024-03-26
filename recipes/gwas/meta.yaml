@@ -47,6 +47,8 @@ requirements:
     - xz
     - bzip2
     - lz4-c
+    # Transfer results
+    - upload
 
 test:
   commands:
