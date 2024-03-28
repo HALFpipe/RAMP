@@ -255,8 +255,8 @@ def load_from_cache(cache_path: Path, key: str) -> Any:
     with CompressedBytesReader(file_path) as file_handle:
         try:
             return pickle.load(file_handle)
-        except pickle.UnpicklingError as e:
-            logger.warning(f'Failed to load "{file_path}"', exc_info=e)
+        except (pickle.UnpicklingError, EOFError) as error:
+            logger.warning(f'Failed to load "{file_path}"', exc_info=error)
             return None
 
 

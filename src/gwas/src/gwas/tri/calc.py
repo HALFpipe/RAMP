@@ -21,18 +21,23 @@ class Task(NamedTuple):
 
 
 def check_tri_path(
-    tri_path: Path,
-    vcf_by_chromosome: Mapping[int | str, VCFFile],
+    tri_path: Path, vcf_by_chromosome: Mapping[int | str, VCFFile], sw: SharedWorkspace
 ) -> tuple[int | str, Path] | None:
     if not tri_path.is_file():
         return None
     try:
-        _, kwargs = Triangular.read_file_metadata(tri_path)
-    except (ValueError, TypeError):
+        tri = Triangular.from_file(tri_path, sw)
+        chromosome = tri.chromosome
+        samples = vcf_by_chromosome[chromosome].samples
+        tri.free()
+    except (ValueError, TypeError) as error:
+        logger.warning(
+            f"Will re-calculate tri file {tri_path} because of an error reading the "
+            "existing file",
+            exc_info=error,
+        )
         return None
-    chromosome = kwargs["chromosome"]
-    samples = vcf_by_chromosome[chromosome].samples
-    if set(kwargs["samples"]) <= set(samples):
+    if set(tri.samples) <= set(samples):
         logger.debug(
             f"Using existing triangularized file {tri_path} "
             f"for chromosome {chromosome}"
@@ -48,6 +53,7 @@ def check_tri_path(
 def check_tri_paths(
     tri_paths: list[Path] | None,
     vcf_by_chromosome: Mapping[int | str, VCFFile],
+    sw: SharedWorkspace,
 ) -> MutableMapping[int | str, Path]:
     tri_paths_by_chromosome: MutableMapping[int | str, Path] = dict()
 
@@ -56,7 +62,7 @@ def check_tri_paths(
 
     # Load from `--tri` flag.
     for tri_path in tri_paths:
-        result = check_tri_path(tri_path, vcf_by_chromosome)
+        result = check_tri_path(tri_path, vcf_by_chromosome, sw)
         if result is None:
             continue
         chromosome, tri_path = result
@@ -90,7 +96,7 @@ def get_tri_tasks(
             continue
         # Generate default path.
         tri_path = output_directory / Triangular.get_file_name(chromosome)
-        result = check_tri_path(tri_path, vcf_by_chromosome)
+        result = check_tri_path(tri_path, vcf_by_chromosome, sw)
         if result is not None:
             chromosome, tri_path = result
             tri_paths_by_chromosome[chromosome] = tri_path
@@ -147,7 +153,7 @@ def calc_tri(
     Returns:
         Mapping[int | str, Path]: The paths to the triangular matrix files.
     """
-    tri_paths_by_chromosome = check_tri_paths(tri_paths, vcf_by_chromosome)
+    tri_paths_by_chromosome = check_tri_paths(tri_paths, vcf_by_chromosome, sw)
 
     t, tasks = get_tri_tasks(
         chromosomes,
