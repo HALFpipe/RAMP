@@ -60,32 +60,42 @@ def test_pheno(
         covariate_path, sep="\t", index=True, header=True, na_rep="n/a"
     )
 
-    variable_collection = VariableCollection.from_txt(
+    variable_collection0 = VariableCollection.from_txt(
         [phenotype_path],
         [covariate_path],
         sw,
         samples=samples,
         missing_value_strategy="listwise_deletion",
     )
-    request.addfinalizer(variable_collection.free)
-    assert_array_equal(variable_collection.phenotypes.to_numpy(), phenotypes)
-    assert_array_equal(variable_collection.covariates.to_numpy()[:, 1:], covariates)
+    request.addfinalizer(variable_collection0.free)
+    assert_array_equal(variable_collection0.phenotypes.to_numpy(), phenotypes)
+    assert_array_equal(variable_collection0.covariates.to_numpy()[:, 1:], covariates)
 
     truncated_samples = samples[1:]
-    variable_collection = VariableCollection.from_txt(
+    variable_collection1 = VariableCollection.from_txt(
         [phenotype_path],
         [covariate_path],
         sw,
         samples=truncated_samples,
         missing_value_strategy="listwise_deletion",
     )
-    request.addfinalizer(variable_collection.free)
-    assert_array_equal(variable_collection.phenotypes.to_numpy(), phenotypes[1:, :])
+    request.addfinalizer(variable_collection1.free)
+    assert_array_equal(variable_collection1.phenotypes.to_numpy(), phenotypes[1:, :])
     assert_array_equal(
-        variable_collection.covariates.to_numpy()[:, 1:], covariates[1:, :]
+        variable_collection1.covariates.to_numpy()[:, 1:], covariates[1:, :]
     )
 
-    assert len(sw.allocations) == allocation_count + 2
+    truncated_phenotypes = phenotype_names[1:]
+    variable_collection2 = variable_collection0.copy(
+        samples=truncated_samples, phenotype_names=truncated_phenotypes
+    )
+    request.addfinalizer(variable_collection2.free)
+    assert_array_equal(variable_collection2.phenotypes.to_numpy(), phenotypes[1:, 1:])
+    assert_array_equal(
+        variable_collection2.covariates.to_numpy()[:, 1:], covariates[1:, :]
+    )
+
+    assert len(sw.allocations) == allocation_count + 6
 
 
 def test_pheno_zero_variance(
@@ -114,4 +124,4 @@ def test_pheno_zero_variance(
         "covariate_04",
     ]
 
-    assert len(sw.allocations) == allocation_count + 1
+    assert len(sw.allocations) == allocation_count + 2

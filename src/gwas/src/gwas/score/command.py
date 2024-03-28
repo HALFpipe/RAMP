@@ -119,9 +119,10 @@ class GwasCommand:
             if len(pattern_phenotypes) == 0:
                 raise RuntimeError(f"No phenotypes in chunk {i}. This should not happen")
 
-            variable_collection = base_variable_collection.copy()
-            variable_collection.subset_phenotypes(pattern_phenotypes)
-            variable_collection.subset_samples(pattern_samples)
+            variable_collection = base_variable_collection.copy(
+                samples=pattern_samples, phenotype_names=pattern_phenotypes
+            )
+            variable_collection.remove_zero_variance_covariates()
             if not variable_collection.is_finite:
                 # Sanity check.
                 raise RuntimeError(

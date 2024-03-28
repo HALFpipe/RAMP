@@ -80,12 +80,29 @@ class VariableCollection:
     def __post_init__(self) -> None:
         self.remove_zero_variance_covariates()
 
-    def copy(self) -> Self:
+    def copy(
+        self, phenotype_names: list[str] | None = None, samples: list[str] | None = None
+    ) -> Self:
         phenotypes = self.phenotypes.to_numpy()
         covariates = self.covariates.to_numpy()
+
+        if phenotype_names is not None:
+            phenotypes = self.subset_phenotypes_array(
+                phenotypes, self.phenotype_names, phenotype_names
+            )
+        else:
+            phenotype_names = self.phenotype_names.copy()
+
+        if samples is not None:
+            phenotypes, covariates = self.subset_samples_array(
+                self.samples, samples, phenotypes, covariates
+            )
+        else:
+            samples = self.samples.copy()
+
         vc = self.from_arrays(
-            self.samples.copy(),
-            self.phenotype_names.copy(),
+            samples,
+            phenotype_names,
             phenotypes,
             self.covariate_names.copy(),
             covariates,
@@ -99,17 +116,25 @@ class VariableCollection:
         self.phenotypes.free()
         self.covariates.free()
 
-    def subset_phenotypes(self, phenotype_names: list[str]) -> None:
-        if phenotype_names == self.phenotype_names:
+    @staticmethod
+    def subset_phenotypes_array(
+        phenotypes: npt.NDArray[np.float64],
+        phenotype_names: list[str],
+        subset_phenotype_names: list[str],
+    ):
+        phenotype_indices = [
+            phenotype_names.index(name) for name in subset_phenotype_names
+        ]
+        return phenotypes[:, phenotype_indices]
+
+    def subset_phenotypes(self, subset_phenotype_names: list[str]) -> None:
+        if subset_phenotype_names == self.phenotype_names:
             # Nothing to do.
             return
-
-        phenotype_indices = [
-            self.phenotype_names.index(name) for name in phenotype_names
-        ]
-        self.phenotype_names = phenotype_names
-
-        new_phenotypes = self.phenotypes.to_numpy()[:, phenotype_indices]
+        self.phenotype_names = subset_phenotype_names
+        new_phenotypes = self.subset_phenotypes_array(
+            self.phenotypes.to_numpy(), self.phenotype_names, subset_phenotype_names
+        )
         self.phenotypes.free()
         self.phenotypes = SharedArray.from_numpy(
             new_phenotypes, self.phenotypes.sw, prefix="phenotypes"
@@ -149,6 +174,18 @@ class VariableCollection:
             )
             old_covariates.free()
 
+    @staticmethod
+    def subset_samples_array(
+        samples: list[str],
+        subset_samples: list[str],
+        phenotypes: npt.NDArray[np.float64],
+        covariates: npt.NDArray[np.float64],
+    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+        sample_indices = [samples.index(sample) for sample in subset_samples]
+        new_phenotypes = phenotypes[sample_indices, :]
+        new_covariates = covariates[sample_indices, :]
+        return new_phenotypes, new_covariates
+
     def subset_samples(self, samples: list[str]) -> None:
         if samples == self.samples:
             # Nothing to do.
@@ -159,14 +196,15 @@ class VariableCollection:
         old_phenotypes = self.phenotypes
         old_covariates = self.covariates
 
-        sample_indices = [self.samples.index(sample) for sample in samples]
+        new_phenotypes, new_covariates = self.subset_samples_array(
+            self.samples, samples, old_phenotypes.to_numpy(), old_covariates.to_numpy()
+        )
+
         self.samples = samples
 
-        new_phenotypes = old_phenotypes.to_numpy()[sample_indices, :]
         self.phenotypes = SharedArray.from_numpy(new_phenotypes, sw, prefix="phenotypes")
         old_phenotypes.free()
 
-        new_covariates = old_covariates.to_numpy()[sample_indices, :]
         self.covariates = SharedArray.from_numpy(new_covariates, sw, prefix="covariates")
         old_covariates.free()
         self.remove_zero_variance_covariates()
