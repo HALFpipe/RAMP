@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from pathlib import Path
+from subprocess import check_call
 from typing import NamedTuple, Sequence
 
 import numpy as np
@@ -9,6 +10,8 @@ from gwas.compression.pipe import CompressedTextReader
 from gwas.vcf.base import Engine, Variant, VCFFile
 from numpy import typing as npt
 from tqdm.auto import tqdm
+
+from .utils import plink2
 
 sample_size_label = "small"
 chromosome: int = 22
@@ -106,3 +109,54 @@ def test_cpp(vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]])
     dosages = np.zeros((vcf_file.variant_count, vcf_file.sample_count))
     with vcf_file:
         vcf_file.read(dosages)
+
+
+def test_converted(vcf_path: Path, tmp_path: Path):
+    converted_prefix = tmp_path / f"chr{chromosome}-converted"
+    check_call(
+        [
+            plink2,
+            "--vcf",
+            str(vcf_path),
+            "dosage=DS",
+            "--export",
+            "bgen-1.3",
+            "--out",
+            str(converted_prefix),
+        ]
+    )
+    converted_bgen_path = converted_prefix.with_suffix(".bgen")
+    assert converted_bgen_path.is_file()
+
+    check_call(
+        [
+            plink2,
+            "--bgen",
+            str(converted_bgen_path),
+            "ref-unknown",
+            "--mac",
+            "1",
+            "--export",
+            "vcf",
+            "vcf-dosage=DS-force",
+            "bgz",
+            "--out",
+            str(converted_prefix),
+        ]
+    )
+    converted_vcf_path = converted_prefix.with_suffix(".vcf.gz")
+    assert converted_vcf_path.is_file()
+
+    variant_indices = np.arange(4000, dtype=np.uint32)
+
+    vcf_file = VCFFile.from_path(vcf_path, engine=Engine.cpp)
+    array1 = np.zeros((4000, vcf_file.sample_count), dtype=float)
+    with vcf_file:
+        vcf_file.variant_indices = variant_indices
+        vcf_file.read(array1)
+
+    vcf_file = VCFFile.from_path(converted_vcf_path, engine=Engine.cpp)
+    array2 = np.zeros((4000, vcf_file.sample_count), dtype=float)
+    with vcf_file:
+        vcf_file.variant_indices = variant_indices
+        vcf_file.read(array2)
