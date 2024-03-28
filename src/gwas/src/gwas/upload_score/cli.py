@@ -39,6 +39,9 @@ def upload(arguments: Namespace) -> None:
         tmp_path = Path(tmp_path_str)
         paths: set[str] = set()
         for upload_path in upload_paths:
+            if upload_path.name.startswith("sub-"):
+                # Skip BIDS subject files
+                continue
             link_path = tmp_path / upload_path.name
             link_path.parent.mkdir(parents=True, exist_ok=True)
             link_path.symlink_to(upload_path)
