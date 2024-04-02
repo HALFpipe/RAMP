@@ -77,7 +77,6 @@ struct RingBuffer {
     const ssize_t bytes_read =
         read(file_descriptor, data_.data() + actual_write_index, read_size);
     if (bytes_read < 0) {
-      // std::cerr << "Error reading from file descriptor" << std::endl;
       PyErr_SetString(PyExc_IOError, "Error reading from file descriptor");
       throw error_already_set();
     }

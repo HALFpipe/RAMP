@@ -5,8 +5,7 @@ FROM ubuntu:rolling as base
 ENV LC_ALL="C.UTF-8" \
     LANG="C.UTF-8" \
     DEBIAN_FRONTEND="noninteractive" \
-    DEBCONF_NOWARNINGS="yes" \
-    PATH="/opt/conda/bin:$PATH"
+    DEBCONF_NOWARNINGS="yes"
 
 RUN apt-get update && \
     apt-get install --yes --no-install-recommends \
@@ -25,6 +24,7 @@ RUN apt-get update && \
 # =============
 FROM base as conda
 
+ENV PATH="/opt/conda/bin:$PATH"
 RUN curl --silent --show-error --location \
     "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh" \
     --output "conda.sh" && \
@@ -38,7 +38,6 @@ RUN curl --silent --show-error --location \
 # Build packages
 # ==============
 FROM conda as builder
-
 RUN mamba install --yes "boa" "conda-verify"
 COPY recipes/conda_build_config.yaml /root/conda_build_config.yaml
 
@@ -112,12 +111,15 @@ RUN mamba install --yes --use-local \
     "r-saige" && \
     sync && \
     rm -rf /opt/conda/conda-bld && \
-    mamba clean --yes --all --force-pkgs-dirs && \
-    sync && \
-    find /opt/conda/ -follow -type f -name "*.a" -delete && \
-    sync
+    mamba clean --yes --all --force-pkgs-dirs
 
 # Final
 # =====
 FROM base
 COPY --from=install /opt/conda /opt/conda
+
+# Ensure that we can link to libraries installed via conda
+ENV PATH="/opt/conda/bin:$PATH" \
+    CPATH="/opt/conda/include:${CPATH}"
+RUN echo /opt/conda/lib > /etc/ld.so.conf.d/conda.conf && \
+    ldconfig
