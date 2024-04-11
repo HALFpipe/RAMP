@@ -97,26 +97,32 @@ def underscore(x: str) -> str:
     return re.sub(r"([a-z\d])([A-Z])", r"\1_\2", x).lower()
 
 
-def get_initargs() -> tuple[set[int], Queue[LogRecord] | None, int | str]:
+def get_initargs() -> tuple[set[int] | None, Queue[LogRecord] | None, int | str]:
     from .log import logging_thread
 
     logging_queue: Queue[LogRecord] | None = None
     if logging_thread is not None:
         logging_queue = logging_thread.logging_queue
 
+    sched_affinity: set[int] | None = None
+    if hasattr(os, "sched_getaffinity"):
+        sched_affinity = os.sched_getaffinity(0)
+
     return (
-        os.sched_getaffinity(0),
+        sched_affinity,
         logging_queue,
         logger.getEffectiveLevel(),
     )
 
 
 def initializer(
-    sched_affinity: set[int],
+    sched_affinity: set[int] | None,
     logging_queue: Queue[LogRecord] | None,
     log_level: int | str,
 ) -> None:
-    os.sched_setaffinity(0, sched_affinity)
+    if sched_affinity is not None:
+        if hasattr(os, "sched_setaffinity"):
+            os.sched_setaffinity(0, sched_affinity)
 
     if logging_queue is not None:
         worker_configurer(logging_queue, log_level)
