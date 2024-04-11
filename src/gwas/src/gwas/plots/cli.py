@@ -17,32 +17,41 @@ from gwas.plots.worker import create_dataframe_all_chr
 def parse_args() -> argparse.Namespace:
     """Parses command-line arguments"""
     parser = argparse.ArgumentParser(description="Generate Manhattan & QQ Plots")
-    parser.add_argument(
-        "--metadata_directory",
-        help="Insert path to the metadata directory",
+
+    group = parser.add_argument_group(
+        "paths", description="Input and output directories"
+    )
+    group.add_argument(
+        "--input-directory",
+        "--workdir",
+        "--wd",
+        type=str,
+        nargs="+",
+        action="extend",
+        required=True,
+        help="at least two input directories containing scores and metadata",
+    )
+    group.add_argument(
+        "--output_directory",
+        help="Insert path to output directory for dataframes and plots",
         required=True,
     )
-    parser.add_argument(
-        "--scoredata_directory",
-        help="Insert path to the scoredata directory",
-        required=True,
-    )
+
     parser.add_argument(
         "--csvroi_file",
         help="Insert path to the csv rois file",
         default=None,
     )
-    parser.add_argument(
-        "--output_directory",
-        help="Insert path to output directory for dataframes and plots",
-        required=True,
-    )
+
     parser.add_argument(
         "--log-level", choices=logging.getLevelNamesMapping().keys(), default="INFO"
     )
     parser.add_argument(
         "--save_df",
-        help="If set the generated dataframe for a phenotype will be saved in the specified output directory. Useful for debugging.",
+        help=(
+            "If set the generated dataframe for a phenotype will be saved in the"
+            "specified output directory. Useful for debugging."
+        ),
         type=bool,
         default=False,
     )
@@ -65,10 +74,6 @@ def main():
     labels_list = []
     if args.csvroi_file:
         labels_list = filter_rois(csv_path=args.csvroi_file)
-
-    # Implement logic to work with nonexistent region of interest files
-
-    # maybe confusing to use progressbar for labels and then not for chromomosomes but variant data for each chromosome
 
     for label in tqdm(range(len(labels_list)), desc="Processing labels"):
         if check_existing_files(directory=output_directory, label=label):
