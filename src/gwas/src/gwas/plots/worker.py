@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
 from multiprocessing import Pool
 from pathlib import Path
+from typing import List
 
 import blosc2
 import pandas as pd
 
-from gwas.plots.helpers import chi2_pvalue, find_phenotype_index, load_metadata
+from gwas.plots.helpers import (
+    ChromosomeData,
+    chi2_pvalue,
+    find_phenotype_index,
+    load_metadata,
+)
 
 
 def create_dataframe_single_chr(
@@ -67,20 +73,21 @@ def create_dataframe_single_chr(
 
 
 def create_dataframe_all_chr(
-    score_path: str | Path, metadata_path: str | Path, label: str, cpu_count: int
+    chromosome_list: List[ChromosomeData], label: str, cpu_count: int
 ) -> pd.DataFrame:
     """Generate dataframes with information needed for manhattan plots / qq plots
      for each chromosome which will be concatenated together.
     Uses multiprocessing to utilize cpu and share the workload.
     """
-    chromosomes = list(range(1, 23)) + ["X"]
     tasks = [
         (
-            Path(score_path) / f"chr{chromosome}.score.b2array",
-            Path(metadata_path) / f"chr{chromosome}.score.axis-metadata.pkl.zst",
+            # Path(score_path) / f"chr{chromosome}.score.b2array",
+            # Path(metadata_path) / f"chr{chromosome}.score.axis-metadata.pkl.zst",
+            Path(chr.score_path),
+            Path(chr.metadata_path),
             label,
         )
-        for chromosome in chromosomes
+        for chr in chromosome_list
     ]
     dfs = []
 
