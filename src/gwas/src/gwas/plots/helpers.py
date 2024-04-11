@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import pickle
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple
 
@@ -115,3 +116,57 @@ def check_existing_files(directory: Path, label: str) -> bool:
     if plot_file_path.is_file() or df_file_path.is_file():
         return True
     return False
+
+
+@dataclass
+class ChromosomeData:
+    """Dataclass for tracking chromosome paths"""
+
+    chromosome: int | str
+    score_path: str | Path
+    metadata_path: str | Path
+
+
+def resolve_chromosomes(input_dir: str, logger) -> List[ChromosomeData]:
+    """
+    Verifies that each directory contains either all required .b2array score files
+    or all axis_metadata.pkl.zst metadata files, for chromosomes 1-22 to X.
+
+    Parameters:
+        input_dir (str): Input directory path.
+
+    Returns:
+        resolved_chr (List[chrDataclass]): A list of all resolved chromosomes
+        where score path and
+        metadata path could be found.
+
+    Raises:
+        NotADirectoryError: If any specified path is not a directory.
+        ValueError: If one of the chromosomes of 1 to 22 is missing.
+        Only warns when ChrX is missing.
+    """
+    resolved_chroms = []
+
+    chromosomes = [str(ch) for ch in range(1, 23)] + ["X"]
+
+    if not Path(input_dir).is_dir():
+        raise NotADirectoryError(f"""Specified input directory is not found:
+                                 {input_dir}""")
+
+    for chr in chromosomes:
+        score_path = Path(input_dir) / f"chr{chr}.score.b2array"
+        metadata_path = Path(input_dir) / f"chr{chr}.score.axis-metadata.pkl.zst"
+
+        if not score_path.exists() and metadata_path.exists():
+            if chr == "X":
+                logger.warning("Warning missing chromosome X!")
+            raise ValueError(f"""Missing needed chromosome {chr}
+                             for calculation!""")
+
+        chromosome = ChromosomeData(
+            chromosome=chr, score_path=score_path, metadata_path=metadata_path
+        )
+
+        resolved_chroms.append(chromosome)
+
+    return resolved_chroms
