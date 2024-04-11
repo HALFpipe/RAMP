@@ -13,7 +13,9 @@ from gwas.compression.pipe import CompressedBytesReader
 
 
 def chi2_pvalue(ustat: int | float, vstat: int | float) -> float:
-    """Calculates the p-value from U-statistic and V-statistic using the chi-square test."""
+    """
+    Calculates the p-value from U-statistic and V-statistic using the chi-square test.
+    """
     chi2_stat = (ustat**2) / vstat
     p_value = chi2.sf(chi2_stat, df=1)
     return p_value
@@ -27,16 +29,21 @@ def find_phenotype_index(phenotype_label: str, phenotypes_list: List) -> Tuple[i
         phenotypes_list (List[str]): A list of phenotype descriptors.
 
     Returns:
-        Tuple[int, int]: A tuple containing the indices of the U-statistic and V-statistic.
+        Tuple[int, int]: A tuple containing the indices of the U-statistic and
+        V-statistic.
 
     Raises:
-        ValueError: If either the U-statistic or V-statistic index cannot be found for the
+        ValueError: If either the U-statistic or V-statistic index cannot be
+        found for the
         specified phenotype label.
     """
     u_stat_idx = None
     v_stat_idx = None
     # namedTuple für phenotype
-    # to use phenotypes_list.index() method we need to build the complete string from the correct label using our included file-name.txt
+    """
+    to use phenotypes_list.index() method we need to build the complete
+    string from the correct label using our included file-name.txt
+    """
     for index, phenotype in enumerate(phenotypes_list):
         if phenotype_label in phenotype:
             if "stat-u" in phenotype:
@@ -48,12 +55,12 @@ def find_phenotype_index(phenotype_label: str, phenotypes_list: List) -> Tuple[i
         return u_stat_idx, v_stat_idx
     else:
         raise ValueError(
-            f"Matching indices for '{phenotype_label}' not found. u_stat_idx: {u_stat_idx}, v_stat_idx: {v_stat_idx}"
+            f"""Matching indices for '{phenotype_label}' not found.
+            u_stat_idx: {u_stat_idx}, v_stat_idx: {v_stat_idx}"""
         )
 
 
 def load_metadata(metadata_path: Path):
-    # with open(metadata_path, "rb") as f:
     with CompressedBytesReader(metadata_path) as f:
         decompressor = zstd.ZstdDecompressor()
         compressed_data = f.read()
@@ -72,20 +79,6 @@ def filter_rois(csv_path: str):
     return labels_list
 
 
-def save_dataframe_as_pickle(
-    dataframe: pd.DataFrame, directory: Path, label: str
-) -> None:
-    folder_name = "integramoods_gwas_dfs"
-    folder_path = directory / folder_name
-    folder_path.mkdir(parents=True, exist_ok=True)
-
-    filename = f"integramoods_gwas_{label}_df.pkl"
-    file_path = folder_path / filename
-
-    with file_path.open("wb") as file:
-        pickle.dump(dataframe, file)
-
-
 def generate_and_save_manhattan_plot(
     dataframe: pd.DataFrame, directory: Path, label: str
 ) -> None:
@@ -95,15 +88,17 @@ def generate_and_save_manhattan_plot(
 
     filename = f"manhattanplot_{label}.png"
     file_path = folder_path / filename
-
-    ax = manhattanplot(
+    f, ax = plt.subplots(figsize=(12, 8), facecolor="w", edgecolor="k")
+    _ = manhattanplot(
         data=dataframe,
         genomewideline=1e-8,
         chrom="CHR",
         pos="BP",
         pv="P",
         snp="SNP",
+        hline_kws={"linestyle": "--", "lw": 1.3},
         xticklabel_kws={"rotation": "vertical"},
+        ax=ax,
     )
     plt.savefig(file_path)
 
