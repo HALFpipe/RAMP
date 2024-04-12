@@ -4,13 +4,12 @@ import logging
 import multiprocessing as mp
 from pathlib import Path
 
-from tqdm import tqdm
-
 from gwas.plots.helpers import (
     check_existing_files,
-    filter_rois,
+    enrich_phenotype_names,
     generate_and_save_manhattan_plot,
     resolve_chromosomes,
+    verify_metadata,
 )
 from gwas.plots.worker import create_dataframe_all_chr
 
@@ -37,11 +36,14 @@ def parse_args() -> argparse.Namespace:
         help="Insert path to output directory for dataframes and plots",
         required=True,
     )
-
-    parser.add_argument(
-        "--csvroi_file",
-        help="Insert path to the csv rois file",
-        default=None,
+    group.add_argument(
+        "--include-phenotype-list",
+        type=str,
+        nargs=1,
+        help=(
+            "Include only phenotypes that are present within this list."
+            "Each new line should be a new phenotype"
+        ),
     )
 
     parser.add_argument(
@@ -71,20 +73,20 @@ def main():
     output_directory.mkdir(parents=True, exist_ok=True)
 
     input_dir = args.input_directory
+
+    verify_metadata(input_dir)
     resolved_chrs = resolve_chromosomes(input_dir, logger=logger)
+
+    phenotype_stat_names = enrich_phenotype_names(args.include_phenotype_list)
 
     setup_logging(level=args.log_level, log_path=output_directory)
 
-    labels_list = []
-    if args.csvroi_file:
-        labels_list = filter_rois(csv_path=args.csvroi_file)
-
-    for label in tqdm(range(len(labels_list)), desc="Processing labels"):
-        if check_existing_files(directory=output_directory, label=label):
+    for phenotype, stats in phenotype_stat_names.items():
+        if check_existing_files(directory=output_directory, label=phenotype):
             continue
         cur_df = create_dataframe_all_chr(
             chromosome_list=resolved_chrs,
-            label=label,
+            pheno_stats=stats,
             cpu_count=args.num_threads,
         )
         if args.save_df:
@@ -92,12 +94,12 @@ def main():
             folder_path = output_directory / folder_name
             folder_path.mkdir(parents=True, exist_ok=True)
 
-            filename = f"integramoods_gwas_{label}_df.pkl"
+            filename = f"integramoods_gwas_{phenotype}_df.pkl"
             file_path = folder_path / filename
             cur_df.to_pickle(path=file_path)
 
         generate_and_save_manhattan_plot(
-            dataframe=cur_df, directory=output_directory, label=label
+            dataframe=cur_df, directory=output_directory, label=phenotype
         )
 
 

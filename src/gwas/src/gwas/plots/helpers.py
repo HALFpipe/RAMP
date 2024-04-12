@@ -2,7 +2,7 @@
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -22,45 +22,6 @@ def chi2_pvalue(ustat: int | float, vstat: int | float) -> float:
     return p_value
 
 
-def find_phenotype_index(phenotype_label: str, phenotypes_list: List) -> Tuple[int, int]:
-    """
-    Finds the indices of the U-statistic and V-statistic for a given phenotype label.
-    Args:
-        phenotype_label (str): The label of the phenotype to find indices for.
-        phenotypes_list (List[str]): A list of phenotype descriptors.
-
-    Returns:
-        Tuple[int, int]: A tuple containing the indices of the U-statistic and
-        V-statistic.
-
-    Raises:
-        ValueError: If either the U-statistic or V-statistic index cannot be
-        found for the
-        specified phenotype label.
-    """
-    u_stat_idx = None
-    v_stat_idx = None
-    # namedTuple für phenotype
-    """
-    to use phenotypes_list.index() method we need to build the complete
-    string from the correct label using our included file-name.txt
-    """
-    for index, phenotype in enumerate(phenotypes_list):
-        if phenotype_label in phenotype:
-            if "stat-u" in phenotype:
-                u_stat_idx = index
-            elif "stat-v" in phenotype:
-                v_stat_idx = index
-
-    if u_stat_idx is not None and v_stat_idx is not None:
-        return u_stat_idx, v_stat_idx
-    else:
-        raise ValueError(
-            f"""Matching indices for '{phenotype_label}' not found.
-            u_stat_idx: {u_stat_idx}, v_stat_idx: {v_stat_idx}"""
-        )
-
-
 def load_metadata(metadata_path: Path):
     with CompressedBytesReader(metadata_path) as f:
         decompressor = zstd.ZstdDecompressor()
@@ -71,13 +32,6 @@ def load_metadata(metadata_path: Path):
         stream_reader.close()
         metadata = pickle.loads(decompressed_data)
     return metadata
-
-
-def filter_rois(csv_path: str):
-    csv_df = pd.read_csv(csv_path)
-    filtered_df = csv_df[csv_df["Brainnetome label (hypothesis)"].notna()]
-    labels_list = filtered_df["Label"].tolist()
-    return labels_list
 
 
 def generate_and_save_manhattan_plot(
@@ -170,3 +124,58 @@ def resolve_chromosomes(input_dir: str, logger) -> List[ChromosomeData]:
         resolved_chroms.append(chromosome)
 
     return resolved_chroms
+
+
+def verify_metadata(input_dir: str | Path):
+    """
+    Verifies that all metadata files have the same length and contain the same
+    phenotype labels.
+    Parameters:
+        input_dir (str): input directory containing metadata files.
+    Raises:
+        ValueError: If metadata files do not have the same length or phenotype labels.
+    """
+    metadata_files = list(Path(input_dir).glob("*.axis-metadata.pkl.zst"))
+
+    if not metadata_files:
+        raise ValueError("No metadata files to be verified found!")
+
+    reference_metadata = load_metadata(metadata_files[0])
+    reference_series = reference_metadata[1]
+    reference_set = set(reference_series)
+
+    for file in metadata_files[1:]:
+        current_metadata = load_metadata(file)
+        current_series = current_metadata[1]
+
+        # Check for matching length
+        if current_series.size != reference_series.size:
+            raise ValueError(
+                f"""Metadata file {file} does not match in length with
+                 the reference."""
+            )
+
+        # Check for matching content
+        if set(current_series) != reference_set:
+            raise ValueError(
+                f"""Metadata file {file} does not have matching phenotype labels
+                 with the reference."""
+            )
+
+
+def enrich_phenotype_names(phenotype_list_path: str | Path):
+    """
+    Returns a dictionary mapping each phenotype to its stat
+    name with '_stat-u' and '_stat-v' suffixes from a file.
+    """
+    phenotypes_txt_path = Path(phenotype_list_path)
+    with Path.open(phenotypes_txt_path, "r") as file:
+        pheno_set = set(line.strip() for line in file)
+
+    pheno_variants = {}
+    for pheno in pheno_set:
+        stat_u = f"{pheno}_stat-u"
+        stat_v = f"{pheno}_stat-v"
+        pheno_variants[pheno] = (stat_u, stat_v)
+
+    return pheno_variants
