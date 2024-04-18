@@ -74,7 +74,7 @@ def main():
 
     input_dir = args.input_directory
 
-    verify_metadata(input_dir)
+    verify_metadata(*input_dir)
     resolved_chrs = resolve_chromosomes(input_dir, logger=logger)
 
     phenotype_stat_names = enrich_phenotype_names(args.include_phenotype_list)
