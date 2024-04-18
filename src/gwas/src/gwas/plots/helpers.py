@@ -25,12 +25,13 @@ def chi2_pvalue(ustat: int | float, vstat: int | float) -> float:
 def load_metadata(metadata_path: Path):
     with CompressedBytesReader(metadata_path) as f:
         decompressor = zstd.ZstdDecompressor()
-        compressed_data = f.read()
+        # compressed_data = f.read()
         # decompressed_data = decompressor.decompress(compressed_data)
-        stream_reader = decompressor.stream_reader(compressed_data)
-        decompressed_data = stream_reader.read()
-        stream_reader.close()
-        metadata = pickle.loads(decompressed_data)
+        # stream_reader = decompressor.stream_reader(compressed_data)
+        with decompressor.stream_reader(f) as reader:
+            decompressed_data = reader.read()
+            reader.close()
+            metadata = pickle.loads(decompressed_data)
     return metadata
 
 
