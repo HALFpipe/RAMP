@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from enum import Enum, auto
 from functools import partial
 from pathlib import Path
 from typing import ClassVar
 
+import cyvcf2
 import numpy as np
 import pandas as pd
 from numpy import typing as npt
@@ -22,6 +23,7 @@ from .variant import Variant
 class Engine(Enum):
     python = auto()
     cpp = auto()
+    cyvcf = auto()
 
 
 variant_columns = [
@@ -35,6 +37,106 @@ variant_columns = [
     "r_squared",
     "format_str",
 ]
+
+
+class AbstractVCFFile(ABC):
+    mandatory_columns: ClassVar[tuple[str, ...]] = (
+        "CHROM",
+        "POS",
+        "ID",
+        "REF",
+        "ALT",
+        "QUAL",
+        "FILTER",
+        "INFO",
+        "FORMAT",
+    )
+
+    chromosome_column_index: ClassVar[int] = mandatory_columns.index("CHROM")
+    position_column_index: ClassVar[int] = mandatory_columns.index("POS")
+    reference_allele_column_index: ClassVar[int] = mandatory_columns.index("REF")
+    alternate_allele_column_index: ClassVar[int] = mandatory_columns.index("ALT")
+    info_column_index: ClassVar[int] = mandatory_columns.index("INFO")
+    format_column_index: ClassVar[int] = mandatory_columns.index("FORMAT")
+
+    metadata_column_indices: ClassVar[npt.NDArray[np.uint32]] = np.array(
+        [
+            chromosome_column_index,
+            position_column_index,
+            reference_allele_column_index,
+            alternate_allele_column_index,
+            info_column_index,
+            format_column_index,
+        ],
+        dtype=np.uint32,
+    )
+    vcf_samples: list[str]
+    samples: list[str]
+    sample_indices: npt.NDArray[np.uint32]
+
+    vcf_variants: pd.DataFrame
+    variant_indices: npt.NDArray[np.uint32]
+    allele_frequency_columns: list[str]
+
+    minor_allele_frequency_cutoff: float
+    r_squared_cutoff: float
+
+    def __init__(self, file_path: str | Path) -> None:
+        super().__init__()
+        self.file_path = file_path
+        self.header_info = self._read_header()
+        self.samples = []
+        self.variants = pd.DataFrame
+
+    @abstractmethod
+    def _read_header(self):
+        pass
+
+    @abstractmethod
+    def set_samples(self, samples: set[str]):
+        pass
+
+    @abstractmethod
+    def set_variants_from_cutoffs(
+        self,
+        minor_allele_frequency_cutoff: float = -np.inf,
+        r_squared_cutoff: float = -np.inf,
+    ):
+        pass
+
+    @abstractmethod
+    def read(self):
+        pass
+
+    @abstractmethod
+    def make_data_frame(self, vcf_variants: list[cyvcf2.Variant]) -> pd.DataFrame:
+        pass
+
+    @staticmethod
+    def from_path(
+        file_path: Path | str,
+        samples: set[str] | None = None,
+        engine: Engine = Engine.cpp,
+    ) -> VCFFile:
+        if engine == Engine.python:
+            from .python import PyVCFFile
+
+            vcf_file: VCFFile = PyVCFFile(file_path)
+        elif engine == Engine.cpp:
+            from .cpp import CppVCFFile
+
+            vcf_file = CppVCFFile(file_path)
+        # elif engine == Engine.cyvcf:
+        #    from .cyvcf2 import CyVCFReader
+
+        #    vcf_file = CyVCFReader(file_path=file_path)
+        else:
+            raise ValueError
+
+        if samples is not None:
+            vcf_file.set_samples(samples)
+
+        return vcf_file
 
 
 class VCFFile(CompressedTextReader):
