@@ -23,7 +23,7 @@ def vcf_file(
 
 
 @pytest.fixture(scope="module")
-def genotypes_array(vcf_file: VCFFile) -> npt.NDArray:
+def genotypes_array(vcf_file: VCFFile) -> npt.NDArray[np.float64]:
     vcf_file.set_variants_from_cutoffs(
         minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
     )
@@ -37,7 +37,7 @@ def genotypes_array(vcf_file: VCFFile) -> npt.NDArray:
 
 
 @pytest.fixture(scope="module")
-def numpy_tri(genotypes_array: npt.NDArray) -> npt.NDArray:
+def numpy_tri(genotypes_array: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     a = genotypes_array
 
     r = np.linalg.qr(a, mode="r")
@@ -55,9 +55,9 @@ def numpy_tri(genotypes_array: npt.NDArray) -> npt.NDArray:
 @pytest.mark.slow
 def test_tri(
     vcf_file: VCFFile,
-    genotypes_array: npt.NDArray,
-    numpy_tri: npt.NDArray,
-):
+    genotypes_array: npt.NDArray[np.float64],
+    numpy_tri: npt.NDArray[np.float64],
+) -> None:
     log_size = 30  # 1 gigabyte.
     sw = SharedWorkspace.create(size=2**log_size)
 
@@ -93,7 +93,9 @@ def test_tri(
 
 
 @pytest.mark.slow
-def test_tri_file(tmp_path: Path, numpy_tri: npt.NDArray, sw: SharedWorkspace):
+def test_tri_file(
+    tmp_path: Path, numpy_tri: npt.NDArray[np.float64], sw: SharedWorkspace
+) -> None:
     allocation_count = len(sw.allocations)
 
     sw = SharedWorkspace.create()
@@ -118,7 +120,7 @@ def test_tri_file(tmp_path: Path, numpy_tri: npt.NDArray, sw: SharedWorkspace):
     tri_path = tri.to_file(tmp_path)
     assert f"chr{tri.chromosome}" in tri_path.name
 
-    b = Triangular.from_file(tri_path, sw)
+    b = Triangular.from_file(tri_path, sw, np.float64)
     assert f"chr{tri.chromosome}" in b.name
     assert b.chromosome == tri.chromosome
     assert b.variant_count == tri.variant_count
@@ -133,7 +135,7 @@ def test_tri_file(tmp_path: Path, numpy_tri: npt.NDArray, sw: SharedWorkspace):
     assert len(sw.allocations) == allocation_count
 
 
-def test_tri_subset_samples(sw: SharedWorkspace):
+def test_tri_subset_samples(sw: SharedWorkspace) -> None:
     allocation_count = len(sw.allocations)
 
     k = 100

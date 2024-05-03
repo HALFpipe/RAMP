@@ -20,7 +20,7 @@ def write_table(
     prefix: str,
     samples: list[SampleID],
     columns: list[str],
-    array: npt.NDArray,
+    array: npt.NDArray[np.float64],
     output_sample_ids: str = "merge_both_with_underscore",
 ) -> None:
     index = [s.to_str(method=output_sample_ids) for s in samples]

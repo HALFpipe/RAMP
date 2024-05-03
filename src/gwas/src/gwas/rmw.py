@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import scipy
 from numpy import typing as npt
+from pandas.core.frame import _PandasNamedTuple
 from tqdm.auto import tqdm
 
 from . import __version__
@@ -56,7 +57,7 @@ def parse_delim(value: str) -> tuple[str, npt.NDArray[np.float64]]:
     return name, np.fromstring(values, sep="\t")
 
 
-def write_delim(file_handle: IO[str], *values: str):
+def write_delim(file_handle: IO[str], *values: str) -> None:
     file_handle.write("##" + "\t".join(values) + "\n")
 
 
@@ -175,7 +176,7 @@ class Scorefile:
     def read_header(
         cls,
         file_path: Path | str,
-    ):
+    ) -> ScorefileHeader:
         header_dict: dict[str, Any] = dict(
             null_model_estimates=list(),
             covariate_summaries=list(),
@@ -206,14 +207,14 @@ class Scorefile:
         return ScorefileHeader(**header_dict)
 
     @classmethod
-    def get_dtype(cls, _: ScorefileHeader):
+    def get_dtype(cls, _: ScorefileHeader) -> npt.DTypeLike:
         return np.dtype(list(zip(cls.names, cls.types, strict=True)))
 
     @classmethod
     def read(
         cls,
         file_path: Path | str,
-    ) -> tuple[ScorefileHeader, npt.NDArray]:
+    ) -> tuple[ScorefileHeader, npt.NDArray[np.float64]]:
         line_count = 0
         with CompressedTextReader(file_path) as file:
             for line in file:
@@ -249,7 +250,7 @@ class Scorefile:
         variants: pd.DataFrame,
         u_stat: npt.NDArray[np.float64],
         v_stat: npt.NDArray[np.float64],
-    ):
+    ) -> None:
         with CompressedTextWriter(file_path) as file_handle:
             cls.write_header(file_handle, header)
             cls.write_names(file_handle, np.empty((0,)))
@@ -260,8 +261,8 @@ class Scorefile:
         cls,
         file_path: Path | str,
         header: ScorefileHeader,
-        array: npt.NDArray,
-    ):
+        array: npt.NDArray[np.float64],
+    ) -> None:
         with CompressedTextWriter(file_path) as file_handle:
             cls.write_header(file_handle, header)
             cls.write_names(file_handle, np.empty((0,)))
@@ -281,7 +282,9 @@ class Scorefile:
         if phenotype_name is not None:
             phenotype_index = vc.phenotype_names.index(phenotype_name)
 
-        def make_summaries(names: list[str], values: npt.NDArray[np.float64]):
+        def make_summaries(
+            names: list[str], values: npt.NDArray[np.float64]
+        ) -> OrderedDict[str, VariableSummary]:
             summaries: OrderedDict[str, VariableSummary] = OrderedDict()
             for i, name in enumerate(names):
                 if phenotype_name is not None and name != phenotype_name:
@@ -339,7 +342,7 @@ class Scorefile:
         cls,
         file_handle: IO[str],
         header: ScorefileHeader,
-    ):
+    ) -> None:
         file_handle.write(f"##ProgramName={header.program_name}\n")
         file_handle.write(f"##Version={header.version}\n")
 
@@ -355,7 +358,7 @@ class Scorefile:
 
         summary_columns = ["min", "25th", "median", "75th", "max", "mean", "variance"]
 
-        def write_summary(name: str, summary: VariableSummary):
+        def write_summary(name: str, summary: VariableSummary) -> None:
             write_delim(
                 file_handle,
                 name,
@@ -365,7 +368,7 @@ class Scorefile:
         def write_summaries(
             title: str,
             summaries: OrderedDict[str, VariableSummary],
-        ):
+        ) -> None:
             write_delim(file_handle, title, *summary_columns)
             for name, summary in summaries.items():
                 write_summary(name, summary)
@@ -394,14 +397,14 @@ class Scorefile:
             write_delim(file_handle, "Heritability", *map(to_str, header.heritability))
 
     @classmethod
-    def write_names(cls, file_handle: IO[str], _):
+    def write_names(cls, file_handle: IO[str], _: Any) -> None:
         file_handle.write("#" + "\t".join(cls.names) + "\n")
 
     @staticmethod
     def write_null_model(
         file_handle: IO[str],
         null_model_estimates: list[NullModelEstimate],
-    ):
+    ) -> None:
         file_handle.write("## - NullModelEstimates\n")
         file_handle.write("## - Name\tBetaHat\tSE(BetaHat)\n")
 
@@ -412,8 +415,8 @@ class Scorefile:
 
     @staticmethod
     def make_metadata(
-        variant,
-        **kwargs,
+        variant: _PandasNamedTuple,
+        **kwargs: int,
     ) -> list[str]:
         # RareMetalWorker only calculates these for genotype data, not dosage data,
         # so we just set them to pre-defined values.
@@ -447,10 +450,10 @@ class Scorefile:
         file_handle: IO[str],
         u_stat: float,
         v_stat: float,
-    ):
+    ) -> None:
         alt_effsize = u_stat / v_stat
         chi2 = np.square(u_stat) / v_stat
-        pvalue = scipy.stats.chi2.sf(chi2, 1)  # type: ignore
+        pvalue = scipy.stats.chi2.sf(chi2, 1)
 
         stats = (
             u_stat,
@@ -467,8 +470,8 @@ class Scorefile:
         variants: pd.DataFrame,
         u_stat: npt.NDArray[np.float64],
         v_stat: npt.NDArray[np.float64],
-        **kwargs,
-    ):
+        **kwargs: int,
+    ) -> None:
         if u_stat.shape != v_stat.shape:
             raise ValueError("U and V must have the same shape.")
 

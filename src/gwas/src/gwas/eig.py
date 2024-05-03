@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from dataclasses import dataclass
+from math import sqrt
 from pathlib import Path
 from typing import Self, Sequence
 
@@ -8,7 +9,7 @@ import numpy as np
 from numpy import typing as npt
 
 from ._matrix_functions import dgesvdq
-from .mem.arr import SharedArray
+from .mem.arr import SharedArray, SharedFloat64Array
 from .mem.wkspace import SharedWorkspace
 from .tri.base import Triangular
 from .utils import chromosomes_set, make_sample_boolean_vectors
@@ -16,7 +17,7 @@ from .vcf.base import VCFFile
 
 
 @dataclass
-class Eigendecomposition(SharedArray):
+class Eigendecomposition(SharedFloat64Array):
     chromosome: int | str | None
     samples: list[str]
     variant_count: int
@@ -32,7 +33,7 @@ class Eigendecomposition(SharedArray):
             return f"no-chr{chromosome}.eig.txt.gz"
 
     @staticmethod
-    def get_prefix(**kwargs) -> str:
+    def get_prefix(**kwargs: str | int | None) -> str:
         chromosome = kwargs.get("chromosome")
         if chromosome is not None:
             return f"no-chr{chromosome}-eig"
@@ -50,7 +51,8 @@ class Eigendecomposition(SharedArray):
 
     @property
     def sqrt_eigenvalues(self) -> npt.NDArray[np.float64]:
-        return self.singular_values / np.sqrt(self.variant_count)
+        sqrt_variant_count = sqrt(self.variant_count)
+        return self.singular_values / sqrt_variant_count
 
     @property
     def eigenvalues(self) -> npt.NDArray[np.float64]:
@@ -78,8 +80,8 @@ class Eigendecomposition(SharedArray):
         chromosome: int | str,
         samples: list[str],
         variant_count: int,
-        eigenvalues: npt.NDArray,
-        eigenvectors: npt.NDArray,
+        eigenvalues: npt.NDArray[np.float64],
+        eigenvectors: npt.NDArray[np.float64],
         sw: SharedWorkspace,
     ) -> Self:
         _, sample_count = eigenvectors.shape
@@ -127,7 +129,7 @@ class Eigendecomposition(SharedArray):
                 raise RuntimeError(f"Samples do not match: {tri.samples} != {samples}")
 
         # Concatenate triangular matrices
-        tri_array = sw.merge(*(tri.name for tri in arrays))
+        tri_array = SharedFloat64Array.merge(*arrays)
         tri_array.transpose()
 
         a = tri_array.to_numpy()
@@ -167,7 +169,7 @@ class Eigendecomposition(SharedArray):
     @classmethod
     def get_chromosome(
         cls, arrays: Sequence[Triangular], chromosome: int | str | None = None
-    ):
+    ) -> int | str | None:
         if chromosome is None:
             # Determine which chromosomes we are leaving out
             chromosomes = chromosomes_set()
@@ -192,7 +194,7 @@ class Eigendecomposition(SharedArray):
         chromosome: int | str | None = None,
     ) -> Self:
         return cls.from_tri(
-            *(Triangular.from_file(tri_path, sw) for tri_path in tri_paths),
+            *(Triangular.from_file(tri_path, sw, np.float64) for tri_path in tri_paths),
             chromosome=chromosome,
             samples=samples,
         )
@@ -203,7 +205,7 @@ class EigendecompositionCollection:
     chromosome: int | str | None
     samples: list[str]
     sample_boolean_vectors: list[npt.NDArray[np.bool_]]
-    eigenvector_arrays: list[SharedArray]
+    eigenvector_arrays: list[SharedFloat64Array]
 
     @property
     def sample_count(self) -> int:
@@ -242,7 +244,7 @@ class EigendecompositionCollection:
         sample_boolean_vectors = make_sample_boolean_vectors(
             base_samples, (eig.samples for eig in eigs)
         )
-        eigenvector_arrays: list[SharedArray] = list()
+        eigenvector_arrays: list[SharedFloat64Array] = list()
 
         for eig, sample_boolean_vector in zip(eigs, sample_boolean_vectors, strict=True):
             sample_count = len(eig.samples)

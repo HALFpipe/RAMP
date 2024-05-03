@@ -32,7 +32,9 @@ requirements:
     - pandas
     - matplotlib
     - seaborn
-    - "pytorch<2"
+    - jax
+    - jaxtyping
+    - chex
     - networkx
     - psutil
     - threadpoolctl

@@ -6,7 +6,7 @@ from pathlib import Path
 from subprocess import DEVNULL, PIPE, Popen
 from threading import Thread
 from types import TracebackType
-from typing import IO, Any, Mapping, Type, TypeVar
+from typing import IO, Any, Generic, Mapping, Type, TypeVar
 
 from ..log import logger
 from ..utils import unwrap_which
@@ -28,10 +28,10 @@ decompress_commands: Mapping[str, list[str]] = {
 T = TypeVar("T", bytes, str)
 
 
-class StderrThread(Thread):
-    def __init__(self, process_handle: Popen):
+class StderrThread(Generic[T], Thread):
+    def __init__(self, process_handle: Popen[T]) -> None:
         super().__init__(daemon=True)
-        self.process_handle = process_handle
+        self.process_handle: Popen[T] = process_handle
 
     def run(self) -> None:
         stderr = self.process_handle.stderr
@@ -52,7 +52,7 @@ class CompressedReader(AbstractContextManager[IO[T]]):
             raise FileNotFoundError(self.file_path)
         self.is_text = is_text
 
-        self.process_handle: Popen | None = None
+        self.process_handle: Popen[T] | None = None
         self.file_handle: IO[T] | None = None
 
     def __enter__(self) -> IO[T]:
@@ -142,9 +142,9 @@ class CompressedWriter(AbstractContextManager[IO[T]]):
         self.num_threads = num_threads
         self.compression_level = compression_level
 
-        self.input_file_handle: IO | None = None
+        self.input_file_handle: IO[T] | None = None
         self.output_file_handle: IO[bytes] | None = None
-        self.process_handle: Popen | None = None
+        self.process_handle: Popen[T] | None = None
 
     def __enter__(self) -> IO[T]:
         return self.open()
@@ -226,16 +226,36 @@ class CompressedWriter(AbstractContextManager[IO[T]]):
 
 
 class CompressedBytesWriter(CompressedWriter[bytes]):
-    def __init__(self, file_path: Path | str, **kwargs) -> None:
-        super().__init__(file_path, is_text=False, **kwargs)
+    def __init__(
+        self,
+        file_path: Path | str,
+        num_threads: int = cpu_count(),
+        compression_level: int | None = None,
+    ) -> None:
+        super().__init__(
+            file_path,
+            is_text=False,
+            num_threads=num_threads,
+            compression_level=compression_level,
+        )
 
     def __enter__(self) -> IO[bytes]:
         return super().__enter__()
 
 
 class CompressedTextWriter(CompressedWriter[str]):
-    def __init__(self, file_path: Path | str, **kwargs) -> None:
-        super().__init__(file_path, is_text=True, **kwargs)
+    def __init__(
+        self,
+        file_path: Path | str,
+        num_threads: int = cpu_count(),
+        compression_level: int | None = None,
+    ) -> None:
+        super().__init__(
+            file_path,
+            is_text=True,
+            num_threads=num_threads,
+            compression_level=compression_level,
+        )
 
     def open(self) -> IO[str]:
         if self.file_path.suffix in {".vcf", ".txt"}:

@@ -13,14 +13,16 @@ from numpy import typing as npt
 
 from ...log import logger
 from ..pipe import CompressedBytesWriter
-from .base import Blosc2CompressionMethod, FileArray, T
+from .base import Blosc2CompressionMethod, FileArray, ScalarType
 
 
 @dataclass
-class Blosc2FileArray(FileArray[T]):
+class Blosc2FileArray(FileArray[ScalarType]):
     chunk_shape: tuple[int, ...] | None = None
 
-    def __setitem__(self, key: tuple[slice, ...], value: npt.NDArray[T]) -> None:
+    def __setitem__(
+        self, key: tuple[slice, ...], value: npt.NDArray[ScalarType]
+    ) -> None:
         if isinstance(self.compression_method, Blosc2CompressionMethod):
             array = self.get_blosc2_ndarray()
             array[key] = value
@@ -108,7 +110,7 @@ class Blosc2FileArray(FileArray[T]):
             array = blosc2.empty(
                 shape=self.shape,
                 urlpath=str(file_path),
-                dtype=self.dtype,  # type: ignore
+                dtype=self.dtype,
                 cparams=dict(
                     codec=self.compression_method.codec,
                     clevel=self.compression_method.clevel,

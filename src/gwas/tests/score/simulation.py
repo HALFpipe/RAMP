@@ -25,7 +25,7 @@ missing_value_pattern_count: int = 3
 @pytest.fixture(scope="session")
 def pfile_paths(
     directory_factory: DirectoryFactory, sample_size: int, vcf_files: list[VCFFile]
-):
+) -> list[Path]:
     tmp_path = Path(directory_factory.get("pfile", sample_size))
 
     pfiles: list[Path] = list()
@@ -69,7 +69,7 @@ def pfile_paths(
 @pytest.fixture(scope="session")
 def bfile_path(
     directory_factory: DirectoryFactory, sample_size: int, pfile_paths: list[Path]
-):
+) -> Path:
     tmp_path = Path(directory_factory.get("bfile", sample_size))
 
     pfile_list_path = tmp_path / "pfile-list.txt"
@@ -106,7 +106,7 @@ def variants(
     directory_factory: DirectoryFactory,
     sample_size: int,
     pfile_paths: list[Path],
-):
+) -> list[str]:
     tmp_path = Path(directory_factory.get("variants", sample_size))
 
     variants: list[str] = list()
@@ -152,7 +152,7 @@ def simulation(
     sample_size: int,
     bfile_path: Path,
     variants: list[str],
-):
+) -> SimulationResult:
     """
     This needs a lot of memory, so we do this before we allocate the shared workspace
     """

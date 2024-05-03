@@ -77,7 +77,7 @@ class RmwDebug:
 
 
 def read_matrix(
-    file_handle: peekable,
+    file_handle: peekable[str],
 ) -> npt.NDArray[np.float64]:
     pattern = re.compile(r"^[0-9-]")
 
@@ -196,7 +196,7 @@ def process_data(
     data: dict[str, Any],
     put_match: Callable[[dict[str, str]], None],
     field_count: int,
-):
+) -> None:
     for line in peekable_stdout:
         line = line.strip()
 
@@ -220,14 +220,16 @@ def process_data(
             break
 
 
-def process_hat(data, hat_match: re.Match[str]) -> None:
+def process_hat(data: dict[str, Any], hat_match: re.Match[str]) -> None:
     for key, value in hat_match.groupdict().items():
         if key not in data:
             logger.debug(f'Found "{key}"')
         data[key] = float(value)
 
 
-def process_matrix(peekable_stdout: peekable[str], data: dict[str, Any], line: str):
+def process_matrix(
+    peekable_stdout: peekable[str], data: dict[str, Any], line: str
+) -> None:
     field = field_mapping[line]
     if field in data:
         if isinstance(data[field], list):

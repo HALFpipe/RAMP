@@ -7,7 +7,7 @@ from gwas.compression.arr.base import FileArray, compression_methods
 from gwas.compression.pipe import CompressedTextReader
 
 
-def test_text_file_array(tmp_path: Path):
+def test_text_file_array(tmp_path: Path) -> None:
     array_proxy = FileArray.create(
         file_path=tmp_path / "test",
         shape=(10, 10),
@@ -36,7 +36,7 @@ def test_text_file_array(tmp_path: Path):
         assert np.allclose(data_frame[column_names], 7)
 
 
-def test_text_file_array_chunks(tmp_path: Path):
+def test_text_file_array_chunks(tmp_path: Path) -> None:
     array_proxy = FileArray.create(
         file_path=tmp_path / "test",
         shape=(10, 10),

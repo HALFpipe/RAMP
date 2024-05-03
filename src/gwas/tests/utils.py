@@ -7,7 +7,11 @@ from subprocess import check_call
 import numpy as np
 from gwas.log import logger
 from gwas.utils import unwrap_which
+from jaxtyping import jaxtyped
 from numpy import typing as npt
+from typeguard import typechecked as typechecker
+
+check_types = jaxtyped(typechecker=typechecker)
 
 bcftools = unwrap_which("bcftools")
 gcta64 = unwrap_which("gcta64")

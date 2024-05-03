@@ -1,25 +1,28 @@
 # -*- coding: utf-8 -*-
 from dataclasses import dataclass
-from typing import ClassVar
+from functools import cached_property
+from typing import Callable, TypeVar
 
 import numpy as np
 import scipy
-import torch
+from jax import jit
+from jax import numpy as jnp
+from jaxtyping import Array, Float
 from numpy import typing as npt
 
 from ..log import logger
 from .ml import OptimizeInput, OptimizeResult, ProfileMaximumLikelihood
+
+terms_count = TypeVar("terms_count")
 
 
 @dataclass
 class FaSTLMM(ProfileMaximumLikelihood):
     step: float = 0.2
 
-    requires_grad: ClassVar[bool] = False
-
     def minus_two_log_likelihood(
-        self, terms: torch.Tensor, o: OptimizeInput
-    ) -> torch.Tensor:
+        self, terms: Float[Array, " 2"], o: OptimizeInput
+    ) -> Float[Array, ""]:
         t = self.get_minus_two_log_likelihood_terms(terms, o)
 
         variance_ratio = terms[0]
@@ -29,24 +32,30 @@ class FaSTLMM(ProfileMaximumLikelihood):
         minus_two_log_likelihood = (
             t.sample_count
             + t.logarithmic_determinant
-            + t.sample_count * torch.log(genetic_variance)
+            + t.sample_count * jnp.log(genetic_variance)
         )
 
         if self.enable_softplus_penalty:
             minus_two_log_likelihood += self.softplus_penalty(
-                torch.stack((error_variance, genetic_variance)), o
+                jnp.stack((error_variance, genetic_variance)), o
             )
 
-        return torch.where(
-            torch.isfinite(minus_two_log_likelihood),
+        return jnp.where(
+            jnp.isfinite(minus_two_log_likelihood),
             minus_two_log_likelihood,
-            torch.inf,
+            jnp.inf,
         )
 
-    def wrapper(self, log_variance_ratio: npt.NDArray, o: OptimizeInput):
-        variance_ratio = np.power(10, log_variance_ratio)
-        terms = torch.tensor([variance_ratio, 1], dtype=torch.float64)
-        return self.func(terms, o).item()
+    @cached_property
+    def func(
+        self,
+    ) -> Callable[[Float[Array, " terms_count"], OptimizeInput], Float[Array, ""]]:
+        return jit(self.minus_two_log_likelihood)
+
+    def wrapper(self, numpy_terms: npt.NDArray[np.float64], o: OptimizeInput) -> float:
+        variance_ratio = np.power(10, numpy_terms)
+        terms = jnp.asarray([variance_ratio, 1])
+        return float(np.asarray(self.func(terms, o)))
 
     def optimize(
         self,
@@ -54,7 +63,6 @@ class FaSTLMM(ProfileMaximumLikelihood):
         method: str = "",
         enable_hessian: bool = False,
         disp: bool = False,
-        **kwargs,
     ) -> OptimizeResult:
         func = self.wrapper
 
@@ -71,7 +79,7 @@ class FaSTLMM(ProfileMaximumLikelihood):
         with np.errstate(all="ignore"):
             for bounds in zip(xa, xa + self.step, strict=True):
                 try:
-                    optimize_result = scipy.optimize.minimize_scalar(  # type: ignore
+                    optimize_result = scipy.optimize.minimize_scalar(
                         func,
                         args=(o,),
                         bounds=bounds,
@@ -93,44 +101,47 @@ class FaSTLMM(ProfileMaximumLikelihood):
         variance_ratio = np.power(10, log_variance_ratio)
 
         # Scale by genetic variance
-        terms = torch.Tensor([variance_ratio, 1])
-        _, _, residuals, _ = self.get_standard_errors(terms, o)
-        genetic_variance = float(np.square(residuals).mean())
+        terms = jnp.asarray([variance_ratio, 1])
+        se = self.get_standard_errors(terms, o)
+        genetic_variance = float(np.square(se.scaled_residuals).mean())
         terms *= genetic_variance
 
         return OptimizeResult(
-            x=terms.numpy(),
+            x=np.asarray(terms),
             fun=float(fmin),
         )
 
 
 @dataclass
 class PenalizedFaSTLMM(FaSTLMM):
+    def __post_init__(self) -> None:
+        logger.warning("PenalizedFaSTLMM doesn't work")
+
     def minus_two_log_likelihood(
-        self, terms: torch.Tensor, o: OptimizeInput
-    ) -> torch.Tensor:
+        self, terms: Float[Array, " 2"], o: OptimizeInput
+    ) -> Float[Array, ""]:
         t = self.get_minus_two_log_likelihood_terms(terms, o)
 
         variance_ratio = terms[0]
         genetic_variance = t.deviation / (t.sample_count - 4)
         error_variance = variance_ratio * genetic_variance
 
-        penalty = -2 * torch.log(variance_ratio)
+        penalty = -2 * jnp.log(variance_ratio)
 
         minus_two_log_likelihood = (
             (t.sample_count - 4)
             + t.logarithmic_determinant
-            + t.sample_count * torch.log(genetic_variance)
+            + t.sample_count * jnp.log(genetic_variance)
             + penalty
         )
 
         if self.enable_softplus_penalty:
             minus_two_log_likelihood += self.softplus_penalty(
-                torch.stack((error_variance, genetic_variance)), o
+                jnp.stack((error_variance, genetic_variance)), o
             )
 
-        return torch.where(
-            torch.isfinite(minus_two_log_likelihood),
+        return jnp.where(
+            jnp.isfinite(minus_two_log_likelihood),
             minus_two_log_likelihood,
-            torch.inf,
+            jnp.inf,
         )

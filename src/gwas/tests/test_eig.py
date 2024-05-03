@@ -11,7 +11,7 @@ import pytest
 import scipy
 from gwas.eig import Eigendecomposition
 from gwas.log import logger
-from gwas.mem.arr import SharedArray
+from gwas.mem.arr import SharedArray, SharedFloat64Array
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri.base import Triangular
 from gwas.tri.tsqr import scale
@@ -27,7 +27,7 @@ def load_genotypes(
     samples: list[str],
     chromosomes: Sequence[int | str],
     sw: SharedWorkspace,
-) -> SharedArray:
+) -> SharedFloat64Array:
     allocation_count = len(sw.allocations)
 
     vcf_file = vcf_files[0]
@@ -75,7 +75,7 @@ def test_eig(
     vcf_files_by_size_and_chromosome: Mapping[str, Mapping[int | str, VCFFile]],
     tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
     sw: SharedWorkspace,
-):
+) -> None:
     allocation_count = len(sw.allocations)
 
     sampe_size_label = "small"
@@ -110,13 +110,14 @@ def test_eig(
     (numpy_tri,) = scipy.linalg.qr(a.transpose(), mode="r")
 
     tri_arrays = [
-        Triangular.from_file(tri_paths_by_chromosome[c], sw) for c in chromosomes
+        Triangular.from_file(tri_paths_by_chromosome[c], sw, np.float64)
+        for c in chromosomes
     ]
     if samples != vcf_file.samples:
         for tri in tri_arrays:
             tri.subset_samples(samples)
     sw.squash()
-    tri_array = sw.merge(*(tri.name for tri in tri_arrays))
+    tri_array = SharedFloat64Array.merge(*tri_arrays)
 
     _, tri_singular_values, _ = scipy.linalg.svd(
         tri_array.to_numpy().transpose(),
@@ -162,7 +163,7 @@ def test_eig_rmw(
     vcf_files_by_size_and_chromosome: Mapping[str, Mapping[int | str, VCFFile]],
     tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
     sw: SharedWorkspace,
-):
+) -> None:
     allocation_count = len(sw.allocations)
 
     c: int | str = 22
@@ -173,7 +174,7 @@ def test_eig_rmw(
     )
 
     tri_array = Triangular.from_file(
-        tri_paths_by_size_and_chromosome[sampe_size_label][c], sw
+        tri_paths_by_size_and_chromosome[sampe_size_label][c], sw, np.float64
     )
     eig_array = Eigendecomposition.from_tri(
         tri_array,

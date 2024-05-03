@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import pytest
 from gwas.eig import Eigendecomposition, EigendecompositionCollection
-from gwas.mem.arr import SharedArray
+from gwas.mem.arr import SharedArray, SharedFloat64Array
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.score.worker import Calc, TaskSyncCollection
@@ -12,11 +12,11 @@ from gwas.vcf.base import VCFFile
 @pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 def test_calc_worker(
     vcf_file: VCFFile,
-    genotypes_array: SharedArray,
+    genotypes_array: SharedFloat64Array,
     sw: SharedWorkspace,
     eig: Eigendecomposition,
     nm: NullModelCollection,
-    request,
+    request: pytest.FixtureRequest,
 ) -> None:
     allocation_count = len(sw.allocations)
 
@@ -27,7 +27,7 @@ def test_calc_worker(
     test_rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
     request.addfinalizer(test_rotated_genotypes_array.free)
     name = SharedArray.get_name(sw, "test-stat")
-    stat_array: SharedArray = sw.alloc(name, 2, phenotype_count, variant_count)
+    stat_array: SharedFloat64Array = sw.alloc(name, 2, phenotype_count, variant_count)
     request.addfinalizer(stat_array.free)
 
     ec = EigendecompositionCollection.from_eigendecompositions(
@@ -39,8 +39,8 @@ def test_calc_worker(
         inverse_variance_array,
         scaled_residuals_array,
     ) = nm.get_arrays_for_score_calc()
-    inverse_variance_arrays: list[SharedArray] = [inverse_variance_array]
-    scaled_residuals_arrays: list[SharedArray] = [scaled_residuals_array]
+    inverse_variance_arrays: list[SharedFloat64Array] = [inverse_variance_array]
+    scaled_residuals_arrays: list[SharedFloat64Array] = [scaled_residuals_array]
 
     t = TaskSyncCollection(job_count=1)
 

@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 from dataclasses import dataclass
+from multiprocessing import cpu_count
 from typing import ClassVar, Self
 
 import numpy as np
 from numpy import typing as npt
 
-from gwas.eig import Eigendecomposition
-from gwas.mem.arr import SharedArray
-from gwas.mem.wkspace import SharedWorkspace
-from gwas.pheno import VariableCollection
+from ..eig import Eigendecomposition
+from ..mem.arr import SharedArray, SharedFloat64Array
+from ..mem.wkspace import SharedWorkspace
+from ..pheno import VariableCollection
 
 
 @dataclass
@@ -38,10 +39,10 @@ class NullModelCollection:
     genetic_variance: npt.NDArray[np.float64]
     error_variance: npt.NDArray[np.float64]
 
-    regression_weights: SharedArray
-    standard_errors: SharedArray
-    half_scaled_residuals: SharedArray
-    variance: SharedArray
+    regression_weights: SharedFloat64Array
+    standard_errors: SharedFloat64Array
+    half_scaled_residuals: SharedFloat64Array
+    variance: SharedFloat64Array
 
     methods: ClassVar[list[str]] = ["fastlmm", "pfastlmm", "pml", "mpl", "reml", "ml"]
 
@@ -74,7 +75,7 @@ class NullModelCollection:
         residuals[:, phenotype_index] = np.ravel(r.half_scaled_residuals)
         variance[:, phenotype_index] = np.ravel(r.variance)
 
-    def get_arrays_for_score_calc(self) -> tuple[SharedArray, SharedArray]:
+    def get_arrays_for_score_calc(self) -> tuple[SharedFloat64Array, SharedFloat64Array]:
         variance = self.variance.to_numpy()
         (sample_count, phenotype_count) = variance.shape
         half_scaled_residuals = self.half_scaled_residuals.to_numpy()
@@ -112,7 +113,7 @@ class NullModelCollection:
         eig: Eigendecomposition,
         vc: VariableCollection,
         method: str | None = "fastlmm",
-        **kwargs,
+        num_threads: int = cpu_count(),
     ) -> Self:
         from .fastlmm import FaSTLMM, PenalizedFaSTLMM
         from .ml import (
@@ -157,6 +158,6 @@ class NullModelCollection:
                 "reml": RestrictedMaximumLikelihood.fit,
                 "ml": MaximumLikelihood.fit,
             }[method]
-            func(eig, vc, nm, **kwargs)
+            func(eig, vc, nm, num_threads=num_threads)
 
         return nm

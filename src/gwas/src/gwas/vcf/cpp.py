@@ -65,7 +65,7 @@ class CppVCFFile(VCFFile):
 
     def read(
         self,
-        dosages: npt.NDArray,
+        dosages: npt.NDArray[np.float64],
     ) -> None:
         if self.file_handle is None:
             raise ValueError("Cannot read from a closed file")

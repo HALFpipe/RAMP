@@ -15,17 +15,16 @@ class TriWorker(Process):
         tsqr: TallSkinnyQR,
         tri_path: Path,
         t: TaskSyncCollection,
-        *args,
-        **kwargs,
+        name: str | None = None,
     ) -> None:
         self.tsqr = tsqr
         self.tri_path = tri_path
         self.t = t
 
-        if "name" not in kwargs:
-            kwargs["name"] = f"tri-worker-chr{tsqr.vcf_file.chromosome}"
+        if name is None:
+            name = f"tri-worker-chr{tsqr.vcf_file.chromosome}"
 
-        super().__init__(t.exception_queue, *args, **kwargs)
+        super().__init__(t.exception_queue, name=name)
 
     def func(self) -> None:
         logger.debug(f"Triangularizing chromosome {self.tsqr.vcf_file.chromosome}")

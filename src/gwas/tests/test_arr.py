@@ -2,11 +2,11 @@
 from pathlib import Path
 
 import numpy as np
-from gwas.mem.arr import SharedArray
+from gwas.mem.arr import SharedFloat64Array
 from gwas.mem.wkspace import SharedWorkspace
 
 
-def test_sa(tmp_path: Path):
+def test_sa(tmp_path: Path) -> None:
     sw = SharedWorkspace.create(size=2**30)
 
     shape = (5, 7)
@@ -25,7 +25,7 @@ def test_sa(tmp_path: Path):
     # io
     path = tmp_path / "a.txt"
     array.to_file(path)
-    array = SharedArray.from_file(path, sw)
+    array = SharedFloat64Array.from_file(path, sw, np.float64)
     c = array.to_numpy()
     assert np.allclose(a, c)
 
@@ -36,7 +36,7 @@ def test_sa(tmp_path: Path):
     array.transpose()
 
     # compress
-    indices = np.array([0, 3, 4])
+    indices = np.array([0, 3, 4], dtype=np.uint32)
     array.compress(indices)
     a = array.to_numpy()
     assert np.allclose(b[indices, :], a)

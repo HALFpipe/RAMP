@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from subprocess import check_call
-from typing import IO, Mapping
+from typing import IO, Any, Mapping
 
 import numpy as np
 import pytest
 from gwas.eig import Eigendecomposition
-from gwas.mem.arr import SharedArray
+from gwas.mem.arr import SharedArray, SharedFloat64Array
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection
@@ -47,15 +47,17 @@ def other_chromosomes(chromosome: int | str) -> list[str | int]:
 
 
 @pytest.fixture(scope="session", params=list(range(simulation_count)))
-def phenotype_index(request) -> int:
-    return request.param
+def phenotype_index(request: pytest.FixtureRequest) -> int:
+    i = request.param
+    assert isinstance(i, int)
+    return i
 
 
 @pytest.fixture(scope="session")
 def variable_collections(
     simulation: SimulationResult,
     sw: SharedWorkspace,
-    request,
+    request: pytest.FixtureRequest,
 ) -> list[VariableCollection]:
     np.random.seed(47)
     allocation_count = len(sw.allocations)
@@ -116,7 +118,7 @@ def eigendecompositions(
     tri_paths_by_chromosome: dict[str | int, Path],
     variable_collections: list[VariableCollection],
     sw: SharedWorkspace,
-    request,
+    request: pytest.FixtureRequest,
 ) -> list[Eigendecomposition]:
     allocation_count = len(sw.allocations)
 
@@ -140,7 +142,7 @@ def eigendecompositions(
 def null_model_collections(
     variable_collections: list[VariableCollection],
     eigendecompositions: list[Eigendecomposition],
-    request,
+    request: pytest.FixtureRequest,
 ) -> list[NullModelCollection]:
     null_model_collections = [
         NullModelCollection.from_eig(
@@ -164,7 +166,7 @@ def vcf_file(
     return vcf_files_by_chromosome[chromosome]
 
 
-def format_row(a) -> str:
+def format_row(a: npt.NDArray[np.float64]) -> str:
     if a.size == 1:
         return to_str(a)
     else:
@@ -285,11 +287,11 @@ def rmw_scorefile_paths(
 @dataclass
 class RmwScore:
     header: list[ScorefileHeader]
-    array: npt.NDArray
+    array: npt.NDArray[Any]
 
 
 @cache
-def read_scorefile(path: Path) -> tuple[ScorefileHeader, npt.NDArray]:
+def read_scorefile(path: Path) -> tuple[ScorefileHeader, npt.NDArray[np.float64]]:
     header, array = Scorefile.read(path)
     return header, array
 
@@ -315,8 +317,8 @@ def rmw_score(
 def genotypes_array(
     vcf_file: VCFFile,
     sw: SharedWorkspace,
-    request,
-) -> SharedArray:
+    request: pytest.FixtureRequest,
+) -> SharedFloat64Array:
     allocation_count = len(sw.allocations)
 
     sample_count = len(vcf_file.samples)

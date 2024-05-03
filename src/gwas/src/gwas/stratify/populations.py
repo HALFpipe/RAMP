@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
 from itertools import product
+from typing import Sequence
 
 import numpy as np
+from matplotlib.artist import Artist
 from numpy import typing as npt
 from scipy.stats import multivariate_normal
 
@@ -59,8 +61,8 @@ super_populations = {
 def plot_populations(
     cutoff: float,
     samples: list[SampleID],
-    reference_components: dict[str, npt.NDArray],
-    sample_components: npt.NDArray,
+    reference_components: dict[str, npt.NDArray[np.float64]],
+    sample_components: npt.NDArray[np.float64],
     sample_populations: dict[str, set[SampleID]],
 ) -> None:
     """Save a pairplot of the populations.
@@ -68,13 +70,16 @@ def plot_populations(
     Args:
         cutoff (float): The cutoff of the log-pdf of the multivariate normal.
         samples (list[SampleID]): The samples as tuples of FID and IID.
-        reference_components (dict[str, npt.NDArray]): The MDS components for the
-            reference.
-        sample_components (npt.NDArray): The MDs components for the samples.
+        reference_components (dict[str, npt.NDArray[np.float64]]): The MDS components for
+            the reference.
+        sample_components (npt.NDArray[np.float64]): The MDs components for the samples.
         sample_populations (dict[str, set[SampleID]]): The samples classified by
             population.
     """
+    import matplotlib
     from matplotlib import pyplot as plt
+
+    matplotlib.rcParams["font.family"] = "DejaVu Sans"
 
     component_count = sample_components.shape[1]
     k = component_count - 1
@@ -87,7 +92,7 @@ def plot_populations(
         figsize=(6 * k, 6 * k),
         dpi=300,
     )
-    gridspec = axes[1][0].get_gridspec()  # type: ignore
+    gridspec = axes[1][0].get_gridspec()
     for ax in axes[-1][:-1]:
         ax.remove()
     ax_bottom_left = figure.add_subplot(gridspec[-1, :-1])
@@ -103,7 +108,7 @@ def plot_populations(
         samples, sample_populations, populations_to_plot
     )
 
-    artists: list = list()
+    artists: Sequence[Artist | None] = list()
     for c1, c2 in product(range(component_count), repeat=2):
         if c2 >= c1:
             continue
@@ -131,7 +136,7 @@ def plot_populations(
         )
         coordinates = np.dstack((x, y))
 
-        z: dict[str, npt.NDArray] = calc_z(
+        z: dict[str, npt.NDArray[np.float64]] = calc_z(
             reference_components, sample_populations, c1, c2, coordinates
         )
         prune_z(populations_to_plot, z)
@@ -163,17 +168,20 @@ def plot_populations(
     plt.close("all")
 
 
+Color = str | tuple[float, float, float]
+
+
 def calc_sample_colors(
     samples: list[SampleID],
     sample_populations: dict[str, set[SampleID]],
     populations_to_plot: list[str],
-) -> tuple[list, list]:
+) -> tuple[Sequence[Color], Sequence[Color]]:
     import seaborn as sns
 
-    color_palette = sns.color_palette("husl", len(populations_to_plot))
+    color_palette: Sequence[Color] = sns.color_palette("husl", len(populations_to_plot))
     if not isinstance(color_palette, list):
         raise ValueError
-    sample_colors = list()
+    sample_colors: list[Color] = list()
     for sample in samples:
         matches = {p for p in populations_to_plot if sample in sample_populations[p]}
         if len(matches) == 1:
@@ -185,13 +193,13 @@ def calc_sample_colors(
 
 
 def calc_z(
-    reference_components: dict[str, npt.NDArray],
+    reference_components: dict[str, npt.NDArray[np.float64]],
     sample_populations: dict[str, set[SampleID]],
     c1: int,
     c2: int,
-    coordinates: npt.NDArray,
-) -> dict[str, npt.NDArray]:
-    z: dict[str, npt.NDArray] = dict()
+    coordinates: npt.NDArray[np.float64],
+) -> dict[str, npt.NDArray[np.float64]]:
+    z: dict[str, npt.NDArray[np.float64]] = dict()
     for population in populations:
         super_population = super_populations[population]
         if (
@@ -206,13 +214,15 @@ def calc_z(
         covariance = np.cov(c.transpose())
         marginal_multivariate_normal = multivariate_normal(
             mean=mean,
-            cov=covariance,  # type: ignore
+            cov=covariance,
         )
         z[population] = marginal_multivariate_normal.logpdf(coordinates)
     return z
 
 
-def prune_z(populations_to_plot: list[str], z: dict[str, npt.NDArray]):
+def prune_z(
+    populations_to_plot: list[str], z: dict[str, npt.NDArray[np.float64]]
+) -> None:
     if populations_to_plot != populations:
         for population, super_population in super_populations.items():
             if population not in z:

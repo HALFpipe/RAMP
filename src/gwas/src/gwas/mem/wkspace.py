@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
 
 import os
 import pickle
@@ -9,7 +8,8 @@ from itertools import pairwise
 from mmap import MAP_SHARED, mmap
 from multiprocessing import reduction as mp_reduction
 from pprint import pformat
-from typing import Callable
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Callable, Self, TypeVar, overload
 
 import numpy as np
 from numpy import typing as npt
@@ -18,6 +18,11 @@ from psutil import virtual_memory
 from ..log import logger
 from ._os import c_memfd_create
 
+if TYPE_CHECKING:
+    from .arr import ScalarType, SharedArray, SharedFloat64Array
+
+DType = TypeVar("DType", bound=np.dtype[Any])
+
 
 @dataclass(frozen=True)
 class Allocation:
@@ -25,11 +30,11 @@ class Allocation:
     size: int
 
     shape: tuple[int, ...]
-    dtype: str
+    dtype: np.dtype[Any]
 
 
 @dataclass
-class SharedWorkspace(AbstractContextManager):
+class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
     fd: int
     size: int
 
@@ -38,10 +43,15 @@ class SharedWorkspace(AbstractContextManager):
     def __post_init__(self) -> None:
         self.buf = mmap(self.fd, self.size, flags=MAP_SHARED)
 
-    def __enter__(self) -> SharedWorkspace:
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *args) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         self.close()
         self.unlink()
 
@@ -55,12 +65,27 @@ class SharedWorkspace(AbstractContextManager):
         end = max(a.start + a.size for a in self.allocations.values())
         return end / self.size
 
-    def get_array(self, name: str):
+    def get_array(self, name: str) -> "SharedArray[Any]":
         from .arr import SharedArray
 
         return SharedArray(name, self)
 
-    def alloc(self, name: str, *shape: int, dtype: str = "f8"):
+    @overload
+    def alloc(
+        self, name: str, *shape: int, dtype: type[np.float64] | None = None
+    ) -> "SharedFloat64Array": ...
+
+    @overload
+    def alloc(
+        self, name: str, *shape: int, dtype: type[ScalarType] | np.dtype[ScalarType]
+    ) -> "SharedArray[ScalarType]": ...
+
+    def alloc(
+        self,
+        name: str,
+        *shape: int,
+        dtype: type[ScalarType] | np.dtype[ScalarType] | None = None,
+    ) -> "SharedArray[ScalarType]":
         """alloc.
 
         Parameters
@@ -74,6 +99,11 @@ class SharedWorkspace(AbstractContextManager):
         dtype : str
             dtype
         """
+        if dtype is None:
+            numpy_dtype: np.dtype[ScalarType | np.float64] = np.dtype(np.float64)
+        else:
+            numpy_dtype = np.dtype(dtype)
+
         allocations = self.allocations
         if name in allocations:
             raise ValueError(f'Allocation "{name}" already exists')
@@ -82,7 +112,7 @@ class SharedWorkspace(AbstractContextManager):
         start = max(a.start + a.size for a in allocations.values())
 
         # calculate size in bytes
-        itemsize = np.dtype(dtype).itemsize
+        itemsize = numpy_dtype.itemsize
         size = int(np.prod(shape) * itemsize)
 
         # check for overflow
@@ -92,7 +122,7 @@ class SharedWorkspace(AbstractContextManager):
                 f"No space left in shared memory buffer: {pformat(allocations)}"
             )
 
-        allocations[name] = Allocation(start, size, shape, dtype)
+        allocations[name] = Allocation(start, size, shape, numpy_dtype)
 
         logger.debug(
             f'Created new allocation "{name}" '
@@ -107,64 +137,7 @@ class SharedWorkspace(AbstractContextManager):
 
         return array
 
-    def merge(self, *names: str):
-        """Merge multiple allocations into a single contiguous allocation.
-
-        Parameters
-        ----------
-        self : SharedWorkspace
-            The shared workspace instance.
-        *names : str
-            The names of the allocations to merge.
-
-        Returns
-        -------
-        SharedArray
-            A new shared array representing the merged allocation.
-
-        Raises
-        ------
-        ValueError
-            If the allocations are not contiguous or have different dtypes or
-            incompatible shapes.
-        """
-        allocations = self.allocations
-
-        to_merge = [(name, a) for name, a in allocations.items() if name in names]
-        to_merge.sort(key=lambda t: t[-1].start)
-
-        # Check contiguous
-        for (_, a), (_, b) in pairwise(to_merge):
-            if a.start + a.size != b.start:
-                raise ValueError(f'Allocations "{a}" and "{b}" are not contiguous')
-
-        # Determine dtype
-        dtype_set = set(a.dtype for _, a in to_merge)
-        if len(dtype_set) != 1:
-            raise ValueError("Allocations have different dtypes")
-        (dtype,) = dtype_set
-
-        # determine size
-        start = min(a.start for _, a in to_merge)
-        size = sum(a.size for _, a in to_merge)
-
-        tile_shape_set = set(a.shape[:-1] for _, a in to_merge)
-        if len(tile_shape_set) != 1:
-            raise ValueError("Allocations have incompatible shapes")
-        (tile_shape,) = tile_shape_set
-        shape = tuple([*tile_shape, sum(a.shape[-1] for _, a in to_merge)])
-
-        for name, _ in to_merge:
-            del allocations[name]
-
-        name, _ = to_merge[0]
-        allocations[name] = Allocation(start, size, shape, dtype)
-        logger.debug(f'Created merged allocation "{name}" at {start} with size {size}')
-        self.allocations = allocations
-
-        return self.get_array(name)
-
-    def free(self, name) -> None:
+    def free(self, name: str) -> None:
         allocations = self.allocations
         del allocations[name]
         self.allocations = allocations
@@ -176,7 +149,7 @@ class SharedWorkspace(AbstractContextManager):
         contiguous and to reclaim space. This method moves each allocation up to the
         end of the previous allocation.
         """
-        data: npt.NDArray = np.ndarray(
+        data: npt.NDArray[np.uint8] = np.ndarray(
             (self.size,),
             buffer=self.buf,
             dtype=np.uint8,
@@ -208,7 +181,9 @@ class SharedWorkspace(AbstractContextManager):
 
     @property
     def allocations(self) -> dict[str, Allocation]:
-        return pickle.loads(self.buf)
+        a = pickle.loads(self.buf)
+        assert isinstance(a, dict)
+        return a
 
     @allocations.setter
     def allocations(self, allocations: dict[str, Allocation]) -> None:
@@ -220,10 +195,10 @@ class SharedWorkspace(AbstractContextManager):
 
         self.buf[: len(dict_bytes)] = dict_bytes
 
-    def close(self):
+    def close(self) -> None:
         self.buf.close()
 
-    def unlink(self):
+    def unlink(self) -> None:
         os.close(self.fd)
         # call([
         #     "bash",
@@ -232,7 +207,7 @@ class SharedWorkspace(AbstractContextManager):
         # ])
 
     @classmethod
-    def create(cls, size: int | None = None, dict_size: int = 2**20) -> SharedWorkspace:
+    def create(cls, size: int | None = None, dict_size: int = 2**20) -> Self:
         """Creates a shared workspace that is stored in an anonymous file,
         allocated via `memfd_create`. Adapted from
         https://github.com/ska-sa/katgpucbf/blob/main/src/katgpucbf/dsim/shared_array.py
@@ -263,17 +238,21 @@ class SharedWorkspace(AbstractContextManager):
 
         # Initialize allocations dictionary.
         allocations: dict[str, Allocation] = dict(
-            index=Allocation(start=0, size=dict_size, shape=tuple(), dtype=""),
+            index=Allocation(
+                start=0, size=dict_size, shape=tuple(), dtype=np.dtype(np.uint8)
+            ),
         )
         sw.allocations = allocations
         return sw
 
 
-def _reduce(a: SharedWorkspace) -> tuple[Callable, tuple]:
+def _reduce(
+    a: SharedWorkspace,
+) -> tuple[Callable[[Any, int], SharedWorkspace], tuple[Any, int]]:
     return _rebuild, (mp_reduction.DupFd(a.fd), a.size)
 
 
-def _rebuild(dupfd, size: int) -> SharedWorkspace:
+def _rebuild(dupfd: Any, size: int) -> SharedWorkspace:
     return SharedWorkspace(dupfd.detach(), size)
 
 

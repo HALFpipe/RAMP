@@ -13,7 +13,7 @@ from .conftest import RmwScore
 def test_compression(
     tmp_path: Path,
     rmw_score: RmwScore,
-):
+) -> None:
     scores = np.ascontiguousarray(
         np.dstack([rmw_score.array["U_STAT"], rmw_score.array["SQRT_V_STAT"]])
     ).astype(np.float64)

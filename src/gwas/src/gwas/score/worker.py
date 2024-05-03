@@ -14,7 +14,7 @@ from numpy import typing as npt
 from ..compression.arr.base import FileArray
 from ..eig import EigendecompositionCollection
 from ..log import logger
-from ..mem.arr import SharedArray
+from ..mem.arr import SharedFloat64Array
 from ..utils import Action, Process, SharedState
 from ..vcf.base import VCFFile
 from .calc import calc_u_stat, calc_v_stat
@@ -49,14 +49,9 @@ class TaskSyncCollection(SharedState):
 
 
 class Worker(Process):
-    def __init__(
-        self,
-        t: TaskSyncCollection,
-        *args,
-        **kwargs,
-    ) -> None:
+    def __init__(self, t: TaskSyncCollection) -> None:
         self.t = t
-        super().__init__(t.exception_queue, *args, **kwargs)
+        super().__init__(t.exception_queue)
 
 
 class GenotypeReader(Worker):
@@ -64,9 +59,7 @@ class GenotypeReader(Worker):
         self,
         t: TaskSyncCollection,
         vcf_file: VCFFile,
-        genotypes_array: SharedArray,
-        *args,
-        **kwargs,
+        genotypes_array: SharedFloat64Array,
     ) -> None:
         if genotypes_array.shape[0] != vcf_file.sample_count:
             raise ValueError(
@@ -76,7 +69,7 @@ class GenotypeReader(Worker):
         self.vcf_file = vcf_file
         self.genotypes_array = genotypes_array
 
-        super().__init__(t, *args, **kwargs)
+        super().__init__(t)
 
     def func(self) -> None:
         variant_indices = self.vcf_file.variant_indices.copy()
@@ -116,14 +109,12 @@ class Calc(Worker):
     def __init__(
         self,
         t: TaskSyncCollection,
-        genotypes_array: SharedArray,
+        genotypes_array: SharedFloat64Array,
         ec: EigendecompositionCollection,
-        rotated_genotypes_array: SharedArray,
-        inverse_variance_arrays: list[SharedArray],
-        scaled_residuals_arrays: list[SharedArray],
-        stat_array: SharedArray,
-        *args,
-        **kwargs,
+        rotated_genotypes_array: SharedFloat64Array,
+        inverse_variance_arrays: list[SharedFloat64Array],
+        scaled_residuals_arrays: list[SharedFloat64Array],
+        stat_array: SharedFloat64Array,
     ) -> None:
         self.genotypes_array = genotypes_array
         self.rotated_genotypes_array = rotated_genotypes_array
@@ -132,7 +123,7 @@ class Calc(Worker):
         self.scaled_residuals_arrays = scaled_residuals_arrays
         self.stat_array = stat_array
 
-        super().__init__(t, *args, **kwargs)
+        super().__init__(t)
 
     def func(self) -> None:
         eigenvector_matrices = [
@@ -264,12 +255,10 @@ class ScoreWriter(Worker):
     def __init__(
         self,
         t: TaskSyncCollection,
-        stat_array: SharedArray,
-        stat_file_array: FileArray,
+        stat_array: SharedFloat64Array,
+        stat_file_array: FileArray[np.float64],
         phenotype_offset: int,
         variant_offset: int,
-        *args,
-        **kwargs,
     ) -> None:
         self.stat_array = stat_array
         self.stat_file_array = stat_file_array
@@ -277,7 +266,7 @@ class ScoreWriter(Worker):
         self.phenotype_offset = phenotype_offset
         self.variant_offset = variant_offset
 
-        super().__init__(t, *args, **kwargs)
+        super().__init__(t)
 
     def func(self) -> None:
         job_count = len(self.t.can_write)

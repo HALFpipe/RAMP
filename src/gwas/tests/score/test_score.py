@@ -9,7 +9,7 @@ import scipy
 import seaborn as sns
 from gwas.eig import Eigendecomposition, EigendecompositionCollection
 from gwas.log import logger
-from gwas.mem.arr import SharedArray
+from gwas.mem.arr import SharedArray, SharedFloat64Array
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection
@@ -28,11 +28,11 @@ from .simulation import simulation_count
 @pytest.fixture(scope="module")
 def rotated_genotypes_arrays(
     vcf_file: VCFFile,
-    genotypes_array: SharedArray,
+    genotypes_array: SharedFloat64Array,
     eigendecompositions: list[Eigendecomposition],
     sw: SharedWorkspace,
-    request,
-) -> list[SharedArray]:
+    request: pytest.FixtureRequest,
+) -> list[SharedFloat64Array]:
     allocation_count = len(sw.allocations)
 
     genotypes = genotypes_array.to_numpy()
@@ -42,7 +42,7 @@ def rotated_genotypes_arrays(
         vcf_file.samples, (eig.samples for eig in eigendecompositions)
     )
 
-    rotated_genotypes_arrays: list[SharedArray] = list()
+    rotated_genotypes_arrays: list[SharedFloat64Array] = list()
     for eig, sample_boolean_vector in zip(
         eigendecompositions, sample_boolean_vectors, strict=True
     ):
@@ -68,9 +68,9 @@ def rotated_genotypes_arrays(
 @pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 def test_rotate_demeaned_genotypes(
     vcf_file: VCFFile,
-    genotypes_array: SharedArray,
+    genotypes_array: SharedFloat64Array,
     eigendecompositions: list[Eigendecomposition],
-    rotated_genotypes_arrays: list[SharedArray],
+    rotated_genotypes_arrays: list[SharedFloat64Array],
 ) -> None:
     ec = EigendecompositionCollection.from_eigendecompositions(
         vcf_file,
@@ -107,7 +107,7 @@ def test_rotate_demeaned_genotypes(
 @pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 def test_genotypes_array(
     vcf_file: VCFFile,
-    genotypes_array: SharedArray,
+    genotypes_array: SharedFloat64Array,
     variable_collections: list[VariableCollection],
     rmw_score: RmwScore,
 ) -> None:
@@ -184,7 +184,7 @@ def plot_stat(
         y=y,
         color=color,
         alpha=0.005,
-        edgecolors=None,  # type: ignore
+        edgecolors=None,
     )
     axes.axline((0, 0), slope=1, color="black")
     axes.set_xlabel(xlabel)
@@ -215,7 +215,7 @@ def test_score(
     phenotype_index: int,
     null_model_collections: list[NullModelCollection],
     eigendecompositions: list[Eigendecomposition],
-    rotated_genotypes_arrays: list[SharedArray],
+    rotated_genotypes_arrays: list[SharedFloat64Array],
     rmw_score: RmwScore,
     rmw_debug: RmwDebug,
 ) -> None:

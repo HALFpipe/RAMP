@@ -52,6 +52,20 @@ setup(
                 include_dirs=[],
                 libraries=[],
             ),
+            Extension(
+                "gwas.plot._get",
+                [
+                    "src/gwas/plot/_get.pyx",
+                ],
+                define_macros=[
+                    ("NPY_NO_DEPRECATED_API", None),
+                    ("NDEBUG", None),
+                ],
+                include_dirs=[np.get_include()],
+                libraries=[
+                    "blosc2",
+                ],
+            ),
         ]
     )
     + [

@@ -9,7 +9,7 @@ from tqdm import tqdm
 from ..compression.arr.base import FileArray
 from ..eig import Eigendecomposition, EigendecompositionCollection
 from ..log import logger
-from ..mem.arr import SharedArray
+from ..mem.arr import SharedArray, SharedFloat64Array
 from ..vcf.base import VCFFile
 from .worker import (
     Calc,
@@ -24,9 +24,9 @@ from .worker import (
 def calc_score(
     vcf_file: VCFFile,
     eigendecompositions: list[Eigendecomposition],
-    inverse_variance_arrays: list[SharedArray],
-    scaled_residuals_arrays: list[SharedArray],
-    stat_file_array: FileArray,
+    inverse_variance_arrays: list[SharedFloat64Array],
+    scaled_residuals_arrays: list[SharedFloat64Array],
+    stat_file_array: FileArray[np.float64],
     phenotype_offset: int = 0,
     variant_offset: int = 0,
 ) -> None:
@@ -67,7 +67,7 @@ def calc_score(
     name = SharedArray.get_name(sw, "rotated-genotypes")
     rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
     name = SharedArray.get_name(sw, "stat")
-    stat_array: SharedArray = sw.alloc(name, 2, phenotype_count, variant_count)
+    stat_array: SharedFloat64Array = sw.alloc(name, 2, phenotype_count, variant_count)
     # Create the worker processes.
     t = TaskSyncCollection(job_count=job_count)
     reader_proc = GenotypeReader(t, vcf_file, genotypes_array)
@@ -89,7 +89,7 @@ def calc_score(
         total=variant_count, unit="variants", desc="calculating score statistics"
     ) as progress_bar:
 
-        def update_progress_bar():
+        def update_progress_bar() -> None:
             try:
                 task_progress: TaskProgress = t.progress_queue.get_nowait()
                 progress_bar.update(task_progress.variant_count)

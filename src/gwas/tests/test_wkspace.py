@@ -1,35 +1,35 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import pytest
-from gwas.mem.arr import SharedArray
+from gwas.mem.arr import SharedFloat64Array
 from gwas.mem.wkspace import SharedWorkspace
 from numpy import typing as npt
 
 
-def test_sw_merge():
+def test_sw_merge() -> None:
     sw = SharedWorkspace.create()
 
-    names = list()
+    arrays: list[SharedFloat64Array] = list()
     for i in range(10):
         name = f"m-{i}"
 
         sw.alloc(name, 1000, 100)
-        a = sw.get_array(name).to_numpy()
-        a[1, 7] = 10
+        a = SharedFloat64Array(name, sw)
+        a.to_numpy()[1, 7] = 10
 
-        names.append(name)
+        arrays.append(a)
 
-    sw.merge(*names)
+    SharedFloat64Array.merge(*arrays)
 
-    a = sw.get_array("m-0").to_numpy()
-    assert np.all(a[1, 7::100])
-    assert np.isclose(a.sum(), 100)
+    a = SharedFloat64Array("m-0", sw)
+    assert np.all(a.to_numpy()[1, 7::100])
+    assert np.isclose(a.to_numpy().sum(), 100)
 
     sw.close()
     sw.unlink()
 
 
-def test_sw_mem():
+def test_sw_mem() -> None:
     sw = SharedWorkspace.create(size=2**21)
 
     with pytest.raises(MemoryError):
@@ -39,12 +39,12 @@ def test_sw_mem():
     sw.unlink()
 
 
-def test_sw_squash():
+def test_sw_squash() -> None:
     sw = SharedWorkspace.create()
 
     n = 100
 
-    arrays: list[SharedArray] = list()
+    arrays: list[SharedFloat64Array] = list()
     for i in range(7):
         name = f"s-{i}"
 
@@ -54,7 +54,7 @@ def test_sw_squash():
 
         arrays.append(array)
 
-    numpy_arrays: list[npt.NDArray] = list()
+    numpy_arrays: list[npt.NDArray[np.float64]] = list()
     for i in range(7):
         if i % 2 == 0:
             numpy_arrays.append(arrays[i].to_numpy().copy())
@@ -63,8 +63,8 @@ def test_sw_squash():
 
     sw.squash()
 
-    names = [a.name for a in arrays if a.name in sw.allocations]
-    array = sw.merge(*names)
+    arrays = [a for a in arrays if a.name in sw.allocations]
+    array = SharedFloat64Array.merge(*arrays)
 
     numpy_array = np.hstack(numpy_arrays)
 

@@ -9,6 +9,7 @@ from gwas.tri.calc import calc_tri
 from gwas.utils import chromosome_to_int, chromosomes_set
 from gwas.vcf.base import VCFFile, calc_vcf
 from psutil import virtual_memory
+from pytest import FixtureRequest
 
 base_path: Path = Path(os.environ["DATA_PATH"])
 dataset: str = "opensnp"
@@ -18,12 +19,14 @@ sample_sizes: Mapping[SampleSizeLabel, int] = dict(small=100, medium=500, large=
 
 
 @pytest.fixture(scope="session", params=[22, "X"])
-def chromosome(request) -> str | int:
-    return request.param
+def chromosome(request: FixtureRequest) -> str | int:
+    chromosome = request.param
+    assert isinstance(chromosome, (int, str))
+    return chromosome
 
 
 @pytest.fixture(scope="session")
-def sw(request) -> SharedWorkspace:
+def sw(request: FixtureRequest) -> SharedWorkspace:
     size = int(virtual_memory().available * (2 / 3))
     size = min(size, 48 * 2**30)
     sw = SharedWorkspace.create(size=size)
@@ -53,8 +56,8 @@ def directory_factory() -> DirectoryFactory:
 
 
 @pytest.fixture(scope="session", params=sample_sizes.keys())
-def sample_size_label(request) -> SampleSizeLabel:
-    return request.param
+def sample_size_label(request: FixtureRequest) -> SampleSizeLabel:
+    return request.param  # type: ignore
 
 
 @pytest.fixture(scope="session")
@@ -124,7 +127,7 @@ def vcf_files_by_chromosome(vcf_files: list[VCFFile]) -> Mapping[int | str, VCFF
 
 
 @pytest.fixture(scope="session")
-def raw_path():
+def raw_path() -> Path:
     return base_path / dataset / "raw"
 
 

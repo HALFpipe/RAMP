@@ -26,7 +26,7 @@ def check_tri_path(
     if not tri_path.is_file():
         return None
     try:
-        tri = Triangular.from_file(tri_path, sw)
+        tri = Triangular.from_file(tri_path, sw, np.float64)
         chromosome = tri.chromosome
         samples = vcf_by_chromosome[chromosome].samples
         tri.free()
@@ -266,7 +266,7 @@ def check_running(
         t.can_run.clear()
 
 
-def wait(running):
+def wait(running: list[TriWorker]) -> None:
     for proc in running:
         proc.join(timeout=1)
         if proc.is_alive():

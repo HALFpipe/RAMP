@@ -2,7 +2,7 @@
 name = "gwas"
 dynamic = ["version"]
 
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 
 dependencies = [
   "numpy>=1.22",
@@ -10,7 +10,9 @@ dependencies = [
   "pandas",
   "matplotlib",
   "seaborn",
-  "torch<2",
+  "jax",
+  "jaxtyping",
+  "chex",
   "networkx",
   "psutil",
   "threadpoolctl",
@@ -21,6 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
+plot = "gwas.plot.cli:main"
 score = "gwas.score.cli:main"
 stratify = "gwas.stratify.cli:main"
 transpose = "gwas.transpose.cli:main"
@@ -55,6 +58,10 @@ select = [
     "C90", # McCabe complexity
     "PD", # pandas-vet
     "PTH", # flake8-use-pathlib
+]
+ignore = [
+  "F722",  # Syntax error in forward annotation
+  "PD008",  # Use .loc instead of .at. If speed is important, use NumPy.
 ]
 
 [tool.pytest.ini_options]

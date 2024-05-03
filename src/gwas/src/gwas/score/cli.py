@@ -9,11 +9,6 @@ from typing import Literal
 import numpy as np
 
 
-def main() -> None:
-    mp.set_start_method("spawn")
-    run(sys.argv[1:])
-
-
 def parse_arguments(argv: list[str]) -> Namespace:
     from gwas.compression.arr.base import compression_methods
     from gwas.null_model.base import NullModelCollection
@@ -110,6 +105,11 @@ def parse_arguments(argv: list[str]) -> Namespace:
     return argument_parser.parse_args(argv)
 
 
+def main() -> None:
+    mp.set_start_method("spawn")
+    run(sys.argv[1:])
+
+
 def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") -> None:
     arguments = parse_arguments(argv)
 
@@ -124,6 +124,14 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
     size: int | None = None
     if arguments.mem_gb is not None:
         size = int(arguments.mem_gb * 2**30)
+
+    from chex import set_n_cpu_devices
+    from jax import config
+
+    config.update("jax_enable_x64", True)
+    config.update("jax_platform_name", "cpu")
+    config.update("jax_traceback_filtering", "off")
+    set_n_cpu_devices(arguments.num_threads)
 
     with SharedWorkspace.create(size=size) as sw:
         try:

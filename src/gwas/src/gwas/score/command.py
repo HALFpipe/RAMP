@@ -13,7 +13,7 @@ from ..compression.arr.base import compression_methods
 from ..eig import Eigendecomposition
 from ..log import logger
 from ..mean import calc_mean
-from ..mem.arr import SharedArray
+from ..mem.arr import SharedFloat64Array
 from ..mem.wkspace import SharedWorkspace
 from ..pheno import VariableCollection
 from ..score.job import JobCollection
@@ -154,7 +154,7 @@ class GwasCommand:
                 variable_collection.sw.squash()
 
                 variable_collection.covariate_names.extend(pc_names)
-                variable_collection.covariates = SharedArray.from_numpy(
+                variable_collection.covariates = SharedFloat64Array.from_numpy(
                     covariates, variable_collection.sw, prefix="covariates"
                 )
 

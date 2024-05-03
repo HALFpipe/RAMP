@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import multiprocessing as mp
 import os
 import re
 from contextlib import nullcontext
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum, auto
 from logging import LogRecord
-from multiprocessing import get_context
 from multiprocessing import pool as mp_pool
 from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event
@@ -29,13 +29,13 @@ from typing import (
 )
 
 import numpy as np
-import torch.multiprocessing as mp
+import pandas as pd
 from numpy import typing as npt
 
-from gwas.log import logger, worker_configurer
+from .log import logger, multiprocessing_context, worker_configurer
 
 try:
-    from pytest_cov.embed import cleanup_on_sigterm  # type: ignore
+    from pytest_cov.embed import cleanup_on_sigterm
 except ImportError:
     pass
 else:
@@ -66,8 +66,12 @@ def chromosome_from_int(chromosome_int: int) -> int | str:
         return chromosome_int
 
 
+def chromosomes_list() -> list[int | str]:
+    return [*range(1, 22 + 1), "X"]
+
+
 def chromosomes_set() -> set[int | str]:
-    return set(range(1, 22 + 1)) | {"X"}
+    return set(chromosomes_list())
 
 
 def unwrap_which(command: str) -> str:
@@ -89,7 +93,7 @@ def to_str(x: Any) -> str:
         if x.size == 1:
             x = x.item()
     if np.issubdtype(type(x), np.floating):
-        return np.format_float_scientific(x)  # type: ignore
+        return np.format_float_scientific(x)
     return str(x)
 
 
@@ -126,6 +130,7 @@ def initializer(
 
     if logging_queue is not None:
         worker_configurer(logging_queue, log_level)
+    logger.debug(f'Configured process "{mp.current_process().name}"')
 
 
 class Pool(mp_pool.Pool):
@@ -133,12 +138,11 @@ class Pool(mp_pool.Pool):
         self,
         processes: int | None = None,
         maxtasksperchild: int | None = None,
-        context: Any | None = None,
     ) -> None:
         initargs = get_initargs()
-        if context is None:
-            context = get_context("spawn")
-        super().__init__(processes, initializer, initargs, maxtasksperchild, context)
+        super().__init__(
+            processes, initializer, initargs, maxtasksperchild, multiprocessing_context
+        )
 
 
 class Action(Enum):
@@ -197,12 +201,11 @@ class Process(mp.Process):
     def __init__(
         self,
         exception_queue: mp.Queue[Exception] | None,
-        *args,
-        **kwargs,
+        name: str | None = None,
     ) -> None:
         self.initargs = get_initargs()
         self.exception_queue = exception_queue
-        super().__init__(*args, **kwargs)
+        super().__init__(name=name)
 
     def func(self) -> None:
         raise NotImplementedError
@@ -219,7 +222,7 @@ class Process(mp.Process):
                 self.exception_queue.put_nowait(e)
 
 
-def invert_pivot(pivot: npt.NDArray[np.integer]) -> npt.NDArray[np.integer]:
+def invert_pivot(pivot: npt.NDArray[np.uint32]) -> npt.NDArray[np.uint32]:
     """Calculates the inverse of a pivot array. Taken from
     https://stackoverflow.com/a/25535723
 
@@ -264,7 +267,7 @@ def parse_obj_as(cls: Type[T], data: Any) -> T:
             for key, value in data.items()
         }  # type: ignore
 
-    return data
+    return data  # type: ignore
 
 
 def make_sample_boolean_vectors(
@@ -291,7 +294,7 @@ def make_pool_or_null_context(
     num_threads: int = 1,
     chunksize: int | None = 1,
     iteration_order: IterationOrder = IterationOrder.UNORDERED,
-) -> tuple[ContextManager, Iterator[S]]:
+) -> tuple[ContextManager[Any], Iterator[S]]:
     if num_threads < 2:
         return nullcontext(), map(callable, iterable)
 
@@ -312,6 +315,33 @@ def make_pool_or_null_context(
         map_function = pool.imap_unordered
     else:
         raise ValueError(f"Unknown iteration order {iteration_order}")
-    output_iterator: Iterator = map_function(callable, iterable, chunksize)
-    cm: ContextManager = pool
+    output_iterator: Iterator[S] = map_function(callable, iterable, chunksize)
+    cm: ContextManager[Any] = pool
     return cm, output_iterator
+
+
+def greater_or_close(series: pd.Series, cutoff: float) -> npt.NDArray[np.bool_]:
+    value = np.asarray(series.values)
+    result = np.logical_or(
+        np.logical_or(value >= cutoff, np.isclose(value, cutoff)), np.isnan(value)
+    )
+    return result
+
+
+def make_variant_mask(
+    allele_frequencies: pd.Series | pd.DataFrame,
+    r_squared: pd.Series,
+    minor_allele_frequency_cutoff: float,
+    r_squared_cutoff: float,
+) -> npt.NDArray[np.bool_]:
+    allele_frequencies = allele_frequencies.copy()
+    allele_frequencies = allele_frequencies.where(
+        allele_frequencies.to_numpy() <= 0.5, 1 - allele_frequencies
+    )
+    if isinstance(allele_frequencies, pd.DataFrame):
+        allele_frequencies = allele_frequencies.max(axis="columns")
+    variant_mask = greater_or_close(
+        allele_frequencies,
+        minor_allele_frequency_cutoff,
+    ) & greater_or_close(r_squared, r_squared_cutoff)
+    return variant_mask

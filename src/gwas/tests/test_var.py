@@ -5,19 +5,19 @@ from typing import Type
 import numpy as np
 import pytest
 import scipy
-import torch
 from gwas.null_model.ml import (
     MaximumLikelihood,
     OptimizeInput,
     ProfileMaximumLikelihood,
     RestrictedMaximumLikelihood,
 )
+from jax import numpy as jnp
 
 
 @pytest.mark.parametrize(
     "driver", [MaximumLikelihood, ProfileMaximumLikelihood, RestrictedMaximumLikelihood]
 )
-def test_var(driver: Type[ProfileMaximumLikelihood]):
+def test_var(driver: Type[ProfileMaximumLikelihood]) -> None:
     seed(0xABC)
 
     # simulate data
@@ -45,9 +45,9 @@ def test_var(driver: Type[ProfileMaximumLikelihood]):
 
     eigenvalues, eigenvectors = np.linalg.eigh(kinship)
 
-    eigenvalues = torch.tensor(eigenvalues)
-    rotated_covariates = torch.tensor(eigenvectors.transpose() @ covariates)
-    rotated_phenotype = torch.tensor(eigenvectors.transpose() @ phenotype)
+    eigenvalues = jnp.asarray(eigenvalues)
+    rotated_covariates = jnp.asarray(eigenvectors.transpose() @ covariates)
+    rotated_phenotype = jnp.asarray(eigenvectors.transpose() @ phenotype)
 
     o: OptimizeInput = OptimizeInput(
         eigenvalues,

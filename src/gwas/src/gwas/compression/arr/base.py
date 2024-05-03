@@ -12,6 +12,7 @@ from typing import Any, Generic, Mapping, Type, TypeVar
 import blosc2
 import numpy as np
 import pandas as pd
+from numpy import typing as npt
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -77,15 +78,15 @@ compression_methods: Mapping[str, CompressionMethod] = dict(
 )
 
 
-T = TypeVar("T", bound=np.generic)
+ScalarType = TypeVar("ScalarType", bound=np.generic)
 
 
 @dataclass
-class FileArray(Generic[T], AbstractContextManager):
+class FileArray(Generic[ScalarType], AbstractContextManager["FileArray[ScalarType]"]):
     file_path: Path
 
     shape: tuple[int, ...]
-    dtype: Type[T]
+    dtype: Type[ScalarType]
     compression_method: CompressionMethod
 
     axis_metadata: list[pd.DataFrame | pd.Series | None] = field(init=False)
@@ -101,7 +102,9 @@ class FileArray(Generic[T], AbstractContextManager):
         self.axis_metadata[axis] = metadata
 
     @abstractmethod
-    def __setitem__(self, key: tuple[slice, ...], value: np.ndarray) -> None:
+    def __setitem__(
+        self, key: tuple[slice, ...], value: npt.NDArray[ScalarType]
+    ) -> None:
         raise NotImplementedError
 
     @classmethod
@@ -109,10 +112,10 @@ class FileArray(Generic[T], AbstractContextManager):
         cls,
         file_path: Path,
         shape: tuple[int, ...],
-        dtype: Type[T],
+        dtype: Type[ScalarType],
         compression_method: CompressionMethod,
         **kwargs: Any,
-    ) -> FileArray[T]:
+    ) -> FileArray[ScalarType]:
         if isinstance(compression_method, Blosc2CompressionMethod):
             from .bin import Blosc2FileArray
 

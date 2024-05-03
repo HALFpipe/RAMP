@@ -1,10 +1,9 @@
-GWAS Protocol (as a container)
-==============================
+# GWAS Protocol (as a container)
 
-Usage
------
+## Usage
 
 The container comes with all the software needed to generate summary statistics.
+
 <ol>
 
 <li>
@@ -60,10 +59,10 @@ Next, start an interactive shell inside the container using one of the following
 </table>
 </li>
 
-Development
------------
+## Development
 
 To create a local development environment install [Miniforge](https://github.com/conda-forge/miniforge) and create a `.condarc` file in your home directory with the following contents:
+
 ```
 channels:
   - conda-forge
@@ -73,22 +72,27 @@ channels:
 Then update your `.bashrc` or `.zshrc` with `mamba init`. This will allow you to use the `conda` command.
 
 Next, install `mamba` using `conda install mamba` and then create the environment using the following command:
+
 ```bash
 mamba create --name "gwas" \
-  "mamba" "boa" "conda-verify" \
-  "python=3.11" "more-itertools" \
-  "jupyterlab" "ipywidgets" \
-  "numpy" "scipy" "pandas" "pytorch<2" "networkx" \
-  "matplotlib" "seaborn" \
+  "boa" \
   "bzip2" "p7zip>=15.09" \
-  "python-blosc2" "msgpack-python" "ndindex" \
   "bcftools>=1.17" "plink" "plink2" "tabix" \
-  "cython>=3b1" "mkl-include" "zlib" \
-  "mypy" "pytest-benchmark" "threadpoolctl" \
-  "compilers" "rust" "sysroot_linux-64>=2.17"
+  "jupyterlab" "ipywidgets" \
+  "python=3.12" "more-itertools" \
+  "numpy" "scipy" "pandas" "threadpoolctl" \
+  "seaborn" \
+  "jax" "jaxtyping" "chex" \
+  "mkl-include" "mkl" \
+  "python-blosc2" \
+  "mypy" "types-pyyaml"  \
+  "pytest-benchmark" "pytest-cov" \
+  "cython>=3b1" "zlib" \
+  "gxx_linux-64>=13" "gcc_linux-64>=13" "rust" "sysroot_linux-64>=2.17"
 ```
 
 Finally, install the `gwas` package using the following command:
+
 ```bash
 pip install --no-deps --editable "src/gwas"
 ```

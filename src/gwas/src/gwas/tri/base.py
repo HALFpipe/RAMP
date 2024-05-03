@@ -4,22 +4,23 @@ from __future__ import annotations
 import multiprocessing as mp
 from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event, Lock
+from typing import Any
 
 import numpy as np
 from numpy import typing as npt
 
-from ..mem.arr import SharedArray
+from ..mem.arr import SharedFloat64Array
 from ..mem.wkspace import SharedWorkspace
 from ..utils import SharedState
 from ..vcf.base import VCFFile
 
 
-def is_lower_triangular(a: npt.NDArray):
+def is_lower_triangular(a: npt.NDArray[Any]) -> bool:
     return np.allclose(np.triu(a, k=1), 0)
 
 
 @dataclass
-class Triangular(SharedArray):
+class Triangular(SharedFloat64Array):
     chromosome: int | str
     samples: list[str]
     variant_count: int
@@ -48,7 +49,9 @@ class Triangular(SharedArray):
             # Nothing to do
             return
 
-        new_sample_indices = np.array([self.samples.index(sample) for sample in samples])
+        new_sample_indices = np.array(
+            [self.samples.index(sample) for sample in samples], dtype=np.uint32
+        )
         # Remove samples
         self.compress(new_sample_indices)
         self.samples = samples
@@ -58,7 +61,7 @@ class Triangular(SharedArray):
         return f"chr{chromosome}.tri.txt.gz"
 
     @staticmethod
-    def get_prefix(**kwargs) -> str:
+    def get_prefix(**kwargs: str | int | None) -> str:
         chromosome = kwargs.get("chromosome")
         if chromosome is not None:
             return f"chr{chromosome}-tri"

@@ -3,19 +3,19 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from dataclasses import dataclass
-from typing import ContextManager
+from typing import Any, ContextManager
 
 import numpy as np
 from numpy import typing as npt
 
 from ..log import logger
-from ..mem.arr import SharedArray
+from ..mem.arr import SharedFloat64Array
 from ..mem.wkspace import SharedWorkspace
 from ..vcf.base import VCFFile
 from .base import TaskSyncCollection, Triangular
 
 
-def scale(b: npt.NDArray):
+def scale(b: npt.NDArray[np.float64]) -> None:
     # Calculate variant properties
     mean = b.mean(axis=1)
     minor_allele_frequency = mean / 2
@@ -42,7 +42,7 @@ class TallSkinnyQR:
     variant_indices: npt.NDArray[np.uint32] | None = None
 
     @staticmethod
-    def triangularize(shared_array: SharedArray, pivoting: bool = True) -> None:
+    def triangularize(shared_array: SharedFloat64Array, pivoting: bool = True) -> None:
         """Triangularize the given array to a lower triangular matrix"""
         _, sample_count = shared_array.shape
         # Triangularize to upper triangle
@@ -108,7 +108,7 @@ class TallSkinnyQR:
         array = shared_array.to_numpy()
         scale(array)
 
-        multithreading_lock: ContextManager = nullcontext()
+        multithreading_lock: ContextManager[Any] = nullcontext()
         if self.t is not None:
             multithreading_lock = self.t.multithreading_lock
 
@@ -140,10 +140,7 @@ class TallSkinnyQR:
 
         logger.debug(f"Reducing {len(shared_arrays)} chunks")
 
-        names = [shared_array.name for shared_array in shared_arrays]
-
-        sw = shared_arrays[0].sw
-        reduce_array = sw.merge(*names)
+        reduce_array = SharedFloat64Array.merge(*shared_arrays)
         reduce_array.transpose()
         # Triangularize to lower triangle
         cls.triangularize(reduce_array)
@@ -171,7 +168,7 @@ class TallSkinnyQR:
 
         return Triangular(
             name=reduce_array.name,
-            sw=sw,
+            sw=reduce_array.sw,
             chromosome=chromosome,
             samples=shared_arrays[0].samples,
             variant_count=variant_count,

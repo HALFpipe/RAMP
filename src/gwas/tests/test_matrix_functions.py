@@ -4,7 +4,7 @@ import pytest
 from gwas._matrix_functions import dgesvdq, dimatcopy, set_tril, set_triu
 
 
-def test_dimatcopy_square():
+def test_dimatcopy_square() -> None:
     a = np.random.rand(8, 8)
 
     b = a.copy()
@@ -13,7 +13,7 @@ def test_dimatcopy_square():
     assert np.allclose(a.transpose(), b)
 
 
-def test_dimatcopy_rect():
+def test_dimatcopy_rect() -> None:
     a = np.random.rand(5, 8)
 
     b = a.copy()
@@ -26,20 +26,20 @@ def test_dimatcopy_rect():
 
 
 @pytest.mark.parametrize("shape", [(5, 5), (5, 7), (7, 5)])
-def test_set_triu(shape):
+def test_set_triu(shape: tuple[int, ...]) -> None:
     a = np.asfortranarray(np.random.rand(*shape))
     set_triu(a)
     assert np.allclose(np.triu(a, k=1), 0)
 
 
 @pytest.mark.parametrize("shape", [(5, 5), (5, 7), (7, 5)])
-def test_set_tril(shape):
+def test_set_tril(shape: tuple[int, ...]) -> None:
     a = np.asfortranarray(np.random.rand(*shape))
     set_tril(a)
     assert np.allclose(np.tril(a, k=-1), 0)
 
 
-def test_dgesvdq():
+def test_dgesvdq() -> None:
     m = 1000
     n = 100
 
@@ -55,7 +55,7 @@ def test_dgesvdq():
     assert numrank == n
 
 
-def test_dgesvdq_shape():
+def test_dgesvdq_shape() -> None:
     m = 10
     n = 100
 

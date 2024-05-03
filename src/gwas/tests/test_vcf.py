@@ -7,8 +7,10 @@ import numpy as np
 import pandas as pd
 import pytest
 from gwas.compression.pipe import CompressedTextReader
-from gwas.vcf.base import Engine, Variant, VCFFile
+from gwas.vcf.base import Engine, VCFFile
+from gwas.vcf.variant import Variant
 from numpy import typing as npt
+from pytest_benchmark.fixture import BenchmarkFixture
 from tqdm.auto import tqdm
 
 from .utils import plink2
@@ -22,7 +24,7 @@ engines: Sequence[Engine] = list(Engine.__members__.values())
 def test_vcf_file(
     engine: Engine,
     vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
-):
+) -> None:
     vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
     vcf_file = VCFFile.from_path(vcf_path, engine=engine)
 
@@ -88,7 +90,12 @@ def vcf_read(engine: Engine, vcf_path: Path) -> ReadResult:
 
 
 @pytest.mark.parametrize("engine", engines)
-def test_read(benchmark, vcf_path: Path, numpy_read_result: ReadResult, engine: Engine):
+def test_read(
+    benchmark: BenchmarkFixture,
+    vcf_path: Path,
+    numpy_read_result: ReadResult,
+    engine: Engine,
+) -> None:
     read_result = benchmark(vcf_read, engine, vcf_path)
 
     assert np.all(numpy_read_result.variants == read_result.variants)
@@ -111,7 +118,7 @@ def test_cpp(vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]])
         vcf_file.read(dosages)
 
 
-def test_converted(vcf_path: Path, tmp_path: Path):
+def test_converted(vcf_path: Path, tmp_path: Path) -> None:
     converted_prefix = tmp_path / f"chr{chromosome}-converted"
     check_call(
         [

@@ -11,7 +11,7 @@ from numpy import typing as npt
 
 from .compression.arr.base import CompressionMethod, FileArray
 from .log import logger
-from .mem.arr import SharedArray
+from .mem.arr import SharedFloat64Array
 from .mem.wkspace import SharedWorkspace
 
 
@@ -19,7 +19,9 @@ def combine(data_frames: list[pd.DataFrame]) -> pd.DataFrame:
     return reduce(lambda a, b: a.combine_first(b), data_frames)
 
 
-def read_and_combine(paths: list[Path]) -> tuple[list[str], list[str], npt.NDArray]:
+def read_and_combine(
+    paths: list[Path],
+) -> tuple[list[str], list[str], npt.NDArray[np.float64]]:
     import pandas as pd
 
     data_frames: list[pd.DataFrame] = list()
@@ -42,10 +44,10 @@ class VariableCollection:
     samples: list[str]
 
     phenotype_names: list[str]
-    phenotypes: SharedArray
+    phenotypes: SharedFloat64Array
 
     covariate_names: list[str]
-    covariates: SharedArray
+    covariates: SharedFloat64Array
 
     name: str | None = None
 
@@ -121,7 +123,7 @@ class VariableCollection:
         phenotypes: npt.NDArray[np.float64],
         phenotype_names: list[str],
         subset_phenotype_names: list[str],
-    ):
+    ) -> npt.NDArray[np.float64]:
         phenotype_indices = [
             phenotype_names.index(name) for name in subset_phenotype_names
         ]
@@ -136,7 +138,7 @@ class VariableCollection:
             self.phenotypes.to_numpy(), self.phenotype_names, subset_phenotype_names
         )
         self.phenotypes.free()
-        self.phenotypes = SharedArray.from_numpy(
+        self.phenotypes = SharedFloat64Array.from_numpy(
             new_phenotypes, self.phenotypes.sw, prefix="phenotypes"
         )
         logger.debug(
@@ -169,7 +171,7 @@ class VariableCollection:
             ]
             new_covariates = new_covariates[:, ~zero_variance]
 
-            self.covariates = SharedArray.from_numpy(
+            self.covariates = SharedFloat64Array.from_numpy(
                 new_covariates, sw, prefix="covariates"
             )
             old_covariates.free()
@@ -202,10 +204,14 @@ class VariableCollection:
 
         self.samples = samples
 
-        self.phenotypes = SharedArray.from_numpy(new_phenotypes, sw, prefix="phenotypes")
+        self.phenotypes = SharedFloat64Array.from_numpy(
+            new_phenotypes, sw, prefix="phenotypes"
+        )
         old_phenotypes.free()
 
-        self.covariates = SharedArray.from_numpy(new_covariates, sw, prefix="covariates")
+        self.covariates = SharedFloat64Array.from_numpy(
+            new_covariates, sw, prefix="covariates"
+        )
         old_covariates.free()
         self.remove_zero_variance_covariates()
 
@@ -257,9 +263,9 @@ class VariableCollection:
         return cls(
             samples,
             phenotype_names,
-            SharedArray.from_numpy(phenotypes, sw, prefix="phenotypes"),
+            SharedFloat64Array.from_numpy(phenotypes, sw, prefix="phenotypes"),
             covariate_names,
-            SharedArray.from_numpy(covariates, sw, prefix="covariates"),
+            SharedFloat64Array.from_numpy(covariates, sw, prefix="covariates"),
         )
 
     @classmethod
@@ -269,7 +275,7 @@ class VariableCollection:
         covariate_paths: list[Path],
         sw: SharedWorkspace,
         samples: list[str] | None = None,
-        **kwargs,
+        **kwargs: str,
     ) -> Self:
         logger.debug("Reading phenotypes")
         phenotype_samples, phenotype_names, phenotype_array = read_and_combine(
@@ -378,7 +384,7 @@ class VariableSummary:
         return np.allclose(self.values, other.values)
 
     @classmethod
-    def from_array(cls, value: npt.NDArray[np.float64], **kwargs) -> Self:
+    def from_array(cls, value: npt.NDArray[np.float64]) -> Self:
         if value.size == 0:
             raise ValueError("Cannot compute summary from an empty array")
         quantiles = np.quantile(
@@ -394,5 +400,4 @@ class VariableSummary:
             float(maximum),
             float(value.mean()),
             float(value.var(ddof=1)),
-            **kwargs,
         )

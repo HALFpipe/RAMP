@@ -4,7 +4,6 @@ from typing import Type
 
 import numpy as np
 import pytest
-import torch
 from gwas.log import logger
 from gwas.null_model.fastlmm import FaSTLMM
 from gwas.null_model.ml import (
@@ -14,8 +13,9 @@ from gwas.null_model.ml import (
     ProfileMaximumLikelihood,
     RestrictedMaximumLikelihood,
 )
+from jax import numpy as jnp
 
-from ..utils import check_bias
+from ..utils import check_bias, check_types
 from .rmw_debug import RmwDebug
 
 
@@ -26,9 +26,9 @@ def test_fastlmm(
     ml = FaSTLMM(sample_count, covariate_count, enable_softplus_penalty=False)
 
     optimize_input = OptimizeInput(
-        torch.tensor(rmw_debug.d),
-        torch.tensor(rmw_debug.trans_u_x),
-        torch.tensor(rmw_debug.trans_u_y[:, np.newaxis]),
+        eigenvalues=jnp.asarray(rmw_debug.d),
+        rotated_covariates=jnp.asarray(rmw_debug.trans_u_x),
+        rotated_phenotype=jnp.asarray(rmw_debug.trans_u_y[:, np.newaxis]),
     )
 
     # Test for intermediate values
@@ -48,48 +48,51 @@ def test_fastlmm(
         rmw_debug.factor,
         strict=False,
     ):
-        terms = torch.tensor([variance_ratio, 1], dtype=torch.float64)
+        terms = jnp.asarray([variance_ratio, 1])
 
-        r = ml.get_regression_weights(terms, optimize_input)
+        r = check_types(ml.get_regression_weights)(terms, optimize_input)
 
-        constant = float(torch.log(r.variance).sum())
+        constant = float(jnp.log(r.variance).sum())
         assert np.isclose(constant, rmw_constant, atol=1e-3, rtol=1e-3)
 
-        sigma = float(torch.square(r.scaled_residuals).mean())
+        sigma = float(jnp.square(r.scaled_residuals).mean())
         assert np.isclose(sigma, rmw_sigma, atol=1e-3)
 
-        (weights, _, residuals, variance) = ml.get_standard_errors(terms, optimize_input)
+        se = check_types(ml.get_standard_errors)(terms, optimize_input)
         # Sanity check as these values should just be passed through
-        assert np.allclose(weights, r.regression_weights, atol=1e-3)
-        assert np.allclose(residuals, r.scaled_residuals, atol=1e-3)
+        assert np.allclose(se.regression_weights, r.regression_weights, atol=1e-3)
+        assert np.allclose(se.scaled_residuals, r.scaled_residuals, atol=1e-3)
 
         # Compare to raremetalworker
-        assert np.allclose(weights.ravel(), rmw_beta, atol=1e-3)
-        factor = (residuals * np.sqrt(variance)).ravel().numpy()
+        assert np.allclose(se.regression_weights.ravel(), rmw_beta, atol=1e-3)
+        factor = np.asarray(se.scaled_residuals * np.sqrt(se.variance)).ravel()
         assert check_bias(factor, rmw_factor)
 
-        log_likelihood = -0.5 * ml.minus_two_log_likelihood(terms, optimize_input)
+        log_likelihood = -0.5 * check_types(ml.minus_two_log_likelihood)(
+            terms, optimize_input
+        )
+
         assert np.isclose(rmw_log_likelihood, log_likelihood, atol=1e-3)
 
     # Test for final values
-    terms = torch.tensor([rmw_debug.delta_hat, 1], dtype=torch.float64)
-    (_, _, residuals, _) = ml.get_standard_errors(terms, optimize_input)
-    genetic_variance = float(np.square(residuals).mean())
+    terms = jnp.asarray([rmw_debug.delta_hat, 1])
+    se = ml.get_standard_errors(terms, optimize_input)
+    genetic_variance = float(np.square(se.scaled_residuals).mean())
     terms *= genetic_variance
     (_, genetic_variance, error_variance) = ml.get_heritability(terms)
 
     assert np.isclose(genetic_variance, rmw_debug.sigma_g2_hat, atol=1e-3, rtol=1e-3)
     assert np.isclose(error_variance, rmw_debug.sigma_e2_hat, atol=1e-2)
 
-    (weights, _, residuals, variance) = ml.get_standard_errors(terms, optimize_input)
-    assert np.allclose(weights.ravel(), rmw_debug.beta_hat, atol=1e-3)
+    se = ml.get_standard_errors(terms, optimize_input)
+    assert np.allclose(se.regression_weights.ravel(), rmw_debug.beta_hat, atol=1e-3)
     assert np.allclose(
-        (residuals * np.sqrt(variance)).ravel(),
+        (se.scaled_residuals * np.sqrt(se.variance)).ravel(),
         rmw_debug.residuals,
         atol=1e-3,
         rtol=1e-3,
     )
-    assert np.allclose(variance.ravel(), rmw_debug.sigma2, atol=1e-3)
+    assert np.allclose(se.variance.ravel(), rmw_debug.sigma2, atol=1e-3)
 
 
 @pytest.mark.parametrize(
@@ -107,16 +110,16 @@ def test_optimize(
     ml_class: Type[ProfileMaximumLikelihood],
 ) -> None:
     sample_count, covariate_count = rmw_debug.x.shape
-    ml = ml_class(sample_count, covariate_count)
+    ml = ml_class(sample_count=sample_count, covariate_count=covariate_count)
 
     optimize_input = OptimizeInput(
-        torch.tensor(rmw_debug.d),
-        torch.tensor(rmw_debug.trans_u_x),
-        torch.tensor(rmw_debug.trans_u_y[:, np.newaxis]),
+        eigenvalues=jnp.asarray(rmw_debug.d),
+        rotated_covariates=jnp.asarray(rmw_debug.trans_u_x),
+        rotated_phenotype=jnp.asarray(rmw_debug.trans_u_y[:, np.newaxis]),
     )
 
     optimize_result = ml.optimize(optimize_input)
-    terms = torch.Tensor(optimize_result.x)
+    terms = jnp.asarray(optimize_result.x)
     (heritability, genetic_variance, error_variance) = ml.get_heritability(terms)
 
     logger.info(
@@ -128,7 +131,10 @@ def test_optimize(
         rmw_debug.sigma_g2_hat + rmw_debug.sigma_e2_hat
     )
     logger.info(f"heritability is {heritability} (rmw is {rmw_heritability})")
-    log_likelihood = -0.5 * ml.minus_two_log_likelihood(terms, optimize_input)
+    log_likelihood = -0.5 * check_types(ml.minus_two_log_likelihood)(
+        terms, optimize_input
+    )
+
     logger.info(
         f"log likelihood is {log_likelihood} (rmw is {rmw_debug.log_likelihood_hat})"
     )

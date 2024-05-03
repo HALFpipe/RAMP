@@ -3,11 +3,14 @@ import re
 from argparse import Namespace
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TypeVar
 
 import numpy as np
 from numpy import typing as npt
 
 from .base import SampleID
+
+DType = TypeVar("DType", bound=np.generic, covariant=True)
 
 
 @dataclass
@@ -49,8 +52,11 @@ class SampleRenamer:
         return sample
 
     def rename_samples(
-        self, samples: list[SampleID], array_samples: list[str], array: npt.NDArray
-    ) -> tuple[list[SampleID], npt.NDArray]:
+        self,
+        samples: list[SampleID],
+        array_samples: list[str],
+        array: npt.NDArray[DType],
+    ) -> tuple[list[SampleID], npt.NDArray[DType]]:
         iid = [self.rename_sample(sample.iid) for sample in samples]
         underscored = [self.rename_sample(f"{fid}_{iid}") for fid, iid in samples]
         sample_indices = np.full(len(array_samples), -1, dtype=int)

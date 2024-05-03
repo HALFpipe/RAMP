@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.4
-
 FROM ubuntu:rolling as base
 
 ENV LC_ALL="C.UTF-8" \
@@ -89,8 +87,8 @@ FROM conda as install
 
 COPY --from=builder /opt/conda/conda-bld /opt/conda/conda-bld
 RUN mamba install --yes --use-local \
-    "python=3.11" \
-    "pytorch=*=cpu*" \
+    "python=3.12" \
+    "jaxlib=*=cpu*" \
     "bcftools>=1.17" \
     "gemma" \
     "plink" \

@@ -83,7 +83,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
     return argument_parser.parse_args(argv)
 
 
-def main():
+def main() -> None:
     arguments = parse_arguments(sys.argv[1:])
     setup_logging(level=arguments.log_level)
 

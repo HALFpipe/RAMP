@@ -1,18 +1,40 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
-
 import logging
 import warnings
 from logging.handlers import QueueHandler
-from multiprocessing import Queue
+from multiprocessing import get_context
+from multiprocessing.queues import Queue
 from pathlib import Path
 from threading import Thread
+from typing import TextIO
 
 logger = logging.getLogger("gwas")
+multiprocessing_context = get_context("spawn")
+
+
+class LoggingThread(Thread):
+    def __init__(self) -> None:
+        super().__init__(daemon=True)
+        self.logging_queue: Queue[logging.LogRecord] = Queue(ctx=multiprocessing_context)
+
+    def run(self) -> None:
+        while True:
+            record = self.logging_queue.get()
+            logger = logging.getLogger(record.name)
+            logger.handle(record)
+
+
 logging_thread: LoggingThread | None = None
 
 
-def _showwarning(message, category, filename, lineno, file=None, line=None):
+def _showwarning(
+    message: Warning | str,
+    category: type[Warning],
+    filename: str,
+    lineno: int,
+    file: TextIO | None = None,
+    line: str | None = None,
+) -> None:
     logger = logging.getLogger("py.warnings")
     logger.warning(
         warnings.formatwarning(message, category, filename, lineno, line),
@@ -45,18 +67,6 @@ def setup_logging(level: str | int, log_path: Path | None = None) -> None:
     global logging_thread
     logging_thread = LoggingThread()
     logging_thread.start()
-
-
-class LoggingThread(Thread):
-    def __init__(self):
-        super().__init__(daemon=True)
-        self.logging_queue: Queue[logging.LogRecord] = Queue()
-
-    def run(self) -> None:
-        while True:
-            record = self.logging_queue.get()
-            logger = logging.getLogger(record.name)
-            logger.handle(record)
 
 
 def worker_configurer(

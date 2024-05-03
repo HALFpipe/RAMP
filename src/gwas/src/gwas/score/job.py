@@ -14,7 +14,7 @@ from ..compression.arr.base import CompressionMethod, FileArray
 from ..compression.pipe import CompressedTextReader, CompressedTextWriter
 from ..eig import Eigendecomposition
 from ..log import logger
-from ..mem.arr import SharedArray
+from ..mem.arr import SharedFloat64Array
 from ..mem.wkspace import SharedWorkspace
 from ..null_model.base import NullModelCollection
 from ..pheno import VariableCollection, VariableSummary
@@ -157,7 +157,7 @@ class JobCollection:
 
     variable_collection_chunks: list[list[VariableCollection]]
     summary_collection: SummaryCollection = field(init=False)
-    stat_file_array: FileArray = field(init=False)
+    stat_file_array: FileArray[np.float64] = field(init=False)
 
     sw: SharedWorkspace = field(init=False)
 
@@ -229,8 +229,8 @@ class JobCollection:
                     desc="decomposing kinship matrices",
                 )
             ]
-            inverse_variance_arrays: list[SharedArray] = list()
-            scaled_residuals_arrays: list[SharedArray] = list()
+            inverse_variance_arrays: list[SharedFloat64Array] = list()
+            scaled_residuals_arrays: list[SharedFloat64Array] = list()
 
             for eig, vc, summary in zip(
                 eigendecompositions,

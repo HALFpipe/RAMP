@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 import json
 from dataclasses import dataclass, fields
+from itertools import pairwise
 from pathlib import Path
-from typing import Any, Literal, Self, overload
+from typing import Any, Generic, Literal, Self, TypeVar, overload
 
 import numpy as np
 import scipy
@@ -10,12 +11,15 @@ from numpy import typing as npt
 
 from .._matrix_functions import dimatcopy, set_tril
 from ..compression.pipe import CompressedTextReader
+from ..log import logger
 from ..utils import invert_pivot
 from .wkspace import Allocation, SharedWorkspace
 
+ScalarType = TypeVar("ScalarType", bound=np.generic)
+
 
 @dataclass
-class SharedArray:
+class SharedArray(Generic[ScalarType]):
     name: str
     sw: SharedWorkspace
 
@@ -25,14 +29,14 @@ class SharedArray:
         return tuple(a.shape)
 
     @property
-    def dtype(self) -> np.dtype:
+    def dtype(self) -> np.dtype[ScalarType]:
         a = self.sw.allocations[self.name]
         return np.dtype(a.dtype)
 
     def to_file_name(self) -> str:
         raise NotImplementedError
 
-    def __setitem__(self, key: Any, value: npt.NDArray) -> None:
+    def __setitem__(self, key: Any, value: npt.NDArray[ScalarType]) -> None:
         numpy_array = self.to_numpy()
         numpy_array[key] = value
 
@@ -40,7 +44,7 @@ class SharedArray:
         self,
         shape: tuple[int, ...] | None = None,
         include_trailing_free_memory: bool = False,
-    ) -> npt.NDArray:
+    ) -> npt.NDArray[ScalarType]:
         """to_numpy.
 
         Parameters
@@ -86,13 +90,15 @@ class SharedArray:
         )
 
     @classmethod
-    def parse_header(cls, header: str | None) -> dict:
+    def parse_header(cls, header: str | None) -> dict[str, Any]:
         if header is None:
             return dict()
         else:
             header = header.removeprefix("#")  # remove comment prefix
             header = header.strip()  # remove extra whitespace
-            return json.loads(header)
+            parsed_header = json.loads(header)
+            assert isinstance(parsed_header, dict)
+            return parsed_header
 
     def to_header(self) -> str | None:
         ignore = [field.name for field in fields(SharedArray)]
@@ -106,11 +112,13 @@ class SharedArray:
         return json.dumps(data)
 
     @staticmethod
-    def get_prefix(**kwargs) -> str:
+    def get_prefix(**kwargs: str | int | None) -> str:
         return "arr"
 
     @classmethod
-    def get_name(cls, sw: SharedWorkspace, prefix: str | None = None, **kwargs) -> str:
+    def get_name(
+        cls, sw: SharedWorkspace, prefix: str | None = None, **kwargs: str | int | None
+    ) -> str:
         if prefix is None:
             prefix = cls.get_prefix(**kwargs)
         allocations = sw.allocations
@@ -125,12 +133,12 @@ class SharedArray:
     @classmethod
     def from_numpy(
         cls,
-        array: npt.NDArray,
+        array: npt.NDArray[ScalarType],
         sw: SharedWorkspace,
-        **kwargs,
+        **kwargs: Any,
     ) -> Self:
         name = cls.get_name(sw, **kwargs)
-        sa = sw.alloc(name, *array.shape)
+        sa = sw.alloc(name, *array.shape, dtype=array.dtype)
 
         sa.to_numpy()[:] = array
 
@@ -142,7 +150,7 @@ class SharedArray:
     def read_file_metadata(
         cls,
         file_path: Path | str,
-    ) -> tuple[int, dict]:
+    ) -> tuple[int, dict[str, Any]]:
         file_path = Path(file_path)
 
         header: str | None = None
@@ -170,13 +178,14 @@ class SharedArray:
         cls,
         file_path: Path | str,
         sw: SharedWorkspace,
+        dtype: type[ScalarType] | np.dtype[ScalarType],
     ) -> Self:
         file_path = Path(file_path)
         n, kwargs = cls.read_file_metadata(file_path)
 
         name = cls.get_name(sw, **kwargs)
 
-        sw.alloc(name, n, 1)
+        sw.alloc(name, n, 1, dtype=dtype)
         array = cls(name, sw, **kwargs)
         a = array.to_numpy(include_trailing_free_memory=True)
 
@@ -213,41 +222,10 @@ class SharedArray:
 
         return file_path
 
-    def free(self):
+    def free(self) -> None:
         self.sw.free(self.name)
 
-    def transpose(self, shape: tuple[int, ...] | None = None) -> None:
-        """Transpose the matrix in place
-
-        Parameters
-        ----------
-        self :
-            self
-        shape : tuple[int, ...] | None
-            shape
-
-        Returns
-        -------
-        None
-
-        """
-        dimatcopy(self.to_numpy(shape=shape))
-
-        if shape is not None:
-            # no need to change the array shape, as
-            # we only transposed a submatrix
-            return
-
-        # update array shape
-        # with self.sw.lock:
-        allocations = self.sw.allocations
-        a = allocations[self.name]
-
-        allocations[self.name] = Allocation(a.start, a.size, a.shape[::-1], a.dtype)
-
-        self.sw.allocations = allocations
-
-    def compress(self, indices: npt.NDArray[np.integer]) -> None:
+    def compress(self, indices: npt.NDArray[np.uint32]) -> None:
         """Compress rows
 
         Parameters
@@ -300,6 +278,100 @@ class SharedArray:
         allocations[self.name] = Allocation(a.start, size, shape, a.dtype)
         self.sw.allocations = allocations
 
+    @classmethod
+    def merge(cls, *arrays: Self) -> Self:
+        """Merge multiple allocations into a single contiguous allocation.
+
+        Parameters
+        ----------
+        self : SharedWorkspace
+            The shared workspace instance.
+        *names : str
+            The names of the allocations to merge.
+
+        Returns
+        -------
+        SharedArray
+            A new shared array representing the merged allocation.
+
+        Raises
+        ------
+        ValueError
+            If the allocations are not contiguous or have different dtypes or
+            incompatible shapes.
+        """
+        names = [a.name for a in arrays]
+        sw = arrays[0].sw
+
+        allocations = sw.allocations
+        to_merge = [(name, a) for name, a in allocations.items() if name in names]
+        to_merge.sort(key=lambda t: t[-1].start)
+
+        # Check contiguous
+        for (_, a), (_, b) in pairwise(to_merge):
+            if a.start + a.size != b.start:
+                raise ValueError(f'Allocations "{a}" and "{b}" are not contiguous')
+
+        # Determine dtype
+        dtype_set = set(a.dtype for _, a in to_merge)
+        if len(dtype_set) != 1:
+            raise ValueError("Allocations have different dtypes")
+        (dtype,) = dtype_set
+
+        # determine size
+        start = min(a.start for _, a in to_merge)
+        size = sum(a.size for _, a in to_merge)
+
+        tile_shape_set = set(a.shape[:-1] for _, a in to_merge)
+        if len(tile_shape_set) != 1:
+            raise ValueError("Allocations have incompatible shapes")
+        (tile_shape,) = tile_shape_set
+        shape = tuple([*tile_shape, sum(a.shape[-1] for _, a in to_merge)])
+
+        for name, _ in to_merge:
+            del allocations[name]
+
+        name, _ = to_merge[0]
+        allocations[name] = Allocation(start, size, shape, dtype)
+        logger.debug(f'Created merged allocation "{name}" at {start} with size {size}')
+        sw.allocations = allocations
+
+        return cls(name, sw)
+
+
+class SharedFloat64Array(SharedArray[np.float64]):
+    def transpose(self, shape: tuple[int, ...] | None = None) -> None:
+        """Transpose the matrix in place
+
+        Parameters
+        ----------
+        self :
+            self
+        shape : tuple[int, ...] | None
+            shape
+
+        Returns
+        -------
+        None
+
+        """
+        array = self.to_numpy(shape=shape)
+        dimatcopy(array)
+
+        if shape is not None:
+            # no need to change the array shape, as
+            # we only transposed a submatrix
+            return
+
+        # update array shape
+        # with self.sw.lock:
+        allocations = self.sw.allocations
+        a = allocations[self.name]
+
+        allocations[self.name] = Allocation(a.start, a.size, a.shape[::-1], a.dtype)
+
+        self.sw.allocations = allocations
+
     @overload
     def triangularize(
         self, pivoting: Literal[True] = True
@@ -308,7 +380,7 @@ class SharedArray:
     @overload
     def triangularize(self, pivoting: Literal[False]) -> None: ...
 
-    def triangularize(self, pivoting: bool = True):
+    def triangularize(self, pivoting: bool = True) -> npt.NDArray[np.uint32] | None:
         """Triangularize to upper triangular matrix via the LAPACK routine GEQRF or
         GEQP3, which is what scipy.linalg.qr uses internally.
 
@@ -316,7 +388,6 @@ class SharedArray:
             RuntimeError: If the LAPACK routine fails.
         """
         a = self.to_numpy()
-
         jpvt: npt.NDArray[np.uint32] | None = None
 
         if pivoting:

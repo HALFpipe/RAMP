@@ -36,7 +36,7 @@ def classify_samples_by_mds(
         covariance = np.cov(c.transpose())
         full_multivariate_normal = scipy.stats.multivariate_normal(
             mean=mean,
-            cov=covariance,  # type: ignore
+            cov=covariance,
         )
 
         # Determine which samples are in the populations.

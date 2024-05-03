@@ -11,11 +11,11 @@ from numpy import typing as npt
 from ...log import logger
 from ...utils import to_str
 from ..pipe import CompressedTextWriter
-from .base import FileArray, T, ZstdTextCompressionMethod
+from .base import FileArray, ScalarType, ZstdTextCompressionMethod
 
 
 @dataclass
-class TextFileArray(FileArray[T]):
+class TextFileArray(FileArray[ScalarType]):
     compressed_text_writer: CompressedTextWriter | None = None
     file_handle: IO[str] | None = None
 
@@ -69,10 +69,10 @@ class TextFileArray(FileArray[T]):
 
     def write_values(
         self,
-        value: npt.NDArray[T],
+        value: npt.NDArray[ScalarType],
         row_start: int,
         row_stop: int,
-    ):
+    ) -> None:
         if self.file_handle is None:
             raise RuntimeError("File is not open for writing")
         row_metadata, _ = self.axis_metadata
@@ -147,7 +147,9 @@ class TextFileArray(FileArray[T]):
                     "Cannot change a single part TextFileArray to a multi-part one"
                 )
 
-    def __setitem__(self, key: tuple[slice, ...], value: npt.NDArray[T]) -> None:
+    def __setitem__(
+        self, key: tuple[slice, ...], value: npt.NDArray[ScalarType]
+    ) -> None:
         row_start, row_stop, col_start, col_stop = self.unpack_key(key)
 
         # Validate key

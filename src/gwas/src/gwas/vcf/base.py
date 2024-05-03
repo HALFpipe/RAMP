@@ -15,7 +15,7 @@ from tqdm.auto import tqdm
 
 from ..compression.pipe import CompressedTextReader, load_from_cache, save_to_cache
 from ..log import logger
-from ..utils import IterationOrder, make_pool_or_null_context
+from ..utils import IterationOrder, make_pool_or_null_context, make_variant_mask
 from .variant import Variant
 
 
@@ -149,23 +149,14 @@ class VCFFile(CompressedTextReader):
         self,
         minor_allele_frequency_cutoff: float = -np.inf,
         r_squared_cutoff: float = -np.inf,
-    ):
-        def greater_or_close(series: pd.Series, cutoff: float) -> npt.NDArray[np.bool_]:
-            value = np.asanyarray(series.values)
-            return (value >= cutoff) | np.isclose(value, cutoff) | np.isnan(value)
-
-        allele_frequency_frame = self.vcf_variants[self.allele_frequency_columns].copy()
-        allele_frequencies = allele_frequency_frame
-        is_major = allele_frequencies > 0.5
-        allele_frequencies[is_major] = 1 - allele_frequencies[is_major]
-        max_allele_frequency = allele_frequencies.max(axis="columns")
-        self.variant_indices = np.flatnonzero(
-            greater_or_close(
-                max_allele_frequency,
-                minor_allele_frequency_cutoff,
-            )
-            & greater_or_close(self.vcf_variants.r_squared, r_squared_cutoff)
-        ).astype(np.uint32)
+    ) -> None:
+        variant_mask = make_variant_mask(
+            self.vcf_variants[self.allele_frequency_columns],
+            self.vcf_variants.r_squared,
+            minor_allele_frequency_cutoff,
+            r_squared_cutoff,
+        )
+        self.variant_indices = np.flatnonzero(variant_mask).astype(np.uint32)
 
         logger.debug(
             f"After filtering with "
@@ -189,7 +180,7 @@ class VCFFile(CompressedTextReader):
     @abstractmethod
     def read(
         self,
-        dosages: npt.NDArray,
+        dosages: npt.NDArray[np.float64],
     ) -> None: ...
 
     @staticmethod
@@ -200,7 +191,10 @@ class VCFFile(CompressedTextReader):
 
     @classmethod
     def load_from_cache(cls, cache_path: Path, vcf_path: Path) -> VCFFile:
-        return load_from_cache(cache_path, cls.cache_key(vcf_path))
+        v = load_from_cache(cache_path, cls.cache_key(vcf_path))
+        if not isinstance(v, VCFFile):
+            raise ValueError
+        return v
 
     @staticmethod
     def from_path(
