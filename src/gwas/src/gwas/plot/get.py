@@ -52,7 +52,7 @@ class LoadPValueJob:
 
 def calculate_chi_squared_p_value(
     u_stat: npt.NDArray[np.float64], v_stat: npt.NDArray[np.float64]
-) -> npt.NDArray[np.float64]:
+) -> None:
     from scipy.stats.distributions import chi2
 
     """
@@ -66,9 +66,24 @@ def calculate_chi_squared_p_value(
 
     # Calculate p-value and log-p-value
     u_stat[:] = chi2.sf(v_stat, df=1)
+
+    invalid_indices = np.logical_or(np.isnan(u_stat), np.isinf(u_stat))
+    invalid_indices = np.logical_or(invalid_indices, u_stat < 0)
+    if np.any(invalid_indices):
+        logger.warning(
+            f"Got invalid p-values {u_stat[invalid_indices]} for chi squared "
+            f"values {v_stat[invalid_indices]}"
+        )
+
     np.log10(u_stat, out=v_stat)
 
-    return v_stat
+    invalid_indices = np.logical_or(np.isnan(v_stat), np.isinf(v_stat))
+    invalid_indices = np.logical_or(invalid_indices, v_stat > 1)
+    if np.any(invalid_indices):
+        logger.warning(
+            f"Got invalid log p-values {v_stat[invalid_indices]} for p-values "
+            f"values {u_stat[invalid_indices]}"
+        )
 
 
 def load_score_file(job: LoadPValueJob) -> None:

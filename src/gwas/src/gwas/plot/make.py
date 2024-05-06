@@ -13,6 +13,7 @@ from scipy import stats
 
 from gwas.mem.arr import SharedArray, SharedFloat64Array
 
+from ..log import logger
 from ..utils import chromosomes_list
 from .get import PlotJob
 from .hg19 import (
@@ -80,7 +81,7 @@ def plot_q_q(
     log_p_value: npt.NDArray[np.float64],
     axes: Axes,
 ) -> None:
-    if not np.all(p_value > 0):
+    if not np.all(p_value >= 0):
         raise ValueError("p-values must be positive")
     if not np.all(p_value <= 1):
         raise ValueError("p-values must be less than or equal to 1")
@@ -128,6 +129,13 @@ class PlotGenerator:
 
     output_directory: Path
 
+    def __post_init__(self) -> None:
+        assert self.p_value_array.shape[0] // 2 == self.mask_array.shape[0]
+        (variant_count,) = self.chromosome_array.shape
+        assert self.position_array.shape == (variant_count,)
+        assert self.p_value_array.shape[1] == variant_count
+        assert self.mask_array.shape[1] == variant_count
+
     def plot(self, job: PlotJob) -> None:
         chromosome_int = self.chromosome_array.to_numpy()
         position = self.position_array.to_numpy()
@@ -140,23 +148,31 @@ class PlotGenerator:
         mask = mask[:, job.phenotype_index]
         p_value = p_value[:, job.phenotype_index]
         log_p_value = log_p_value[:, job.phenotype_index]
+
         chromosome_int = chromosome_int[mask]
         position = position[mask]
         p_value = p_value[mask]
         log_p_value = log_p_value[mask]
 
-        plot_path = get_file_path(self.output_directory, job.name)
-        figure, (manhattan_axes, qq_axes) = plt.subplots(
-            nrows=1,
-            ncols=2,
-            width_ratios=(2, 1),
-            figsize=(18, 8),
-            constrained_layout=True,
-        )
-        figure.suptitle(job.name)
+        try:
+            plot_path = get_file_path(self.output_directory, job.name)
+            figure, (manhattan_axes, qq_axes) = plt.subplots(
+                nrows=1,
+                ncols=2,
+                width_ratios=(2, 1),
+                figsize=(18, 8),
+                constrained_layout=True,
+            )
+            figure.suptitle(job.name)
 
-        plot_manhattan(chromosome_int, position, log_p_value, manhattan_axes)
-        plot_q_q(p_value, log_p_value, qq_axes)
+            plot_manhattan(chromosome_int, position, log_p_value, manhattan_axes)
+            plot_q_q(p_value, log_p_value, qq_axes)
 
-        figure.savefig(plot_path)
-        plt.close(figure)
+            figure.savefig(plot_path)
+            plt.close(figure)
+        except ValueError as e:
+            logger.error(
+                f"Error while plotting {job.name} for {position.size} variants with "
+                f"log_p_value of shape {log_p_value.shape}",
+                exc_info=e,
+            )
