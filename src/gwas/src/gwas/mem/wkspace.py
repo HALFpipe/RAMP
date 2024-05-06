@@ -77,14 +77,14 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
 
     @overload
     def alloc(
-        self, name: str, *shape: int, dtype: type[ScalarType] | np.dtype[ScalarType]
+        self, name: str, *shape: int, dtype: "type[ScalarType] | np.dtype[ScalarType]"
     ) -> "SharedArray[ScalarType]": ...
 
     def alloc(
         self,
         name: str,
         *shape: int,
-        dtype: type[ScalarType] | np.dtype[ScalarType] | None = None,
+        dtype: "type[ScalarType] | np.dtype[ScalarType] | None" = None,
     ) -> "SharedArray[ScalarType]":
         """alloc.
 

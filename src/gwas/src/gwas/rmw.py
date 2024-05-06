@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import scipy
 from numpy import typing as npt
-from pandas.core.frame import _PandasNamedTuple
 from tqdm.auto import tqdm
 
 from . import __version__
@@ -415,7 +414,7 @@ class Scorefile:
 
     @staticmethod
     def make_metadata(
-        variant: _PandasNamedTuple,
+        variant: Any,
         **kwargs: int,
     ) -> list[str]:
         # RareMetalWorker only calculates these for genotype data, not dosage data,

@@ -193,7 +193,7 @@ class VCFFile(CompressedTextReader):
     def load_from_cache(cls, cache_path: Path, vcf_path: Path) -> VCFFile:
         v = load_from_cache(cache_path, cls.cache_key(vcf_path))
         if not isinstance(v, VCFFile):
-            raise ValueError
+            raise ValueError(f"Expected VCFFile, got {type(v)}: {v}")
         return v
 
     @staticmethod
@@ -240,7 +240,11 @@ def load_vcf(
     vcf_path: Path,
     engine: Engine = Engine.cpp,
 ) -> VCFFile:
-    vcf_file: VCFFile | None = VCFFile.load_from_cache(cache_path, vcf_path)
+    vcf_file: VCFFile | None = None
+    try:
+        vcf_file = VCFFile.load_from_cache(cache_path, vcf_path)
+    except ValueError:
+        pass
     if vcf_file is None:
         vcf_file = VCFFile.from_path(vcf_path, engine=engine)
         vcf_file.save_to_cache(cache_path)
