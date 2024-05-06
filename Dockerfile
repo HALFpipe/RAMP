@@ -39,16 +39,8 @@ FROM conda as builder
 RUN mamba install --yes "boa" "conda-verify"
 COPY recipes/conda_build_config.yaml /root/conda_build_config.yaml
 
-RUN --mount=source=recipes/bolt-lmm,target=/bolt-lmm \
-    conda mambabuild --no-anaconda-upload "bolt-lmm" && \
-    conda build purge
-
 RUN --mount=source=recipes/dosage-convertor,target=/dosage-convertor \
     conda mambabuild --no-anaconda-upload "dosage-convertor" && \
-    conda build purge
-
-RUN --mount=source=recipes/gcta,target=/gcta \
-    conda mambabuild --no-anaconda-upload "gcta" && \
     conda build purge
 
 RUN --mount=source=recipes/qctool,target=/qctool \
@@ -97,7 +89,6 @@ RUN mamba install --yes --use-local \
     "tabix" \
     "p7zip>=15.09" \
     "parallel" \
-    "bolt-lmm" \
     "dosage-convertor" \
     "gcta" \
     "gwas" \
