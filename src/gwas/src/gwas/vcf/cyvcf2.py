@@ -75,4 +75,6 @@ class CyVCF2VCFFile(VCFFile):
     def read(self, dosages: npt.NDArray) -> None:
         for i, variant_idx in enumerate(self.variant_indices):
             variant = self.all_variants[variant_idx]
-            dosages[i, :] = [variant.format("DS")[idx][0] for idx in self.sample_indices]
+            dosages[i, :] = [
+                variant.format("DS")[idx][0] for idx in self.sample_indices
+            ]  # for loop rausnehmen?

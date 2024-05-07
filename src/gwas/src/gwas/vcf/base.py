@@ -186,6 +186,8 @@ class VCFFile(AbstractContextManager):
             from .cpp import CppVCFFile
 
             vcf_file = CppVCFFile(file_path)
+        elif engine == Engine.cyvcf2:
+            pass
         else:
             raise ValueError
 
