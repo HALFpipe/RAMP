@@ -46,19 +46,20 @@ def plot(arguments: Namespace, output_directory: Path, sw: SharedWorkspace) -> N
         output_directory=output_directory,
     )
 
-    pool, iterator = make_pool_or_null_context(
-        data_loader.run(),
-        plot_generator.plot,
-        num_threads=num_threads,
-        iteration_order=IterationOrder.UNORDERED,
-    )
-    with pool:
-        for _ in tqdm(
-            iterator,
-            total=len(phenotypes),
-            desc="plotting",
-            unit="phenotypes",
-        ):
-            pass
+    with tqdm(
+        total=len(phenotypes),
+        desc="plotting",
+        unit="phenotypes",
+    ) as progress_bar:
+        for chunk in data_loader.run():
+            pool, iterator = make_pool_or_null_context(
+                chunk,
+                plot_generator.plot,
+                num_threads=num_threads,
+                iteration_order=IterationOrder.UNORDERED,
+            )
+            with pool:
+                for _ in iterator:
+                    progress_bar.update(1)
 
     data_loader.free()

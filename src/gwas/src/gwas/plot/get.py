@@ -255,11 +255,11 @@ class DataLoader:
                 phenotype_index=i,
             )
 
-    def run(self) -> Iterator[PlotJob]:
+    def run(self) -> Iterator[Iterator[PlotJob]]:
         phenotypes = self.phenotypes.copy()
 
         while phenotypes:
             chunk = phenotypes[: self.phenotype_count]
             phenotypes = phenotypes[self.phenotype_count :]
 
-            yield from self.generate_chunk(chunk)
+            yield self.generate_chunk(chunk)
