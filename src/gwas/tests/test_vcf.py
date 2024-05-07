@@ -6,7 +6,7 @@ from typing import NamedTuple, Sequence
 import numpy as np
 import pandas as pd
 import pytest
-from gwas.src.gwas.compression.pipe import CompressedTextReader
+from gwas.compression.pipe import CompressedTextReader
 
 # from gwas.compression.pipe import CompressedTextReader
 # from gwas.vcf.base import Engine, Variant, VCFFile, VCFFileReader
