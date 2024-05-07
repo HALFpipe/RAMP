@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+from pathlib import Path
+from types import TracebackType
+
 import numpy as np
 import pandas as pd
 from cyvcf2 import VCF
@@ -20,7 +23,7 @@ variant_columns = [
 
 
 class CyVCF2VCFFile(VCFFile):
-    def __init__(self, file_path: str) -> None:
+    def __init__(self, file_path: str | Path) -> None:
         super().__init__()
         self.vcf = VCF(file_path)
         self.vcf_samples = list(self.vcf.samples)
@@ -78,3 +81,11 @@ class CyVCF2VCFFile(VCFFile):
             dosages[i, :] = [
                 variant.format("DS")[idx][0] for idx in self.sample_indices
             ]  # for loop rausnehmen?
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
+        return super().__exit__(exc_type, exc_value, traceback)
