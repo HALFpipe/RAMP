@@ -1,23 +1,16 @@
 # -*- coding: utf-8 -*-
-import pickle
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
-from typing import Sequence
 
 import pandas as pd
 import yaml
 from tqdm.auto import tqdm
 
-from ..compression.pipe import CompressedBytesReader, CompressedTextReader
+from ..compression.arr.bin import Blosc2FileArray
+from ..compression.pipe import CompressedTextReader
 from ..log import logger
-from ..utils import chromosomes_list
-
-
-def load_axis_metadata(metadata_path: Path) -> Sequence[pd.DataFrame | pd.Series]:
-    with CompressedBytesReader(metadata_path) as file_handle:
-        metadata = pickle.load(file_handle)
-    assert isinstance(metadata, list)
-    return metadata
+from ..utils import IterationOrder, chromosomes_list, make_pool_or_null_context
 
 
 @dataclass(frozen=True)
@@ -35,52 +28,70 @@ class Phenotype:
     v_stat_index: int
 
 
+def get_chromosome_metadata(
+    input_directory: Path, chromosome: int | str
+) -> tuple[ScoreFile, pd.DataFrame, list[str]] | None:
+    score_path = input_directory / f"chr{chromosome}.score.b2array"
+    if not score_path.exists():
+        message = f"Missing score file for chromosome {chromosome} at {score_path}"
+        if chromosome == "X":
+            logger.warning(message)
+        else:
+            raise ValueError(message)
+
+    array_proxy: Blosc2FileArray = Blosc2FileArray.from_file(score_path)
+    row_metadata, column_metadata = array_proxy.axis_metadata
+
+    if row_metadata is None or column_metadata is None:
+        message = f"Missing axis metadata for chromosome {chromosome}"
+        if chromosome == "X":
+            logger.warning(message)
+            return None
+        else:
+            raise ValueError(message)
+
+    chromosome_variant_metadata = pd.DataFrame(row_metadata)
+    chromosome_column_names: list[str] = [str(p) for p in column_metadata]
+    score_file = ScoreFile(
+        chromosome=chromosome,
+        path=score_path,
+        variant_count=len(chromosome_variant_metadata.index),
+    )
+
+    return score_file, chromosome_variant_metadata, chromosome_column_names
+
+
 def get_metadata(
-    input_directory: Path,
+    input_directory: Path, num_threads: int = 1
 ) -> tuple[list[str], list[ScoreFile], pd.DataFrame]:
     score_files: list[ScoreFile] = []
     column_names: list[str] | None = None
     variant_metadata: list[pd.DataFrame] = list()
 
+    get = partial(get_chromosome_metadata, input_directory)
+
     chromosomes = chromosomes_list()
-    for chromosome in tqdm(chromosomes, desc="loading metadata", unit="chromosomes"):
-        score_path = input_directory / f"chr{chromosome}.score.b2array"
-        if not score_path.exists():
-            message = f"Missing chromosome {chromosome} score file: {score_path}"
-            if chromosome == "X":
-                logger.warning(message)
-            else:
-                raise ValueError(message)
+    pool, iterator = make_pool_or_null_context(
+        chromosomes,
+        get,
+        num_threads=num_threads,
+        chunksize=None,
+        iteration_order=IterationOrder.ORDERED,
+    )
 
-        axis_metadata_path = (
-            input_directory / f"chr{chromosome}.score.axis-metadata.pkl.zst"
-        )
-        if not axis_metadata_path.exists():
-            message = (
-                f"Missing chromosome {chromosome} axis metadata file:"
-                f" {axis_metadata_path}"
-            )
-            if chromosome == "X":
-                logger.warning(message)
-            else:
-                raise ValueError(message)
+    with pool:
+        for result in tqdm(iterator, desc="loading metadata", unit="chromosomes"):
+            if result is None:
+                continue
+            score_file, chromosome_variant_metadata, chromosome_column_names = result
 
-        axis_metadata = load_axis_metadata(axis_metadata_path)
-        chromosome_variant_metadata = pd.DataFrame(axis_metadata[0])
+            if column_names is None:
+                column_names = chromosome_column_names
+            elif column_names != chromosome_column_names:
+                raise ValueError("Column names do not match between chromosomes")
 
-        chromosome_column_names: list[str] = [str(p) for p in axis_metadata[1]]
-        score_file = ScoreFile(
-            chromosome=chromosome,
-            path=score_path,
-            variant_count=len(chromosome_variant_metadata.index),
-        )
-
-        if column_names is None:
-            column_names = chromosome_column_names
-        elif column_names != chromosome_column_names:
-            raise ValueError("Column names do not match between chromosomes")
-        score_files.append(score_file)
-        variant_metadata.append(chromosome_variant_metadata)
+            score_files.append(score_file)
+            variant_metadata.append(chromosome_variant_metadata)
 
     if column_names is None:
         raise ValueError("No column names were found for the score files")
@@ -104,8 +115,7 @@ def get_variable_collection_names(
 
 
 def resolve_score_files(
-    input_directory: Path,
-    phenotype_names: list[str],
+    input_directory: Path, phenotype_names: list[str], num_threads: int = 1
 ) -> tuple[list[Phenotype], list[ScoreFile], pd.DataFrame]:
     """
     Verifies that each directory contains either all required .b2array score files
@@ -128,7 +138,9 @@ def resolve_score_files(
     if not input_directory.is_dir():
         raise NotADirectoryError(f"Could not find input directory: {input_directory}")
 
-    column_names, score_files, variant_metadata = get_metadata(input_directory)
+    column_names, score_files, variant_metadata = get_metadata(
+        input_directory, num_threads=num_threads
+    )
 
     for column in [
         "chromosome_int",

@@ -1,14 +1,23 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
-
+from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from queue import Empty
-from typing import Mapping, MutableMapping, NamedTuple, Sequence
+from typing import (
+    Collection,
+    Iterable,
+    Mapping,
+    MutableMapping,
+    NamedTuple,
+    Sequence,
+)
 
 import numpy as np
+from tqdm.auto import tqdm
 
 from ..log import logger
 from ..mem.wkspace import SharedWorkspace
+from ..utils import IterationOrder, make_pool_or_null_context
 from ..vcf.base import VCFFile
 from .base import TaskSyncCollection, Triangular
 from .tsqr import TallSkinnyQR
@@ -21,15 +30,17 @@ class Task(NamedTuple):
 
 
 def check_tri_path(
-    tri_path: Path, vcf_by_chromosome: Mapping[int | str, VCFFile], sw: SharedWorkspace
+    tri_path: Path,
+    samples_by_chromosome: Mapping[int | str, list[str]],
+    sw: SharedWorkspace,
 ) -> tuple[int | str, Path] | None:
-    if not tri_path.is_file():
-        return None
     try:
         tri = Triangular.from_file(tri_path, sw, np.float64)
         chromosome = tri.chromosome
-        samples = vcf_by_chromosome[chromosome].samples
+        samples = samples_by_chromosome[chromosome]
         tri.free()
+    except FileNotFoundError:
+        return None
     except (ValueError, TypeError) as error:
         logger.warning(
             f"Will re-calculate tri file {tri_path} because of an error reading the "
@@ -50,78 +61,137 @@ def check_tri_path(
         return None
 
 
-def check_tri_paths(
-    tri_paths: list[Path] | None,
-    vcf_by_chromosome: Mapping[int | str, VCFFile],
-    sw: SharedWorkspace,
-) -> MutableMapping[int | str, Path]:
-    tri_paths_by_chromosome: MutableMapping[int | str, Path] = dict()
+@dataclass
+class TriCalc:
+    chromosomes: Collection[str | int]
+    vcf_by_chromosome: Mapping[int | str, VCFFile]
+    output_directory: Path
+    sw: SharedWorkspace
 
-    if tri_paths is None:
-        return dict()
+    minor_allele_frequency_cutoff: float
+    r_squared_cutoff: float
 
-    # Load from `--tri` flag.
-    for tri_path in tri_paths:
-        result = check_tri_path(tri_path, vcf_by_chromosome, sw)
-        if result is None:
-            continue
-        chromosome, tri_path = result
-        tri_paths_by_chromosome[chromosome] = tri_path
+    num_threads: int = 1
 
-    return tri_paths_by_chromosome
+    @property
+    def samples_by_chromosome(self) -> Mapping[int | str, list[str]]:
+        return {
+            chromosome: vcf_file.samples
+            for chromosome, vcf_file in self.vcf_by_chromosome.items()
+        }
 
+    def make_tri_paths_by_chromosome(
+        self, tri_paths: Iterable[Path]
+    ) -> MutableMapping[int | str, Path]:
+        check = partial(
+            check_tri_path, samples_by_chromosome=self.samples_by_chromosome, sw=self.sw
+        )
+        pool, iterator = make_pool_or_null_context(
+            tri_paths,
+            check,
+            num_threads=self.num_threads,
+            iteration_order=IterationOrder.UNORDERED,
+        )
+        tri_paths_by_chromosome: MutableMapping[int | str, Path] = dict()
+        with pool:
+            for result in iterator:
+                if result is None:
+                    continue
+                chromosome, tri_path = result
+                tri_paths_by_chromosome[chromosome] = tri_path
+        return tri_paths_by_chromosome
 
-def get_tri_tasks(
-    chromosomes: Sequence[str | int],
-    vcf_by_chromosome: Mapping[int | str, VCFFile],
-    tri_paths_by_chromosome: MutableMapping[int | str, Path],
-    output_directory: Path,
-    sw: SharedWorkspace,
-    minor_allele_frequency_cutoff: float,
-    r_squared_cutoff: float,
-) -> tuple[TaskSyncCollection, list[Task]]:
-    # Ensure the output directory exists
-    output_directory.mkdir(parents=True, exist_ok=True)
-    t = TaskSyncCollection()
-    t.can_run.set()  # We can run the first task immediately.
-    # Prepare the list of tasks to run.
-    tasks: list[Task] = list()
-    for chromosome in chromosomes:
-        if chromosome == "X":
-            # We only use autosomes for null model estimation, so we only
-            # need to triangularize the autosomes.
-            continue
-        if chromosome in tri_paths_by_chromosome:
-            # Already loaded from `--tri` flag.
-            continue
-        # Generate default path.
-        tri_path = output_directory / Triangular.get_file_name(chromosome)
-        result = check_tri_path(tri_path, vcf_by_chromosome, sw)
-        if result is not None:
-            chromosome, tri_path = result
+    def check_tri_paths(
+        self, tri_paths: Collection[Path]
+    ) -> tuple[Collection[str | int], MutableMapping[int | str, Path]]:
+        # Ensure the output directory exists
+        self.output_directory.mkdir(parents=True, exist_ok=True)
+
+        chromosomes_to_check = set(self.chromosomes)
+        chromosomes_to_check.discard("X")
+
+        tri_paths_by_chromosome: dict[int | str, Path] = dict()
+
+        # Load from `--tri` flag
+        if len(tri_paths) > 0:
+            for chromosome, tri_path in self.make_tri_paths_by_chromosome(
+                tri_paths
+            ).items():
+                tri_paths_by_chromosome[chromosome] = tri_path
+                chromosomes_to_check.remove(chromosome)
+
+        # Load from output directory
+        tri_paths = list()
+        for chromosome in chromosomes_to_check:
+            tri_path = self.output_directory / Triangular.get_file_name(chromosome)
             tri_paths_by_chromosome[chromosome] = tri_path
-            continue
+            tri_paths.append(tri_path)
+        if len(tri_paths) > 0:
+            for chromosome, tri_path in self.make_tri_paths_by_chromosome(
+                tri_paths
+            ).items():
+                tri_paths_by_chromosome[chromosome] = tri_path
+                chromosomes_to_check.remove(chromosome)
 
-        vcf_file = vcf_by_chromosome[chromosome]
-        vcf_file.set_variants_from_cutoffs(
-            minor_allele_frequency_cutoff,
-            r_squared_cutoff,
-        )
+        return chromosomes_to_check, tri_paths_by_chromosome
 
-        tsqr = TallSkinnyQR(
-            vcf_file=vcf_file,
-            sw=sw,
-            t=t,
-        )
-        tri_paths_by_chromosome[chromosome] = tri_path
+    def get_tri_tasks(
+        self,
+        chromosomes: Collection[str | int],
+        tri_paths_by_chromosome: MutableMapping[int | str, Path],
+    ) -> tuple[TaskSyncCollection, list[Task]]:
+        t = TaskSyncCollection()
+        t.can_run.set()  # We can run the first task immediately.
+        # Prepare the list of tasks to run.
+        tasks: list[Task] = list()
 
-        proc: TriWorker = TriWorker(tsqr, tri_path, t)
-        required_size = (
-            np.float64().itemsize * vcf_file.sample_count * vcf_file.variant_count
-        )
-        tasks.append(Task(required_size, proc))
+        for chromosome in chromosomes:
+            tri_path = tri_paths_by_chromosome[chromosome]
+            vcf_file = self.vcf_by_chromosome[chromosome]
+            vcf_file.set_variants_from_cutoffs(
+                self.minor_allele_frequency_cutoff,
+                self.r_squared_cutoff,
+            )
 
-    return t, tasks
+            tsqr = TallSkinnyQR(
+                vcf_file=vcf_file,
+                sw=self.sw,
+                t=t,
+                num_threads=self.num_threads,
+            )
+
+            proc: TriWorker = TriWorker(tsqr, tri_path, t)
+            required_size = (
+                np.float64().itemsize * vcf_file.sample_count * vcf_file.variant_count
+            )
+            tasks.append(Task(required_size, proc))
+
+        return t, tasks
+
+    def run(self, tri_paths: Collection[Path]) -> Mapping[int | str, Path]:
+        chromosomes_to_run, tri_paths_by_chromosome = self.check_tri_paths(tri_paths)
+        t, tasks = self.get_tri_tasks(chromosomes_to_run, tri_paths_by_chromosome)
+
+        # Sort tasks by size so that we can run the largest tasks first. This means that
+        # we are less likely to run into a situation where we only run one task at a time
+        tasks.sort(key=lambda task: task.required_size)
+        logger.debug(f"Will run {len(tasks)} triangularize tasks")
+
+        running: list[TriWorker] = list()
+        try:
+            check_running(self.sw, t, tasks, running)
+        finally:
+            t.should_exit.set()
+
+            for _, proc in tasks:
+                proc.terminate()
+                proc.join(timeout=1)
+                if proc.is_alive():
+                    proc.kill()
+                proc.join()
+                proc.close()
+
+        return tri_paths_by_chromosome
 
 
 def calc_tri(
@@ -132,6 +202,7 @@ def calc_tri(
     tri_paths: list[Path] | None = None,
     minor_allele_frequency_cutoff: float = 0.05,
     r_squared_cutoff: float = -np.inf,
+    num_threads: int = 1,
 ) -> Mapping[int | str, Path]:
     """Generate triangular matrices for each chromosome.
 
@@ -153,42 +224,17 @@ def calc_tri(
     Returns:
         Mapping[int | str, Path]: The paths to the triangular matrix files.
     """
-    tri_paths_by_chromosome = check_tri_paths(tri_paths, vcf_by_chromosome, sw)
-
-    t, tasks = get_tri_tasks(
+    if tri_paths is None:
+        tri_paths = list()
+    return TriCalc(
         chromosomes,
         vcf_by_chromosome,
-        tri_paths_by_chromosome,
         output_directory,
         sw,
         minor_allele_frequency_cutoff,
         r_squared_cutoff,
-    )
-
-    # Sort tasks by size so that we can run the largest tasks first. This means that we
-    # are less likely to run into a situation where we only run one task at a time.
-    tasks.sort(key=lambda task: task.required_size)
-    logger.debug(f"Will run {len(tasks)} triangularize tasks")
-
-    running: list[TriWorker] = list()
-    try:
-        check_running(sw, t, tasks, running)
-    finally:
-        t.should_exit.set()
-
-        for _, proc in tasks:
-            proc.terminate()
-            proc.join(timeout=1)
-            if proc.is_alive():
-                proc.kill()
-            proc.join()
-            proc.close()
-
-    for tri_path in tri_paths_by_chromosome.values():
-        if not tri_path.is_file():
-            raise ValueError(f'Could not find output file "{tri_path}"')
-
-    return tri_paths_by_chromosome
+        num_threads,
+    ).run(tri_paths)
 
 
 def check_running(
@@ -199,71 +245,79 @@ def check_running(
 ) -> None:
     barrier: bool = True
 
-    while True:
-        # Check if an error has occurred.
-        try:
-            raise t.exception_queue.get_nowait()
-        except Empty:
-            pass
+    with tqdm(
+        total=len(tasks),
+        unit="chromosomes",
+        desc="triangularizing genotypes",
+    ) as progress_bar:
+        while True:
+            # Check if an error has occurred.
+            try:
+                raise t.exception_queue.get_nowait()
+            except Empty:
+                pass
 
-        # Sleep for one second if a process is running
-        wait(running)
+            # Sleep for one second if a process is running
+            wait(running)
 
-        # Update list of running processes
-        running = [proc for proc in running if proc.is_alive()]
+            # Update progress bar with the number of processes that have finished
+            progress_bar.update(sum(1 for proc in running if not proc.is_alive()))
 
-        # Check if we can exit
-        if len(running) == 0 and len(tasks) == 0:
-            # All tasks have been completed
-            break
+            # Update list of running processes
+            running = [proc for proc in running if proc.is_alive()]
 
-        # Update the barrier
-        if len(running) == 0:
-            # All processes have exited so we can start more
-            barrier = True
+            # Check if we can exit
+            if len(running) == 0 and len(tasks) == 0:
+                # All tasks have been completed
+                break
 
-        # Check if we can start another task
-        if not t.can_run.is_set():
-            # The most recently started task has not yet initialized.
-            continue
-        if len(tasks) == 0:
-            # No more tasks to run.
-            continue
-        if not barrier:
-            # We are still waiting for processes to finish.
-            continue
+            # Update the barrier
+            if len(running) == 0:
+                # All processes have exited so we can start more
+                barrier = True
 
-        # Calculate the amount of memory required to run the next task in parallel.
-        unallocated_size = sw.unallocated_size
-        sample_count = tasks[-1].proc.tsqr.vcf_file.sample_count
-        extra_required_size = (
-            (len(running) + 1) * np.float64().itemsize * sample_count**2
-        )
-        required_size = tasks[-1].required_size + extra_required_size
-        logger.debug(
-            f"We have {unallocated_size} bytes left in the shared "
-            f"workspace. The next task requires {required_size} bytes to "
-            "run in parallel."
-        )
+            # Check if we can start another task
+            if not t.can_run.is_set():
+                # The most recently started task has not yet initialized.
+                continue
+            if len(tasks) == 0:
+                # No more tasks to run.
+                continue
+            if not barrier:
+                # We are still waiting for processes to finish.
+                continue
 
-        if unallocated_size < required_size and len(running) > 0:
-            # We have already started a task, but we don't have enough memory
-            # to run the next task in parallel.
-            # Set the barrier to wait for the all running tasks to complete before
-            # starting next batch.
-            logger.debug(
-                "Waiting for running tasks to complete before starting next batch."
+            # Calculate the amount of memory required to run the next task in parallel.
+            unallocated_size = sw.unallocated_size
+            sample_count = tasks[-1].proc.tsqr.vcf_file.sample_count
+            extra_required_size = (
+                (len(running) + 1) * np.float64().itemsize * sample_count**2
             )
-            barrier = False
-            continue
+            required_size = tasks[-1].required_size + extra_required_size
+            logger.debug(
+                f"We have {unallocated_size} bytes left in the shared "
+                f"workspace. The next task requires {required_size} bytes to "
+                "run in parallel."
+            )
 
-        proc = tasks.pop().proc
-        proc.start()
-        running.append(proc)
+            if unallocated_size < required_size and len(running) > 0:
+                # We have already started a task, but we don't have enough memory
+                # to run the next task in parallel.
+                # Set the barrier to wait for the all running tasks to complete before
+                # starting next batch.
+                logger.debug(
+                    "Waiting for running tasks to complete before starting next batch."
+                )
+                barrier = False
+                continue
 
-        # Reset the event so that we don't start another task before
-        # this one has initialized.
-        t.can_run.clear()
+            proc = tasks.pop().proc
+            proc.start()
+            running.append(proc)
+
+            # Reset the event so that we don't start another task before
+            # this one has initialized.
+            t.can_run.clear()
 
 
 def wait(running: list[TriWorker]) -> None:

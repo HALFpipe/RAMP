@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Literal, Mapping
 
@@ -147,6 +148,7 @@ def tri_paths_by_size_and_chromosome(
             v,
             base_path / dataset / "tri" / f"{sample_sizes[sample_size_label]}",
             sw,
+            num_threads=cpu_count(),
         )
         for sample_size_label, v in vcf_files_by_size_and_chromosome.items()
     }

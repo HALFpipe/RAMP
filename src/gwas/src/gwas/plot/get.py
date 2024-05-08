@@ -8,6 +8,7 @@ import pandas as pd
 from numpy import typing as npt
 from tqdm.auto import tqdm
 
+from ..compression.arr._get import get_orthogonal_selection
 from ..log import logger
 from ..mem.arr import ScalarType, SharedArray, SharedFloat64Array
 from ..mem.wkspace import SharedWorkspace
@@ -16,12 +17,11 @@ from ..utils import (
     make_pool_or_null_context,
     make_variant_mask,
 )
-from ._get import get_orthogonal_selection
 from .hg19 import offset
 from .resolve import Phenotype, ScoreFile
 
 
-@dataclass
+@dataclass(frozen=True)
 class LoadPValueJob:
     row_offset: int
     row_count: int
@@ -29,6 +29,7 @@ class LoadPValueJob:
     urlpath: bytes
     data_array: SharedFloat64Array
     mask_array: SharedArray[np.bool_]
+    num_threads: int = 1
 
     def subset_array(
         self, shared_array: SharedArray[ScalarType]
@@ -60,29 +61,48 @@ def calculate_chi_squared_p_value(
     """
     logger.debug(f"Calculating chi-squared p-value for {u_stat.size} tests")
 
+    # Find which inputs are invalid
+    invalid_u_stat = np.logical_or(np.isnan(u_stat), np.isinf(u_stat))
+    invalid_v_stat = np.logical_or(np.isnan(v_stat), np.isinf(v_stat))
+    invalid_v_stat = np.logical_or(invalid_v_stat, np.isclose(v_stat, 0))
+    invalid_stat = np.logical_or(invalid_u_stat, invalid_v_stat)
+    if np.any(invalid_stat):
+        logger.warning(
+            f"Got invalid stats for u {u_stat[invalid_stat]} and v "
+            f"values {v_stat[invalid_stat]}"
+        )
+
     # Calculate chi-squared statistic in place
-    np.square(u_stat, out=u_stat)
-    np.true_divide(u_stat, v_stat, out=v_stat)
+    np.square(u_stat, out=u_stat, where=np.logical_not(invalid_stat))
+    np.true_divide(u_stat, v_stat, out=v_stat, where=np.logical_not(invalid_stat))
+    v_stat[invalid_stat] = 0
 
     # Calculate p-value and log-p-value
     u_stat[:] = chi2.sf(v_stat, df=1)
+    u_stat[invalid_stat] = np.nan
 
-    invalid_indices = np.logical_or(np.isnan(u_stat), np.isinf(u_stat))
-    invalid_indices = np.logical_or(invalid_indices, u_stat < 0)
-    if np.any(invalid_indices):
+    invalid_p_value = np.logical_or(np.isnan(u_stat), np.isinf(u_stat))
+    invalid_p_value = np.logical_or(invalid_p_value, u_stat < 0)
+    invalid_p_value = np.logical_and(np.logical_not(invalid_stat), invalid_p_value)
+    if np.any(invalid_p_value):
         logger.warning(
-            f"Got invalid p-values {u_stat[invalid_indices]} for chi squared "
-            f"values {v_stat[invalid_indices]}"
+            f"Got invalid p-values {u_stat[invalid_p_value]} for chi squared "
+            f"values {v_stat[invalid_p_value]}"
         )
 
-    np.log10(u_stat, out=v_stat)
+    invalid_mask = np.logical_or(invalid_stat, invalid_p_value)
+    np.log10(u_stat, out=v_stat, where=np.logical_not(invalid_mask))
+    v_stat[invalid_mask] = np.nan
 
-    invalid_indices = np.logical_or(np.isnan(v_stat), np.isinf(v_stat))
-    invalid_indices = np.logical_or(invalid_indices, v_stat > 1)
-    if np.any(invalid_indices):
+    invalid_log_p_value = np.logical_or(np.isnan(v_stat), np.isinf(v_stat))
+    invalid_log_p_value = np.logical_or(invalid_log_p_value, v_stat > 1)
+    invalid_log_p_value = np.logical_and(
+        np.logical_not(invalid_mask), invalid_log_p_value
+    )
+    if np.any(invalid_log_p_value):
         logger.warning(
-            f"Got invalid log p-values {v_stat[invalid_indices]} for p-values "
-            f"values {u_stat[invalid_indices]}"
+            f"Got invalid log p-values {v_stat[invalid_mask]} for p-values "
+            f"values {u_stat[invalid_mask]}"
         )
 
 
@@ -99,6 +119,7 @@ def load_score_file(job: LoadPValueJob) -> None:
         row_indices=row_indices,
         column_indices=job.column_indices,
         array=data,
+        num_threads=job.num_threads,
     )
 
     u_stat = data[:, ::2]
@@ -228,6 +249,7 @@ class DataLoader:
                 urlpath=str(score_file.path).encode(),
                 data_array=self.data_array,
                 mask_array=self.mask_array,
+                num_threads=self.num_threads,
             )
             for row_offset, score_file in zip(
                 self.row_offsets, self.score_files, strict=True

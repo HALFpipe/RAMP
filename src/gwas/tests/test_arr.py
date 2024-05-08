@@ -11,6 +11,7 @@ def test_sa(tmp_path: Path) -> None:
 
     shape = (5, 7)
     array = sw.alloc("a", *shape)
+    assert isinstance(array, SharedFloat64Array)
 
     # include trailing
     a = array.to_numpy(include_trailing_free_memory=True)
@@ -23,7 +24,7 @@ def test_sa(tmp_path: Path) -> None:
     b = a.copy()
 
     # io
-    path = tmp_path / "a.txt"
+    path = tmp_path / "a"
     array.to_file(path)
     array = SharedFloat64Array.from_file(path, sw, np.float64)
     c = array.to_numpy()

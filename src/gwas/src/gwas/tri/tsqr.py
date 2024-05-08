@@ -7,6 +7,7 @@ from typing import Any, ContextManager
 
 import numpy as np
 from numpy import typing as npt
+from threadpoolctl import threadpool_limits
 
 from ..log import logger
 from ..mem.arr import SharedFloat64Array
@@ -40,6 +41,8 @@ class TallSkinnyQR:
 
     t: TaskSyncCollection | None = None
     variant_indices: npt.NDArray[np.uint32] | None = None
+
+    num_threads: int = 1
 
     @staticmethod
     def triangularize(shared_array: SharedFloat64Array, pivoting: bool = True) -> None:
@@ -113,7 +116,7 @@ class TallSkinnyQR:
             multithreading_lock = self.t.multithreading_lock
 
         # Triangularize to lower triangle
-        with multithreading_lock:
+        with multithreading_lock, threadpool_limits(limits=self.num_threads):
             self.triangularize(shared_array)
 
         if not np.isfinite(array).all():

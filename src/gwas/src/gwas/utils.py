@@ -11,7 +11,7 @@ from enum import Enum, auto
 from logging import LogRecord
 from multiprocessing import pool as mp_pool
 from multiprocessing.queues import Queue
-from multiprocessing.synchronize import Event
+from multiprocessing.synchronize import Event, RLock
 from queue import Empty
 from shutil import which
 from typing import (
@@ -40,6 +40,8 @@ except ImportError:
     pass
 else:
     cleanup_on_sigterm()
+
+global_lock = multiprocessing_context.RLock()
 
 
 def parse_chromosome(chromosome: str) -> int | str:
@@ -101,7 +103,7 @@ def underscore(x: str) -> str:
     return re.sub(r"([a-z\d])([A-Z])", r"\1_\2", x).lower()
 
 
-def get_initargs() -> tuple[set[int] | None, Queue[LogRecord] | None, int | str]:
+def get_initargs() -> tuple[set[int] | None, Queue[LogRecord] | None, int | str, RLock]:
     from .log import logging_thread
 
     logging_queue: Queue[LogRecord] | None = None
@@ -112,17 +114,14 @@ def get_initargs() -> tuple[set[int] | None, Queue[LogRecord] | None, int | str]
     if hasattr(os, "sched_getaffinity"):
         sched_affinity = os.sched_getaffinity(0)
 
-    return (
-        sched_affinity,
-        logging_queue,
-        logger.getEffectiveLevel(),
-    )
+    return (sched_affinity, logging_queue, logger.getEffectiveLevel(), global_lock)
 
 
 def initializer(
     sched_affinity: set[int] | None,
     logging_queue: Queue[LogRecord] | None,
     log_level: int | str,
+    lock: RLock,
 ) -> None:
     if sched_affinity is not None:
         if hasattr(os, "sched_setaffinity"):
@@ -131,6 +130,9 @@ def initializer(
     if logging_queue is not None:
         worker_configurer(logging_queue, log_level)
     logger.debug(f'Configured process "{mp.current_process().name}"')
+
+    global global_lock
+    global_lock = lock
 
 
 class Pool(mp_pool.Pool):
@@ -156,9 +158,11 @@ V = TypeVar("V")
 @dataclass
 class SharedState:
     # Indicates that we should exit.
-    should_exit: Event = field(default_factory=mp.Event)
+    should_exit: Event = field(default_factory=multiprocessing_context.Event)
     # Passes exceptions.
-    exception_queue: Queue[Exception] = field(default_factory=mp.Queue)
+    exception_queue: Queue[Exception] = field(
+        default_factory=multiprocessing_context.Queue
+    )
 
     def get_name(self, value: Any) -> str:
         for dataclass_field in fields(self):

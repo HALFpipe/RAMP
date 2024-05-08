@@ -6,4 +6,5 @@ def get_orthogonal_selection(
     row_indices: npt.NDArray[np.int64],
     column_indices: npt.NDArray[np.int64],
     array: npt.NDArray[np.float64],
+    num_threads: int = 1,
 ) -> None: ...

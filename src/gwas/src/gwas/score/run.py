@@ -86,7 +86,9 @@ def calc_score(
     # Start the loop.
     procs = [reader_proc, calc_proc, writer_proc]
     with tqdm(
-        total=variant_count, unit="variants", desc="calculating score statistics"
+        total=variant_count,
+        unit="variants",
+        leave=False,
     ) as progress_bar:
 
         def update_progress_bar() -> None:

@@ -9,7 +9,10 @@ import numpy as np
 import pandas as pd
 from numpy import typing as npt
 
-from .compression.arr.base import CompressionMethod, FileArray
+from .compression.arr.base import (
+    CompressionMethod,
+    FileArray,
+)
 from .log import logger
 from .mem.arr import SharedFloat64Array
 from .mem.wkspace import SharedWorkspace

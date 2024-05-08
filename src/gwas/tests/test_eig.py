@@ -17,6 +17,7 @@ from gwas.tri.base import Triangular
 from gwas.tri.tsqr import scale
 from gwas.vcf.base import VCFFile
 
+from .conftest import chromosomes
 from .utils import bcftools, rmw, tabix, to_bgzip
 
 minor_allele_frequency_cutoff: float = 0.05
@@ -148,7 +149,7 @@ def test_eig(
 
     # Check that eigenvectors are just permuted
     permutation = np.rint(scipy_eigenvectors @ eig_array.eigenvectors).astype(int)
-    assert ((permutation == 0) | (np.abs(permutation) == 1)).all()
+    assert np.logical_or(permutation == 0, np.abs(permutation) == 1).all()
     assert (1 == np.count_nonzero(permutation, axis=0)).all()
     assert (1 == np.count_nonzero(permutation, axis=1)).all()
 
@@ -278,10 +279,29 @@ def test_eig_rmw(
     permutation = np.rint(
         numpy_eigenvectors.transpose() @ eig_array.eigenvectors
     ).astype(int)
-    assert ((permutation == 0) | (np.abs(permutation) == 1)).all()
+    assert np.logical_or(permutation == 0, np.abs(permutation) == 1).all()
     assert (1 == np.count_nonzero(permutation, axis=0)).all()
     assert (1 == np.count_nonzero(permutation, axis=1)).all()
     assert np.allclose(numpy_eigenvalues[::-1], eig_array.eigenvalues, atol=1e-6)
+
+    eig_array.free()
+    assert len(sw.allocations) == allocation_count
+
+
+def test_eig_mp(
+    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
+    sw: SharedWorkspace,
+) -> None:
+    allocation_count = len(sw.allocations)
+
+    sampe_size_label = "small"
+
+    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sampe_size_label]
+    tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes if c != "X"]
+
+    eig_array = Eigendecomposition.from_files(*tri_paths, sw=sw, num_threads=2)
+    assert np.isfinite(eig_array.eigenvalues).all()
+    assert np.isfinite(eig_array.eigenvectors).all()
 
     eig_array.free()
     assert len(sw.allocations) == allocation_count

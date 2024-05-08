@@ -7,7 +7,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Any, Generic, Mapping, Type, TypeVar
+from typing import Any, ClassVar, Generic, Mapping, Type, TypeVar
 
 import blosc2
 import numpy as np
@@ -16,22 +16,26 @@ from numpy import typing as npt
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompressionMethod:
-    suffix: str = ""
-
-
-@dataclass(frozen=True, kw_only=True)
-class Blosc2CompressionMethod(CompressionMethod):
+class Blosc2CompressionMethod:
     codec: blosc2.Codec
     clevel: int
     filters: tuple[blosc2.Filter, ...] = field(default_factory=tuple)
     use_dict: bool = False
 
-    suffix: str = ".b2array"
+    suffix: ClassVar[str] = ".b2array"
+
+    @property
+    def cparams(self) -> dict[str, Any]:
+        return dict(
+            codec=self.codec,
+            clevel=self.clevel,
+            filters=list(self.filters),
+            use_dict=self.use_dict,
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
-class TextCompressionMethod(CompressionMethod):
+class TextCompressionMethod:
     suffix: str
 
 
@@ -40,6 +44,14 @@ class ZstdTextCompressionMethod(TextCompressionMethod):
     level: int
 
 
+CompressionMethod = Blosc2CompressionMethod | TextCompressionMethod
+
+blosc2_zstd_bitshuffle = Blosc2CompressionMethod(
+    codec=blosc2.Codec.ZSTD,
+    clevel=9,
+    filters=(blosc2.Filter.BITSHUFFLE,),
+)
+default_compression_method = blosc2_zstd_bitshuffle
 compression_methods: Mapping[str, CompressionMethod] = dict(
     zstd_text=ZstdTextCompressionMethod(suffix=".txt.zst", level=11),
     zstd_ultra_text=ZstdTextCompressionMethod(suffix=".txt.zst", level=22),
@@ -56,11 +68,7 @@ compression_methods: Mapping[str, CompressionMethod] = dict(
         clevel=9,
         filters=(blosc2.Filter.SHUFFLE,),
     ),
-    blosc2_zstd_bitshuffle=Blosc2CompressionMethod(
-        codec=blosc2.Codec.ZSTD,
-        clevel=9,
-        filters=(blosc2.Filter.BITSHUFFLE,),
-    ),
+    blosc2_zstd_bitshuffle=blosc2_zstd_bitshuffle,
     blosc2_zstd_bitshuffle_use_dict=Blosc2CompressionMethod(
         codec=blosc2.Codec.ZSTD,
         clevel=9,

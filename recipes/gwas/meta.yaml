@@ -7,12 +7,12 @@ source:
 
 requirements:
   build:
-    - {{ compiler("c") }}
-    - {{ compiler("cxx") }}
-    - {{ compiler("rust") }}
+    - "{{ compiler('c') }}"
+    - "{{ compiler('cxx') }}"
+    - "{{ compiler('rust') }}"
     - "sysroot_linux-64>=2.17"
   host:
-    - python
+    - "python>=3.12"
     - "cython>=3b1"
     - mkl
     - mkl-include
@@ -23,6 +23,7 @@ requirements:
     - "setuptools_scm>=6.2"
     - "setuptools-rust"
     - wheel
+    - c-blosc2
     - zlib
   run:
     - python

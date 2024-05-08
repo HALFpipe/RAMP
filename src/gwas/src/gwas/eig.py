@@ -1,18 +1,26 @@
 # -*- coding: utf-8 -*-
 
 from dataclasses import dataclass
+from functools import partial
 from math import sqrt
+from operator import attrgetter
 from pathlib import Path
 from typing import Self, Sequence
 
 import numpy as np
 from numpy import typing as npt
+from tqdm.auto import tqdm
 
 from ._matrix_functions import dgesvdq
 from .mem.arr import SharedArray, SharedFloat64Array
 from .mem.wkspace import SharedWorkspace
 from .tri.base import Triangular
-from .utils import chromosomes_set, make_sample_boolean_vectors
+from .utils import (
+    IterationOrder,
+    chromosomes_set,
+    make_pool_or_null_context,
+    make_sample_boolean_vectors,
+)
 from .vcf.base import VCFFile
 
 
@@ -25,12 +33,12 @@ class Eigendecomposition(SharedFloat64Array):
     def to_file_name(self) -> str:
         return self.get_file_name(self.chromosome)
 
-    @staticmethod
-    def get_file_name(chromosome: int | str | None) -> str:
+    @classmethod
+    def get_file_name(cls, chromosome: int | str | None) -> str:
         if chromosome is None:
             return "eig.txt.gz"
         else:
-            return f"no-chr{chromosome}.eig.txt.gz"
+            return f"no-chr{chromosome}.eig"
 
     @staticmethod
     def get_prefix(**kwargs: str | int | None) -> str:
@@ -192,12 +200,28 @@ class Eigendecomposition(SharedFloat64Array):
         sw: SharedWorkspace,
         samples: list[str] | None = None,
         chromosome: int | str | None = None,
+        num_threads: int = 1,
     ) -> Self:
-        return cls.from_tri(
-            *(Triangular.from_file(tri_path, sw, np.float64) for tri_path in tri_paths),
-            chromosome=chromosome,
-            samples=samples,
+        load = partial(Triangular.from_file, sw=sw, dtype=np.float64)
+        pool, iterator = make_pool_or_null_context(
+            tri_paths,
+            load,
+            num_threads=num_threads,
+            iteration_order=IterationOrder.UNORDERED,
         )
+        with pool:
+            tri_arrays = list(
+                tqdm(
+                    iterator,
+                    total=len(tri_paths),
+                    desc="loading triangular matrices",
+                    unit="matrices",
+                    leave=False,
+                )
+            )
+        tri_arrays.sort(key=attrgetter("start"))
+
+        return cls.from_tri(*tri_arrays, chromosome=chromosome, samples=samples)
 
 
 @dataclass

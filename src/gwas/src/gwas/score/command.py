@@ -56,7 +56,12 @@ class GwasCommand:
         )
         tri_paths = [self.tri_paths_by_chromosome[c] for c in other_chromosomes]
         # Calculate eigendecomposition and free tris.
-        eig = Eigendecomposition.from_files(*tri_paths, sw=self.sw, samples=vc.samples)
+        eig = Eigendecomposition.from_files(
+            *tri_paths,
+            sw=self.sw,
+            samples=vc.samples,
+            num_threads=self.arguments.num_threads,
+        )
         return eig
 
     def get_variable_collection(self) -> VariableCollection:
@@ -240,6 +245,7 @@ class GwasCommand:
             tri_paths,
             self.arguments.kinship_minor_allele_frequency_cutoff,
             self.arguments.kinship_r_squared_cutoff,
+            num_threads=self.arguments.num_threads,
         )
 
         self.set_vcf_files(vcf_files)
@@ -321,7 +327,11 @@ class GwasCommand:
     def run(self) -> None:
         variable_collections = self.setup_variable_collections()
 
-        for chromosome in tqdm(self.selected_chromosomes, desc="chromosomes"):
+        for chromosome in tqdm(
+            self.selected_chromosomes,
+            unit="chromosomes",
+            desc="calculating score statistics",
+        ):
             self.run_chunk(chromosome, variable_collections.copy())
 
         # Clean up

@@ -11,11 +11,13 @@ from numpy import typing as npt
 from ...log import logger
 from ...utils import to_str
 from ..pipe import CompressedTextWriter
-from .base import FileArray, ScalarType, ZstdTextCompressionMethod
+from .base import FileArray, ScalarType, TextCompressionMethod, ZstdTextCompressionMethod
 
 
 @dataclass
 class TextFileArray(FileArray[ScalarType]):
+    compression_method: TextCompressionMethod
+
     compressed_text_writer: CompressedTextWriter | None = None
     file_handle: IO[str] | None = None
 
@@ -61,7 +63,7 @@ class TextFileArray(FileArray[ScalarType]):
             header.extend(column_metadata.iloc[column_start:column_stop].astype(str))
             self.file_handle.write(self.delimiter.join(header) + "\n")
         else:
-            logger.warning(
+            logger.debug(
                 "Not writing header for file "
                 f'"{str(self.compressed_text_writer.file_path)}" '
                 "because column metadata is not available"
@@ -75,7 +77,11 @@ class TextFileArray(FileArray[ScalarType]):
     ) -> None:
         if self.file_handle is None:
             raise RuntimeError("File is not open for writing")
+
         row_metadata, _ = self.axis_metadata
+        column_count = (
+            row_metadata.shape[1] if row_metadata is not None else 0
+        ) + value.shape[1]
         for row_index in range(row_start, row_stop):
             row_value_iterators: list[Iterator[str]] = list()
             if row_metadata is not None:
@@ -95,9 +101,10 @@ class TextFileArray(FileArray[ScalarType]):
                 )
             )
 
-            self.file_handle.write(
-                self.delimiter.join(chain.from_iterable(row_value_iterators)) + "\n"
-            )
+            row_values = list(chain.from_iterable(row_value_iterators))
+            assert len(row_values) == column_count
+            row = self.delimiter.join(row_values) + "\n"
+            self.file_handle.write(row)
             self.current_row_index += 1
 
     def unpack_key(self, key: tuple[slice, ...]) -> tuple[int, int, int, int]:
@@ -192,13 +199,13 @@ class TextFileArray(FileArray[ScalarType]):
         # Write data
         self.write_values(value, row_start, row_stop)
 
-        # Prepare for next part
+        if row_stop == self.shape[0]:
+            # We have finished writing all rows
+            self.compressed_text_writer.close()
+            self.file_handle = None
+            self.compressed_text_writer = None
         if self.has_multiple_parts:
-            if row_stop == self.shape[0]:
-                if col_stop == self.shape[1]:
-                    self.current_part_index += 1
-                    self.current_row_index = 0
-                    self.current_column_index = col_stop
-                    self.compressed_text_writer.close()
-                    self.file_handle = None
-                    self.compressed_text_writer = None
+            # Prepare for next part
+            self.current_part_index += 1
+            self.current_row_index = 0
+            self.current_column_index = col_stop

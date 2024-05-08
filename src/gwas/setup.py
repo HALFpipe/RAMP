@@ -53,9 +53,9 @@ setup(
                 libraries=[],
             ),
             Extension(
-                "gwas.plot._get",
+                "gwas.compression.arr._get",
                 [
-                    "src/gwas/plot/_get.pyx",
+                    "src/gwas/compression/arr/_get.pyx",
                 ],
                 define_macros=[
                     ("NPY_NO_DEPRECATED_API", None),

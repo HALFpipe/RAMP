@@ -56,9 +56,9 @@ class Triangular(SharedFloat64Array):
         self.compress(new_sample_indices)
         self.samples = samples
 
-    @staticmethod
-    def get_file_name(chromosome: int | str) -> str:
-        return f"chr{chromosome}.tri.txt.gz"
+    @classmethod
+    def get_file_name(cls, chromosome: int | str) -> str:
+        return f"chr{chromosome}.tri"
 
     @staticmethod
     def get_prefix(**kwargs: str | int | None) -> str:

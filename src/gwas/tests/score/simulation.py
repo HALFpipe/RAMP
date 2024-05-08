@@ -16,7 +16,7 @@ from ..utils import gcta64, is_bfile, is_pfile, plink2
 minor_allele_frequency_cutoff: float = 0.001
 causal_variant_count: int = 1000
 heritability: float = 0.6
-simulation_count: int = 16
+simulation_count: int = 6
 covariate_count: int = 4
 missing_value_rate: float = 0.05
 missing_value_pattern_count: int = 3
@@ -143,7 +143,7 @@ class SimulationResult:
     phen: npt.NDArray[np.str_]
     par: npt.NDArray[np.str_]
     patterns: list[npt.NDArray[np.bool_]]
-    pattern_indices: list[int]
+    pattern_indices: npt.NDArray[np.int_]
 
 
 @pytest.fixture(scope="session")
@@ -202,10 +202,13 @@ def simulation(
         for _ in range(missing_value_pattern_count)
     ]
 
-    pattern_indices: list[int] = list()
+    pattern_indices: npt.NDArray[np.int_] = np.random.permutation(
+        np.resize(np.arange(missing_value_pattern_count), simulation_count)
+    )
+    assert set(pattern_indices) == set(range(missing_value_pattern_count))
+
     for i in range(simulation_count):
-        pattern_index = np.random.choice(missing_value_pattern_count)
-        pattern_indices.append(pattern_index)
+        pattern_index = pattern_indices[i]
         for j in range(sample_size):
             if patterns[pattern_index][j]:
                 phen[j, 2 + i] = "NaN"

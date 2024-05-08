@@ -5,6 +5,7 @@ from typing import Type
 import numpy as np
 import pytest
 import scipy
+from gwas.log import logger
 from gwas.null_model.ml import (
     MaximumLikelihood,
     OptimizeInput,
@@ -63,5 +64,5 @@ def test_var(driver: Type[ProfileMaximumLikelihood]) -> None:
     terms = optimize_result.x
 
     heritability = terms[1] / terms[:2].sum()
-    print(heritability)
+    logger.debug(heritability)
     assert heritability > 0

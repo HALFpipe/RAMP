@@ -16,6 +16,7 @@ from numpy import typing as npt
 from psutil import virtual_memory
 
 from ..log import logger
+from ..utils import global_lock
 from ._os import c_memfd_create
 
 if TYPE_CHECKING:
@@ -66,9 +67,13 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         return end / self.size
 
     def get_array(self, name: str) -> "SharedArray[Any]":
-        from .arr import SharedArray
+        from .arr import SharedArray, SharedFloat64Array
 
-        return SharedArray(name, self)
+        dtype = self.allocations[name].dtype
+        if np.issubdtype(dtype, np.float64):
+            return SharedFloat64Array(name, self)
+        else:
+            return SharedArray(name, self)
 
     @overload
     def alloc(
@@ -104,32 +109,34 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         else:
             numpy_dtype = np.dtype(dtype)
 
-        allocations = self.allocations
-        if name in allocations:
-            raise ValueError(f'Allocation "{name}" already exists')
+        with global_lock:
+            logger.debug(f"Acquired {global_lock}")
+            allocations = self.allocations
+            if name in allocations:
+                raise ValueError(f'Allocation "{name}" already exists')
 
-        # start at current end
-        start = max(a.start + a.size for a in allocations.values())
+            # start at current end
+            start = max(a.start + a.size for a in allocations.values())
 
-        # calculate size in bytes
-        itemsize = numpy_dtype.itemsize
-        size = int(np.prod(shape) * itemsize)
+            # calculate size in bytes
+            itemsize = numpy_dtype.itemsize
+            size = int(np.prod(shape) * itemsize)
 
-        # check for overflow
-        end = start + size - 1
-        if end >= self.size:
-            raise MemoryError(
-                f"No space left in shared memory buffer: {pformat(allocations)}"
+            # check for overflow
+            end = start + size - 1
+            if end >= self.size:
+                raise MemoryError(
+                    f"No space left in shared memory buffer: {pformat(allocations)}"
+                )
+
+            allocations[name] = Allocation(start, size, shape, numpy_dtype)
+
+            logger.debug(
+                f'Created new allocation "{name}" '
+                f"at {start} with size {size} "
+                f"({end / self.size:.0%} of workspace used)"
             )
-
-        allocations[name] = Allocation(start, size, shape, numpy_dtype)
-
-        logger.debug(
-            f'Created new allocation "{name}" '
-            f"at {start} with size {size} "
-            f"({end / self.size:.0%} of workspace used)"
-        )
-        self.allocations = allocations
+            self.allocations = allocations
 
         # initialize to zero
         array = self.get_array(name)
@@ -138,9 +145,11 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         return array
 
     def free(self, name: str) -> None:
-        allocations = self.allocations
-        del allocations[name]
-        self.allocations = allocations
+        with global_lock:
+            logger.debug(f"Acquired {global_lock}")
+            allocations = self.allocations
+            del allocations[name]
+            self.allocations = allocations
         logger.debug(f'Free allocation "{name}" ')
 
     def squash(self) -> None:
@@ -155,29 +164,30 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             dtype=np.uint8,
         )
 
-        allocations = self.allocations
+        with global_lock:
+            allocations = self.allocations
 
-        to_squash = list(allocations.keys())
-        to_squash.sort(key=lambda t: allocations[t].start)
+            to_squash = list(allocations.keys())
+            to_squash.sort(key=lambda t: allocations[t].start)
 
-        for previous_name, name in pairwise(to_squash):
-            a = allocations[previous_name]
-            b = allocations[name]
+            for previous_name, name in pairwise(to_squash):
+                a = allocations[previous_name]
+                b = allocations[name]
 
-            if a.start + a.size == b.start:
-                continue  # already contiguous
+                if a.start + a.size == b.start:
+                    continue  # already contiguous
 
-            # move memory up to start of previous allocation
-            start = a.start + a.size
-            data[start : start + b.size] = data[b.start : b.start + b.size]
+                # move memory up to start of previous allocation
+                start = a.start + a.size
+                data[start : start + b.size] = data[b.start : b.start + b.size]
 
-            logger.debug(
-                f'Moved allocation "{name}" from {b.start} to {start} '
-                f'to be contiguous with preceding allocation "{previous_name}"'
-            )
-            allocations[name] = Allocation(start, b.size, b.shape, b.dtype)
+                logger.debug(
+                    f'Moved allocation "{name}" from {b.start} to {start} '
+                    f'to be contiguous with preceding allocation "{previous_name}"'
+                )
+                allocations[name] = Allocation(start, b.size, b.shape, b.dtype)
 
-        self.allocations = allocations
+            self.allocations = allocations
 
     @property
     def allocations(self) -> dict[str, Allocation]:
@@ -187,6 +197,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
 
     @allocations.setter
     def allocations(self, allocations: dict[str, Allocation]) -> None:
+        logger.debug(f"Updating allocations to be: {pformat(allocations)}")
         dict_size = allocations["index"].size
         dict_bytes = pickle.dumps(allocations)
 

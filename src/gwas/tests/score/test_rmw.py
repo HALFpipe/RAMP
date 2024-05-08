@@ -4,7 +4,12 @@ from time import time
 
 import blosc2
 import numpy as np
-from gwas.compression.arr.base import FileArray, compression_methods
+from gwas.compression.arr.base import (
+    Blosc2CompressionMethod,
+    FileArray,
+    compression_methods,
+)
+from gwas.compression.pipe import CompressedTextReader
 from gwas.log import logger
 
 from .conftest import RmwScore
@@ -27,13 +32,13 @@ def test_compression(
         file_path = tmp_path / f"score.{name}{compression_method.suffix}"
 
         start = time()
-        array_writer = FileArray.create(
+        with FileArray.create(
             file_path,
             scores.shape,
             np.float64,
             compression_method,
-        )
-        array_writer[:, :] = scores
+        ) as array_writer:
+            array_writer[:, :] = scores
         end = time()
 
         file_size = file_path.stat().st_size
@@ -43,5 +48,9 @@ def test_compression(
             f"in {end - start:.2f} seconds"
         )
 
-        array = blosc2.open(urlpath=str(file_path))
+        if isinstance(compression_method, Blosc2CompressionMethod):
+            array = blosc2.open(urlpath=str(file_path))
+        else:
+            with CompressedTextReader(file_path) as file_handle:
+                array = np.loadtxt(file_handle)
         np.testing.assert_array_equal(scores, array[...])

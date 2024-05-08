@@ -74,10 +74,10 @@ Then update your `.bashrc` or `.zshrc` with `mamba init`. This will allow you to
 Next, install `mamba` using `conda install mamba` and then create the environment using the following command:
 
 ```bash
-mamba create --name "gwas" \
+conda create --solver="libmamba" --name "gwas" \
   "boa" \
   "bzip2" "p7zip>=15.09" \
-  "bcftools>=1.17" "plink" "plink2" "tabix" \
+  "bcftools>=1.17" "plink" "plink2" "tabix" "gcta" \
   "jupyterlab" "ipywidgets" \
   "python=3.12" "more-itertools" \
   "numpy" "scipy" "pandas" "threadpoolctl" \
@@ -87,7 +87,7 @@ mamba create --name "gwas" \
   "python-blosc2" \
   "mypy" "types-pyyaml"  \
   "pytest-benchmark" "pytest-cov" \
-  "cython>=3b1" "zlib" \
+  "setuptools-rust" "cython>=3b1" "zlib" \
   "gxx_linux-64>=13" "gcc_linux-64>=13" "rust" "sysroot_linux-64>=2.17"
 ```
 

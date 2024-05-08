@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
-import json
 from dataclasses import dataclass, fields
 from itertools import pairwise
 from pathlib import Path
-from typing import Any, Generic, Literal, Self, TypeVar, overload
+from typing import Any, ClassVar, Generic, Literal, Self, TypeVar, overload
 
 import numpy as np
 import scipy
 from numpy import typing as npt
 
+from gwas.compression.arr.bin import Blosc2FileArray
+
 from .._matrix_functions import dimatcopy, set_tril
-from ..compression.pipe import CompressedTextReader
+from ..compression.arr.base import Blosc2CompressionMethod, default_compression_method
 from ..log import logger
-from ..utils import invert_pivot
+from ..utils import global_lock, invert_pivot
 from .wkspace import Allocation, SharedWorkspace
 
 ScalarType = TypeVar("ScalarType", bound=np.generic)
@@ -23,15 +24,23 @@ class SharedArray(Generic[ScalarType]):
     name: str
     sw: SharedWorkspace
 
+    compression_method: ClassVar[Blosc2CompressionMethod] = default_compression_method
+
+    @property
+    def allocation(self) -> Allocation:
+        return self.sw.allocations[self.name]
+
     @property
     def shape(self) -> tuple[int, ...]:
-        a = self.sw.allocations[self.name]
-        return tuple(a.shape)
+        return self.allocation.shape
+
+    @property
+    def start(self) -> int:
+        return self.allocation.start
 
     @property
     def dtype(self) -> np.dtype[ScalarType]:
-        a = self.sw.allocations[self.name]
-        return np.dtype(a.dtype)
+        return np.dtype(self.allocation.dtype)
 
     def to_file_name(self) -> str:
         raise NotImplementedError
@@ -89,27 +98,14 @@ class SharedArray(Generic[ScalarType]):
             order="F",
         )
 
-    @classmethod
-    def parse_header(cls, header: str | None) -> dict[str, Any]:
-        if header is None:
-            return dict()
-        else:
-            header = header.removeprefix("#")  # remove comment prefix
-            header = header.strip()  # remove extra whitespace
-            parsed_header = json.loads(header)
-            assert isinstance(parsed_header, dict)
-            return parsed_header
-
-    def to_header(self) -> str | None:
+    def to_metadata(self) -> dict[str, Any]:
         ignore = [field.name for field in fields(SharedArray)]
-
         data = {
             field.name: getattr(self, field.name)
             for field in fields(self)
             if field.name not in ignore
         }
-
-        return json.dumps(data)
+        return data
 
     @staticmethod
     def get_prefix(**kwargs: str | int | None) -> str:
@@ -147,78 +143,57 @@ class SharedArray(Generic[ScalarType]):
         return cls(name, sw, **cls_kwargs)
 
     @classmethod
-    def read_file_metadata(
-        cls,
-        file_path: Path | str,
-    ) -> tuple[int, dict[str, Any]]:
-        file_path = Path(file_path)
-
-        header: str | None = None
-        first_line: str | None = None
-        with CompressedTextReader(file_path) as file_handle:
-            for line in file_handle:
-                if line.startswith("#"):
-                    header = line
-                    continue
-
-                first_line = line
-                break
-
-        if first_line is None:
-            raise ValueError
-        tokens = first_line.split()
-
-        n = len(tokens)
-        kwargs = cls.parse_header(header)
-
-        return n, kwargs
-
-    @classmethod
     def from_file(
         cls,
-        file_path: Path | str,
+        file_path: Path,
         sw: SharedWorkspace,
         dtype: type[ScalarType] | np.dtype[ScalarType],
+        num_threads: int = 1,
     ) -> Self:
-        file_path = Path(file_path)
-        n, kwargs = cls.read_file_metadata(file_path)
+        array_proxy: Blosc2FileArray = Blosc2FileArray.from_file(
+            file_path, num_threads=num_threads
+        )
+        shape = array_proxy.shape[::-1]
 
-        name = cls.get_name(sw, **kwargs)
+        if array_proxy.extra_metadata is not None:
+            kwargs = array_proxy.extra_metadata
+        else:
+            kwargs = {}
 
-        sw.alloc(name, n, 1, dtype=dtype)
+        with global_lock:
+            name = cls.get_name(sw, **kwargs)
+            sw.alloc(name, *shape, dtype=dtype)
+
         array = cls(name, sw, **kwargs)
-        a = array.to_numpy(include_trailing_free_memory=True)
+        a = array.to_numpy().transpose()
 
-        m: int = 0
-        with CompressedTextReader(file_path) as file_handle:
-            for line in file_handle:
-                if line.startswith("#"):
-                    continue
-                tokens = line.split()
-                a[:, m] = tokens
-                m += 1
+        start = [0] * len(a.shape)
+        stop = list(a.shape)
+        key = (start, stop)
 
-        array.resize(n, m)
+        with array_proxy:
+            if array_proxy.array is not None:
+                array_proxy.array.get_slice_numpy(a, key)
+            else:
+                raise RuntimeError("Blosc2 array not initialized")
 
         return array
 
-    def to_file(
-        self,
-        file_path: Path | str,
-    ) -> Path:
-        file_path = Path(file_path)
-
+    def to_file(self, file_path: Path, num_threads: int = 1) -> Path:
         if file_path.is_dir():
             file_path = file_path / self.to_file_name()
 
-        header = self.to_header()
-        if header is None:
-            header = ""
-
-        # get shortest representation of the floating point numbers
-        # that does not have any loss of precision
-        a = np.vectorize(np.format_float_scientific)(self.to_numpy().transpose())
-        np.savetxt(file_path, a, fmt="%s", header=header)
+        array = self.to_numpy().transpose()
+        array_proxy: Blosc2FileArray = Blosc2FileArray(
+            file_path,
+            array.shape,
+            array.dtype.type,
+            self.compression_method,
+            extra_metadata=self.to_metadata(),
+            num_threads=num_threads,
+        )
+        with array_proxy:
+            array_proxy[:] = array
 
         return file_path
 

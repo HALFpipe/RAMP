@@ -2,35 +2,41 @@
 
 import pickle
 from dataclasses import dataclass
-from math import prod
-from multiprocessing import cpu_count
+from pathlib import Path
 from types import TracebackType
-from typing import Any, Self, Sequence, Type
+from typing import Any, Self, Type
 
 import blosc2
-import numpy as np
+from blosc2.schunk import vlmeta
 from numpy import typing as npt
 
 from ...log import logger
-from ..pipe import CompressedBytesWriter
+from ..pipe import CompressedBytesReader
 from .base import Blosc2CompressionMethod, FileArray, ScalarType
 
 
 @dataclass
 class Blosc2FileArray(FileArray[ScalarType]):
-    chunk_shape: tuple[int, ...] | None = None
+    compression_method: Blosc2CompressionMethod
+    extra_metadata: dict[str, Any] | None = None
 
-    def __setitem__(
-        self, key: tuple[slice, ...], value: npt.NDArray[ScalarType]
-    ) -> None:
-        if isinstance(self.compression_method, Blosc2CompressionMethod):
-            array = self.get_blosc2_ndarray()
-            array[key] = value
-        else:
-            raise NotImplementedError
+    array: blosc2.NDArray | None = None
+
+    @property
+    def cparams(self) -> dict[str, Any]:
+        return dict(
+            **self.compression_method.cparams,
+            nthreads=self.num_threads,
+        )
+
+    @property
+    def vlmeta(self) -> vlmeta:
+        if self.array is None:
+            raise RuntimeError("Blosc2 array not open")
+        return self.array.schunk.vlmeta
 
     def __enter__(self) -> Self:
-        return self
+        return self.require_blosc2_ndarray()
 
     def __exit__(
         self,
@@ -38,106 +44,103 @@ class Blosc2FileArray(FileArray[ScalarType]):
         value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        pass
+        self.array = None
 
-    def reduce_shape(
-        self,
-        shape: tuple[int, ...],
-        max_size: int,
-    ) -> tuple[int, ...]:
-        max_size //= np.dtype(self.dtype).itemsize
-        axis_count = len(shape)
-        reduced_shape: Sequence[int | None] = [None] * axis_count
-        while any(s is None for s in reduced_shape):
-            # Divide the maximum size by the shape of the known axes
-            available_size = max_size / np.prod(
-                [s for s in reduced_shape if s is not None]
-            )
-            # Use the n-th root to determine the ideal shape of the unknown axes
-            unknown_count = sum(s is None for s in reduced_shape)
-            edge_size = int(np.floor(np.power(available_size, 1 / unknown_count)))
-            if any(
-                s < edge_size
-                for c, s in zip(reduced_shape, shape, strict=True)
-                if c is None
-            ):
-                reduced_shape = [
-                    s if s < edge_size else r
-                    for r, s in zip(reduced_shape, shape, strict=True)
-                ]
-                continue
-            reduced_shape = [edge_size if r is None else r for r in reduced_shape]
+    @property
+    def axis_metadata_path(self) -> Path:
+        file_path = self.file_path
+        return file_path.parent / f"{file_path.stem}.axis-metadata.pkl.zst"
 
-        if all(isinstance(s, int) for s in reduced_shape):
-            shape = tuple(s for s in reduced_shape if s is not None)
-            if prod(shape) > max_size:
-                raise RuntimeError(
-                    "Shape reduction failed to produce size within bounds"
-                )
-            return shape
+    def get_vlmeta(self, key: str) -> Any:
+        return pickle.loads(self.vlmeta.get_vlmeta(key))
+
+    def set_vlmeta(self, key: str, value: Any) -> None:
+        cparams = self.cparams
+        if cparams.get("use_dict") is True:
+            # This option is apparently not supported for vlmeta
+            del cparams["use_dict"]
+        self.vlmeta.set_vlmeta(key, pickle.dumps(value), **cparams)
+
+    def load_metadata(self) -> None:
+        try:
+            self.axis_metadata = self.get_vlmeta("axis_metadata")
+        except KeyError:
+            if self.axis_metadata_path.is_file():
+                with CompressedBytesReader(self.axis_metadata_path) as file_handle:
+                    self.axis_metadata = pickle.load(file_handle)
+            else:
+                self.axis_metadata = [None] * len(self.shape)
+
+        keys = set(self.vlmeta.get_names()) - {"axis_metadata"}
+        if keys:
+            self.extra_metadata = {}
+            for key in keys:
+                self.extra_metadata[key] = self.get_vlmeta(key)
+
+    def dump_metadata(self) -> None:
+        self.set_vlmeta("axis_metadata", self.axis_metadata)
+        if self.extra_metadata is not None:
+            for key, value in self.extra_metadata.items():
+                self.set_vlmeta(key, value)
+
+    def __setitem__(
+        self, key: slice | tuple[slice, ...], value: npt.NDArray[ScalarType]
+    ) -> None:
+        if isinstance(self.compression_method, Blosc2CompressionMethod):
+            if self.array is not None:
+                self.array[key] = value
+            else:
+                raise RuntimeError("Blosc2 array not initialized")
         else:
-            raise RuntimeError("Empty dimensions remain")
+            raise NotImplementedError(
+                f"Unknown compression method {self.compression_method}"
+            )
 
-    def get_blosc2_ndarray(self) -> blosc2.NDArray:
+    @classmethod
+    def get_file_path_with_suffix(cls, file_path: Path) -> Path:
+        file_path = file_path
+        if not str(file_path).endswith(Blosc2CompressionMethod.suffix):
+            file_path = (
+                file_path.parent / f"{file_path.name}{Blosc2CompressionMethod.suffix}"
+            )
+        return file_path
+
+    @classmethod
+    def open(cls, file_path: Path, num_threads: int = 1) -> blosc2.NDArray:
+        file_path = cls.get_file_path_with_suffix(file_path)
+        return blosc2.open(
+            urlpath=str(file_path),
+            cparams=dict(nthreads=num_threads),
+            dparams=dict(nthreads=num_threads),
+        )
+
+    def require_blosc2_ndarray(self) -> Self:
         if not isinstance(self.compression_method, Blosc2CompressionMethod):
             raise RuntimeError(
                 "Tried to get Blosc2 array with non-Blosc2 compression method"
             )
 
-        blosc2.set_nthreads(cpu_count())
-
-        file_path = self.file_path
-        if not str(file_path).endswith(self.compression_method.suffix):
-            file_path = (
-                file_path.parent / f"{file_path.name}{self.compression_method.suffix}"
-            )
+        file_path = self.get_file_path_with_suffix(self.file_path)
         self.file_paths.add(file_path)
 
-        if not file_path.is_file():
-            kwargs: dict[str, Any] = dict()
-            # Chunk size of 1024 megabytes
-            max_chunk_size = 2**30
-            if self.chunk_shape is not None:
-                chunk_shape = self.reduce_shape(self.chunk_shape, max_chunk_size)
-            else:
-                chunk_shape = self.reduce_shape(self.shape, max_chunk_size)
-            kwargs["chunks"] = chunk_shape
-            # Block size of 32 megabytes
-            max_block_size = 2**25
-            block_shape = self.reduce_shape(chunk_shape, max_block_size)
-            kwargs["blocks"] = block_shape
-            logger.debug(f"Creating Blosc2 array with kwargs {kwargs}")
-            array = blosc2.empty(
+        try:
+            self.array = self.open(file_path, self.num_threads)
+        except FileNotFoundError:
+            pass
+        if self.array is None:
+            self.array = blosc2.empty(
                 shape=self.shape,
                 urlpath=str(file_path),
                 dtype=self.dtype,
-                cparams=dict(
-                    codec=self.compression_method.codec,
-                    clevel=self.compression_method.clevel,
-                    filters=list(self.compression_method.filters),
-                    nthreads=self.num_threads,
-                    use_dict=self.compression_method.use_dict,
-                ),
-                dparams=dict(
-                    nthreads=self.num_threads,
-                ),
-                **kwargs,
-            )
-            axis_metadata_path = (
-                file_path.parent / f"{file_path.stem}.axis-metadata.pkl.zst"
-            )
-            with CompressedBytesWriter(axis_metadata_path) as file_handle:
-                pickle.dump(self.axis_metadata, file_handle)
-        else:
-            array = blosc2.open(
-                urlpath=str(file_path),
-                cparams=dict(
-                    nthreads=self.num_threads,
-                ),
+                cparams=self.cparams,
                 dparams=dict(
                     nthreads=self.num_threads,
                 ),
             )
+            logger.debug(f"Created Blosc2 array: {self.array}")
+            self.dump_metadata()
+
+        array = self.array
 
         logger.debug(f"Using Blosc2 array {array.info}")
 
@@ -148,5 +151,28 @@ class Blosc2FileArray(FileArray[ScalarType]):
                 f"dtype {self.dtype}. Please delete the file or use a different "
                 "output directory"
             )
+
+        return self
+
+    @classmethod
+    def from_file(cls, file_path: Path, num_threads: int = 1) -> Self:
+        b2array = cls.open(file_path, num_threads)
+        shape = b2array.shape
+        dtype = b2array.dtype
+
+        cparams = b2array.schunk.cparams
+        codec = cparams["codec"]
+        clevel = cparams["clevel"]
+        filters = tuple(f for f in cparams["filters"] if f != blosc2.Filter.NOFILTER)
+        use_dict = cparams["use_dict"]
+        compression_method = Blosc2CompressionMethod(
+            codec=codec, clevel=clevel, filters=filters, use_dict=use_dict
+        )
+
+        array = cls(file_path, shape, dtype, compression_method, num_threads=num_threads)
+
+        # Load metadata
+        with array:
+            array.load_metadata()
 
         return array

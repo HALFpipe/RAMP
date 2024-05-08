@@ -2,7 +2,8 @@
 import atexit
 
 from cython cimport boundscheck, cast, wraparound
-from libc.stdint cimport int64_t
+from cython.operator cimport dereference
+from libc.stdint cimport int16_t, int64_t
 
 import numpy as np
 
@@ -18,28 +19,47 @@ def destroy():
 
 
 cdef extern from "blosc2.h":
-    ctypedef struct blosc2_schunk:
-        pass
-
     void blosc2_init()
     void blosc2_destroy()
+
+    ctypedef struct blosc2_dparams:
+        int16_t nthreads
+
+    ctypedef struct blosc2_storage:
+        blosc2_dparams* dparams
+
+    ctypedef struct blosc2_schunk:
+        blosc2_storage* storage
+        blosc2_context* dctx
 
     blosc2_schunk *blosc2_schunk_open(
         const char* urlpath
     ) nogil
+
+    ctypedef struct blosc2_context:
+        pass
+
+    blosc2_context* blosc2_create_dctx(
+        blosc2_dparams dparams
+    ) nogil
+    void blosc2_free_ctx(
+        blosc2_context * context
+    ) nogil
+
     int blosc2_meta_exists(
         blosc2_schunk *schunk,
         const char *name
-    ) nogil
-    int b2nd_from_schunk(
-        blosc2_schunk* schunk,
-        b2nd_array_t** array
     ) nogil
 
 
 cdef extern from "b2nd.h":
     ctypedef struct b2nd_array_t:
         pass
+
+    int b2nd_from_schunk(
+        blosc2_schunk* schunk,
+        b2nd_array_t** array
+    ) nogil
 
     int b2nd_get_orthogonal_selection(
         b2nd_array_t* array,
@@ -59,6 +79,7 @@ def get_orthogonal_selection(
     np.ndarray[np.int64_t, ndim=1] row_indices,
     np.ndarray[np.int64_t, ndim=1] column_indices,
     np.ndarray[np.float64_t, ndim=2, mode="c"] array,
+    int num_threads = 1,
 ) :
     cdef int64_t row_count = row_indices.size
     cdef int64_t column_count = column_indices.size
@@ -85,6 +106,12 @@ def get_orthogonal_selection(
 
     with nogil:
         schunk = blosc2_schunk_open(urlpath_char)
+
+        schunk.storage.dparams.nthreads = num_threads
+        blosc2_free_ctx(schunk.dctx)
+        schunk.dctx = blosc2_create_dctx(dereference(schunk.storage.dparams))
+        if schunk.dctx == NULL:
+            raise RuntimeError("Could not create decompression context")
 
         return_code = b2nd_from_schunk(schunk, &b2nd_array)
         if return_code < 0:

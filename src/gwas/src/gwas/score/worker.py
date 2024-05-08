@@ -226,26 +226,19 @@ class Calc(Worker):
                     break
                 can_calc.clear()
 
-                # Calculate the score statistics
+                # Prepare arrays
                 u_stat = stat[0, phenotype_slice, :].transpose()
                 v_stat = stat[1, phenotype_slice, :].transpose()
-                logger.debug(f"Calculating U statistic for phenotypes {phenotype_slice}")
 
+                # Calculate the score statistics
+                logger.debug(f"Calculating U statistic for phenotypes {phenotype_slice}")
                 calc_u_stat(scaled_residuals_matrix, rotated_genotypes, u_stat)
-                # np.set_printoptions(linewidth=1000)
-                # print(scaled_residuals_matrix)
-                # print(rotated_genotypes)
 
                 logger.debug("Squaring genotypes")
                 np.square(rotated_genotypes, out=rotated_genotypes)
 
                 logger.debug("Calculating V statistic")
-
                 calc_v_stat(inverse_variance_matrix, rotated_genotypes, u_stat, v_stat)
-                # np.set_printoptions(linewidth=1000)
-                # print(inverse_variance_matrix)
-                # print(rotated_genotypes)
-                # print(v_stat)
 
                 # Signal that calculation has finished
                 can_write.set()
