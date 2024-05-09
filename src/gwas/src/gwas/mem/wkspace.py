@@ -111,8 +111,10 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
 
         with global_lock:
             logger.debug(
-                f"Acquired {global_lock} with name {get_lock_name(global_lock)}"
+                f'Acquired lock "{global_lock}" with name '
+                f'"{get_lock_name(global_lock)}" to allocate "{name}"'
             )
+
             allocations = self.allocations
             if name in allocations:
                 raise ValueError(f'Allocation "{name}" already exists')
@@ -149,12 +151,14 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
     def free(self, name: str) -> None:
         with global_lock:
             logger.debug(
-                f"Acquired {global_lock} with name {get_lock_name(global_lock)}"
+                f'Acquired lock "{global_lock}" with name '
+                f' "{get_lock_name(global_lock)}" to free "{name}"'
             )
+
             allocations = self.allocations
             del allocations[name]
             self.allocations = allocations
-        logger.debug(f'Free allocation "{name}" ')
+        logger.debug(f'Freed allocation "{name}" ')
 
     def squash(self) -> None:
         """
@@ -201,11 +205,13 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
 
     @allocations.setter
     def allocations(self, allocations: dict[str, Allocation]) -> None:
-        acquired_lock = global_lock.acquire(block=False)
-        if acquired_lock is False:
-            raise RuntimeError("Global lock was not acquired")
-        logger.debug(f"Acquired {global_lock} with name {get_lock_name(global_lock)}")
-        try:
+        with global_lock:
+            logger.debug(
+                f"Storing {len(allocations)} allocations after locking "
+                f'with lock "{get_lock_name(global_lock)}"',
+                stack_info=True,
+            )
+
             dict_size = allocations["index"].size
             dict_bytes = pickle.dumps(allocations)
 
@@ -213,8 +219,6 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
                 raise ValueError
 
             self.buf[: len(dict_bytes)] = dict_bytes
-        finally:
-            global_lock.release()
 
     def close(self) -> None:
         self.buf.close()

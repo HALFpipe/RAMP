@@ -80,6 +80,8 @@ def variable_collections(
         sw,
         missing_value_strategy="listwise_deletion",
     )
+    new_allocation_names.add(base_variable_collection.phenotypes.name)
+    new_allocation_names.add(base_variable_collection.covariates.name)
     request.addfinalizer(base_variable_collection.free)
 
     variable_collections = GwasCommand.split_by_missing_values(base_variable_collection)
