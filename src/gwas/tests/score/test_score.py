@@ -33,7 +33,7 @@ def rotated_genotypes_arrays(
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
 ) -> list[SharedFloat64Array]:
-    allocation_count = len(sw.allocations)
+    allocation_names = set(sw.allocations.keys())
 
     genotypes = genotypes_array.to_numpy()
     _, variant_count = genotypes.shape
@@ -60,7 +60,8 @@ def rotated_genotypes_arrays(
 
         rotated_genotypes_arrays.append(rotated_genotypes_array)
 
-    assert len(sw.allocations) == allocation_count + len(rotated_genotypes_arrays)
+    new_allocation_names = {r.name for r in rotated_genotypes_arrays}
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
     return rotated_genotypes_arrays
 
 

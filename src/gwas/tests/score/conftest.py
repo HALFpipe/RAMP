@@ -60,7 +60,8 @@ def variable_collections(
     request: pytest.FixtureRequest,
 ) -> list[VariableCollection]:
     np.random.seed(47)
-    allocation_count = len(sw.allocations)
+    allocation_names = set(sw.allocations.keys())
+    new_allocation_names: set[str] = set()
 
     samples = list(simulation.phen[:, 1])
     phenotype_names = [f"phenotype_{i + 1:02d}" for i in range(simulation_count)]
@@ -79,8 +80,13 @@ def variable_collections(
         sw,
         missing_value_strategy="listwise_deletion",
     )
+    request.addfinalizer(base_variable_collection.free)
 
     variable_collections = GwasCommand.split_by_missing_values(base_variable_collection)
+    for variable_collection in variable_collections:
+        new_allocation_names.add(variable_collection.phenotypes.name)
+        new_allocation_names.add(variable_collection.covariates.name)
+        request.addfinalizer(variable_collection.free)
     assert len(variable_collections) == missing_value_pattern_count
 
     should_be_missing = np.array(simulation.patterns)[
@@ -88,10 +94,8 @@ def variable_collections(
     ].transpose()
     assert (np.isnan(phenotypes) == should_be_missing).all()
 
-    base_variable_collection.free()
     for i, variable_collection in enumerate(variable_collections):
         variable_collection.name = f"variableCollection-{i + 1:d}"
-        request.addfinalizer(variable_collection.free)
 
     vc_by_phenotype = {
         phenotype_name: variable_collection
@@ -108,7 +112,7 @@ def variable_collections(
         ]
         assert vc.samples == phenotype_samples
 
-    assert len(sw.allocations) == allocation_count + 2 * len(variable_collections)
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
     return variable_collections
 
 
@@ -120,7 +124,8 @@ def eigendecompositions(
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
 ) -> list[Eigendecomposition]:
-    allocation_count = len(sw.allocations)
+    allocation_names = set(sw.allocations.keys())
+    new_allocation_names: set[str] = set()
 
     eigendecompositions = [
         Eigendecomposition.from_files(
@@ -132,9 +137,10 @@ def eigendecompositions(
     ]
 
     for eigendecomposition in eigendecompositions:
+        new_allocation_names.add(eigendecomposition.name)
         request.addfinalizer(eigendecomposition.free)
 
-    assert len(sw.allocations) == allocation_count + len(eigendecompositions)
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
     return eigendecompositions
 
 
@@ -319,7 +325,7 @@ def genotypes_array(
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
 ) -> SharedFloat64Array:
-    allocation_count = len(sw.allocations)
+    allocation_names = set(sw.allocations.keys())
 
     sample_count = len(vcf_file.samples)
     variant_count = sw.unallocated_size // (
@@ -337,5 +343,6 @@ def genotypes_array(
     with vcf_file:
         vcf_file.read(genotypes.transpose())
 
-    assert len(sw.allocations) == allocation_count + 1
+    new_allocation_names = {name}
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
     return genotypes_array

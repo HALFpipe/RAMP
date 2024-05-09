@@ -10,6 +10,7 @@ from ..compression.arr.base import FileArray
 from ..eig import Eigendecomposition, EigendecompositionCollection
 from ..log import logger
 from ..mem.arr import SharedArray, SharedFloat64Array
+from ..utils import soft_close
 from ..vcf.base import VCFFile
 from .worker import (
     Calc,
@@ -103,12 +104,7 @@ def calc_score(
         finally:
             t.should_exit.set()
             for proc in procs:
-                proc.terminate()
-                proc.join(timeout=1)
-                if proc.is_alive():
-                    proc.kill()
-                proc.join()
-                proc.close()
+                soft_close(proc)
             ec.free()
             genotypes_array.free()
             rotated_genotypes_array.free()

@@ -29,7 +29,7 @@ def load_genotypes(
     chromosomes: Sequence[int | str],
     sw: SharedWorkspace,
 ) -> SharedFloat64Array:
-    allocation_count = len(sw.allocations)
+    allocation_names = set(sw.allocations.keys())
 
     vcf_file = vcf_files[0]
     sample_count = vcf_file.sample_count
@@ -65,7 +65,8 @@ def load_genotypes(
     a[:, :sample_count] = a[:, sample_indices]
     array.resize(variant_count, sample_count)
 
-    assert len(sw.allocations) == allocation_count + 1
+    new_allocation_names = {name}
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
     return array
 
 
@@ -76,14 +77,15 @@ def test_eig(
     vcf_files_by_size_and_chromosome: Mapping[str, Mapping[int | str, VCFFile]],
     tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
     sw: SharedWorkspace,
+    request: pytest.FixtureRequest,
 ) -> None:
-    allocation_count = len(sw.allocations)
+    allocation_names = set(sw.allocations.keys())
 
-    sampe_size_label = "small"
+    sample_size_label = "small"
     chromosomes: Sequence[int | str] = [7, 8, 9, 10]
 
-    vcf_files = list(vcf_files_by_size_and_chromosome[sampe_size_label].values())
-    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sampe_size_label]
+    vcf_files = list(vcf_files_by_size_and_chromosome[sample_size_label].values())
+    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sample_size_label]
     vcf_file = vcf_files[0]
     samples = vcf_file.samples
     if not np.isclose(subset_proportion, 1):
@@ -97,6 +99,7 @@ def test_eig(
         chromosomes,
         sw,
     )
+    request.addfinalizer(array.free)
 
     variant_count, _ = array.shape
     a = array.to_numpy().transpose()
@@ -119,6 +122,7 @@ def test_eig(
             tri.subset_samples(samples)
     sw.squash()
     tri_array = SharedFloat64Array.merge(*tri_arrays)
+    request.addfinalizer(tri_array.free)
 
     _, tri_singular_values, _ = scipy.linalg.svd(
         tri_array.to_numpy().transpose(),
@@ -135,6 +139,7 @@ def test_eig(
 
     tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes]
     eig_array = Eigendecomposition.from_files(*tri_paths, sw=sw, samples=samples)
+    request.addfinalizer(eig_array.free)
 
     scipy_eigenvalues = np.square(scipy_singular_values) / variant_count
     assert np.allclose(scipy_eigenvalues, eig_array.eigenvalues)
@@ -153,10 +158,8 @@ def test_eig(
     assert (1 == np.count_nonzero(permutation, axis=0)).all()
     assert (1 == np.count_nonzero(permutation, axis=1)).all()
 
-    array.free()
-    eig_array.free()
-    tri_array.free()
-    assert len(sw.allocations) == allocation_count
+    new_allocation_names = {array.name, tri_array.name, eig_array.name}
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
 
 
 def test_eig_rmw(
@@ -164,23 +167,25 @@ def test_eig_rmw(
     vcf_files_by_size_and_chromosome: Mapping[str, Mapping[int | str, VCFFile]],
     tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
     sw: SharedWorkspace,
+    request: pytest.FixtureRequest,
 ) -> None:
-    allocation_count = len(sw.allocations)
+    allocation_names = set(sw.allocations.keys())
 
     c: int | str = 22
-    sampe_size_label = "small"
-    vcf_file = vcf_files_by_size_and_chromosome[sampe_size_label][c]
+    sample_size_label = "small"
+    vcf_file = vcf_files_by_size_and_chromosome[sample_size_label][c]
     vcf_file.set_variants_from_cutoffs(
         minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
     )
 
     tri_array = Triangular.from_file(
-        tri_paths_by_size_and_chromosome[sampe_size_label][c], sw, np.float64
+        tri_paths_by_size_and_chromosome[sample_size_label][c], sw, np.float64
     )
     eig_array = Eigendecomposition.from_tri(
         tri_array,
         chromosome=c,
     )
+    request.addfinalizer(eig_array.free)
 
     vcf_zst_path = vcf_file.file_path
     vcf_gz_path = to_bgzip(tmp_path, vcf_zst_path)
@@ -284,24 +289,27 @@ def test_eig_rmw(
     assert (1 == np.count_nonzero(permutation, axis=1)).all()
     assert np.allclose(numpy_eigenvalues[::-1], eig_array.eigenvalues, atol=1e-6)
 
-    eig_array.free()
-    assert len(sw.allocations) == allocation_count
+    new_allocation_names = {eig_array.name}
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
 
 
 def test_eig_mp(
     tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
     sw: SharedWorkspace,
+    request: pytest.FixtureRequest,
 ) -> None:
-    allocation_count = len(sw.allocations)
+    allocation_names = set(sw.allocations.keys())
 
-    sampe_size_label = "small"
+    sample_size_label = "small"
 
-    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sampe_size_label]
+    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sample_size_label]
     tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes if c != "X"]
 
     eig_array = Eigendecomposition.from_files(*tri_paths, sw=sw, num_threads=2)
+    request.addfinalizer(eig_array.free)
+
     assert np.isfinite(eig_array.eigenvalues).all()
     assert np.isfinite(eig_array.eigenvectors).all()
 
-    eig_array.free()
-    assert len(sw.allocations) == allocation_count
+    new_allocation_names = {eig_array.name}
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)

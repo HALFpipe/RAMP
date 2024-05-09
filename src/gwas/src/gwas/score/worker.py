@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import multiprocessing as mp
 from dataclasses import dataclass, field
 from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event
@@ -13,7 +12,7 @@ from numpy import typing as npt
 
 from ..compression.arr.base import FileArray
 from ..eig import EigendecompositionCollection
-from ..log import logger
+from ..log import logger, multiprocessing_context
 from ..mem.arr import SharedFloat64Array
 from ..utils import Action, Process, SharedState
 from ..vcf.base import VCFFile
@@ -29,23 +28,25 @@ class TaskProgress:
 class TaskSyncCollection(SharedState):
     job_count: int
     # Genotypes array can be overwritten by fresh data
-    can_read: Event = field(default_factory=mp.Event)
+    can_read: Event = field(default_factory=multiprocessing_context.Event)
     # Passes the number of variants that were read to the calculation process
-    read_count_queue: Queue[int] = field(default_factory=mp.Queue)
+    read_count_queue: Queue[int] = field(default_factory=multiprocessing_context.Queue)
     # Indicates that writing has finished and we can calculate
     can_calc: list[Event] = field(init=False)
     # Passes the number of variants that have finished calculating to the writer
     # process
-    calc_count_queue: Queue[int] = field(default_factory=mp.Queue)
+    calc_count_queue: Queue[int] = field(default_factory=multiprocessing_context.Queue)
     # Indicates that calculation has finished and we can write out the results
     can_write: list[Event] = field(init=False)
 
     # Passes the current progress to the main process
-    progress_queue: Queue[TaskProgress] = field(default_factory=mp.Queue)
+    progress_queue: Queue[TaskProgress] = field(
+        default_factory=multiprocessing_context.Queue
+    )
 
     def __post_init__(self) -> None:
-        self.can_calc = [mp.Event() for _ in range(self.job_count)]
-        self.can_write = [mp.Event() for _ in range(self.job_count)]
+        self.can_calc = [multiprocessing_context.Event() for _ in range(self.job_count)]
+        self.can_write = [multiprocessing_context.Event() for _ in range(self.job_count)]
 
 
 class Worker(Process):

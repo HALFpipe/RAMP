@@ -143,7 +143,7 @@ def main() -> None:
     if arguments.output_directory is not None:
         output_directory = Path(arguments.output_directory)
 
-    setup_logging(level=arguments.log_level, log_path=output_directory)
+    setup_logging(level=arguments.log_level, path=output_directory)
 
     try:
         stratify(arguments, output_directory)

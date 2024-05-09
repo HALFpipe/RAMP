@@ -94,14 +94,18 @@ def test_tri(
 
 @pytest.mark.slow
 def test_tri_file(
-    tmp_path: Path, numpy_tri: npt.NDArray[np.float64], sw: SharedWorkspace
+    tmp_path: Path,
+    numpy_tri: npt.NDArray[np.float64],
+    sw: SharedWorkspace,
+    request: pytest.FixtureRequest,
 ) -> None:
-    allocation_count = len(sw.allocations)
+    allocation_names = set(sw.allocations.keys())
 
     sw = SharedWorkspace.create()
     n = numpy_tri.shape[0]
 
     array = sw.alloc("a", n, n)
+    request.addfinalizer(array.free)
     a = array.to_numpy()
     a[:] = numpy_tri.transpose()
 
@@ -121,6 +125,7 @@ def test_tri_file(
     assert f"chr{tri.chromosome}" in tri_path.name
 
     b = Triangular.from_file(tri_path, sw, np.float64)
+    request.addfinalizer(b.free)
     assert f"chr{tri.chromosome}" in b.name
     assert b.chromosome == tri.chromosome
     assert b.variant_count == tri.variant_count
@@ -129,14 +134,12 @@ def test_tri_file(
         tri.minor_allele_frequency_cutoff,
     )
 
-    b.free()
-    tri.free()
-
-    assert len(sw.allocations) == allocation_count
+    new_allocation_names = {b.name, tri.name}
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
 
 
-def test_tri_subset_samples(sw: SharedWorkspace) -> None:
-    allocation_count = len(sw.allocations)
+def test_tri_subset_samples(sw: SharedWorkspace, request: pytest.FixtureRequest) -> None:
+    allocation_names = set(sw.allocations.keys())
 
     k = 100
 
@@ -181,6 +184,8 @@ def test_tri_subset_samples(sw: SharedWorkspace) -> None:
         minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
         r_squared_cutoff=-np.inf,
     )
+    request.addfinalizer(tri.free)
+
     assert isinstance(tri, Triangular)
     assert is_lower_triangular(tri.to_numpy())
     assert np.allclose(tri.to_numpy(), r)
@@ -195,5 +200,5 @@ def test_tri_subset_samples(sw: SharedWorkspace) -> None:
     assert is_lower_triangular(r4)
     assert np.allclose(np.abs(r4), np.abs(r1))
 
-    tri.free()
-    assert len(sw.allocations) == allocation_count
+    new_allocation_names = {tri.name}
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)

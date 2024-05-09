@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import multiprocessing as mp
 from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event, Lock
 from typing import Any
@@ -9,6 +8,7 @@ from typing import Any
 import numpy as np
 from numpy import typing as npt
 
+from ..log import multiprocessing_context
 from ..mem.arr import SharedFloat64Array
 from ..mem.wkspace import SharedWorkspace
 from ..utils import SharedState
@@ -86,6 +86,6 @@ class Triangular(SharedFloat64Array):
 @dataclass
 class TaskSyncCollection(SharedState):
     # Indicates that can run another task.
-    can_run: Event = field(default_factory=mp.Event)
+    can_run: Event = field(default_factory=multiprocessing_context.Event)
     # Ensures that only one multithreaded workload can run at a time.
-    multithreading_lock: Lock = field(default_factory=mp.Lock)
+    multithreading_lock: Lock = field(default_factory=multiprocessing_context.Lock)

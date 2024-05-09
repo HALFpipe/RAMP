@@ -17,7 +17,7 @@ from tqdm.auto import tqdm
 
 from ..log import logger
 from ..mem.wkspace import SharedWorkspace
-from ..utils import IterationOrder, make_pool_or_null_context
+from ..utils import IterationOrder, make_pool_or_null_context, soft_close
 from ..vcf.base import VCFFile
 from .base import TaskSyncCollection, Triangular
 from .tsqr import TallSkinnyQR
@@ -184,12 +184,7 @@ class TriCalc:
             t.should_exit.set()
 
             for _, proc in tasks:
-                proc.terminate()
-                proc.join(timeout=1)
-                if proc.is_alive():
-                    proc.kill()
-                proc.join()
-                proc.close()
+                soft_close(proc)
 
         return tri_paths_by_chromosome
 

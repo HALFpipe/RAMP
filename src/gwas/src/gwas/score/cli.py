@@ -119,7 +119,7 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
     output_directory = Path(arguments.output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
 
-    setup_logging(level=arguments.log_level, log_path=output_directory)
+    setup_logging(level=arguments.log_level, path=output_directory)
 
     size: int | None = None
     if arguments.mem_gb is not None:

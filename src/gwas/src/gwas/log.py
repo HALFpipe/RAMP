@@ -42,7 +42,9 @@ def _showwarning(
     )
 
 
-def setup_logging(level: str | int, log_path: Path | None = None) -> None:
+def setup_logging(
+    level: str | int, path: Path | None = None, stream: bool = True
+) -> None:
     root = logging.getLogger()
     root.setLevel(level)
 
@@ -51,12 +53,12 @@ def setup_logging(level: str | int, log_path: Path | None = None) -> None:
         "%(message)s (%(filename)s:%(lineno)s)"
     )
 
-    handlers: list[logging.Handler] = [
-        logging.StreamHandler(),
-    ]
-    if log_path is not None:
+    handlers: list[logging.Handler] = []
+    if stream is True:
+        handlers.append(logging.StreamHandler())
+    if path is not None:
         handlers.append(
-            logging.FileHandler(log_path / "log.txt", "a", errors="backslashreplace")
+            logging.FileHandler(path / "log.txt", "a", errors="backslashreplace")
         )
     for handler in handlers:
         handler.setFormatter(formatter)
@@ -67,6 +69,8 @@ def setup_logging(level: str | int, log_path: Path | None = None) -> None:
     global logging_thread
     logging_thread = LoggingThread()
     logging_thread.start()
+
+    logger.debug(f"Configured logging with handlers {handlers}")
 
 
 def worker_configurer(

@@ -46,12 +46,11 @@ class ZstdTextCompressionMethod(TextCompressionMethod):
 
 CompressionMethod = Blosc2CompressionMethod | TextCompressionMethod
 
-blosc2_zstd_bitshuffle = Blosc2CompressionMethod(
+blosc2_zstd = Blosc2CompressionMethod(
     codec=blosc2.Codec.ZSTD,
     clevel=9,
-    filters=(blosc2.Filter.BITSHUFFLE,),
 )
-default_compression_method = blosc2_zstd_bitshuffle
+default_compression_method = blosc2_zstd
 compression_methods: Mapping[str, CompressionMethod] = dict(
     zstd_text=ZstdTextCompressionMethod(suffix=".txt.zst", level=11),
     zstd_ultra_text=ZstdTextCompressionMethod(suffix=".txt.zst", level=22),
@@ -59,21 +58,16 @@ compression_methods: Mapping[str, CompressionMethod] = dict(
     xzip_text=TextCompressionMethod(suffix=".txt.xz"),
     bzip2_text=TextCompressionMethod(suffix=".txt.bz2"),
     lz4_text=TextCompressionMethod(suffix=".txt.lz4"),
-    blosc2_zstd=Blosc2CompressionMethod(
-        codec=blosc2.Codec.ZSTD,
-        clevel=9,
-    ),
+    blosc2_zstd=blosc2_zstd,
     blosc2_zstd_shuffle=Blosc2CompressionMethod(
         codec=blosc2.Codec.ZSTD,
         clevel=9,
         filters=(blosc2.Filter.SHUFFLE,),
     ),
-    blosc2_zstd_bitshuffle=blosc2_zstd_bitshuffle,
-    blosc2_zstd_bitshuffle_use_dict=Blosc2CompressionMethod(
+    blosc2_zstd_bitshuffle=Blosc2CompressionMethod(
         codec=blosc2.Codec.ZSTD,
         clevel=9,
         filters=(blosc2.Filter.BITSHUFFLE,),
-        use_dict=True,
     ),
     blosc2_zstd_bytedelta=Blosc2CompressionMethod(
         codec=blosc2.Codec.ZSTD,

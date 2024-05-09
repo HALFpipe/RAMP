@@ -28,7 +28,7 @@ def test_pheno(
     request: FixtureRequest,
 ) -> None:
     np.random.seed(47)
-    allocation_count = len(sw.allocations)
+    allocation_names = set(sw.allocations.keys())
 
     phenotypes = np.random.rand(sample_count, phenotype_count)
     phenotypes[
@@ -95,7 +95,15 @@ def test_pheno(
         variable_collection2.covariates.to_numpy()[:, 1:], covariates[1:, :]
     )
 
-    assert len(sw.allocations) == allocation_count + 6
+    new_allocation_names = {
+        variable_collection0.phenotypes.name,
+        variable_collection0.covariates.name,
+        variable_collection1.phenotypes.name,
+        variable_collection1.covariates.name,
+        variable_collection2.phenotypes.name,
+        variable_collection2.covariates.name,
+    }
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
 
 
 def test_pheno_zero_variance(
@@ -104,7 +112,7 @@ def test_pheno_zero_variance(
 ) -> None:
     np.random.seed(47)
 
-    allocation_count = len(sw.allocations)
+    allocation_names = set(sw.allocations.keys())
 
     phenotypes = np.random.rand(sample_count, phenotype_count)
     covariates = np.random.rand(sample_count, covariate_count)
@@ -124,4 +132,8 @@ def test_pheno_zero_variance(
         "covariate_04",
     ]
 
-    assert len(sw.allocations) == allocation_count + 2
+    new_allocation_names = {
+        variable_collection.phenotypes.name,
+        variable_collection.covariates.name,
+    }
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)

@@ -141,9 +141,6 @@ class Blosc2FileArray(FileArray[ScalarType]):
             self.dump_metadata()
 
         array = self.array
-
-        logger.debug(f"Using Blosc2 array {array.info}")
-
         if array.shape != self.shape or array.dtype != self.dtype:
             raise ValueError(
                 f'Existing array at "{self.file_path}" with shape {array.shape} and '

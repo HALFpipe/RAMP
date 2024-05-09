@@ -160,6 +160,7 @@ class SharedArray(Generic[ScalarType]):
         else:
             kwargs = {}
 
+        assert global_lock is not None
         with global_lock:
             name = cls.get_name(sw, **kwargs)
             sw.alloc(name, *shape, dtype=dtype)
@@ -242,16 +243,16 @@ class SharedArray(Generic[ScalarType]):
         None
 
         """
-        # with self.sw.lock:
-        allocations = self.sw.allocations
-        a = allocations[self.name]
+        with global_lock:
+            allocations = self.sw.allocations
+            a = allocations[self.name]
 
-        # calculate size in bytes
-        itemsize = np.dtype(a.dtype).itemsize
-        size = int(np.prod(shape) * itemsize)
+            # calculate size in bytes
+            itemsize = np.dtype(a.dtype).itemsize
+            size = int(np.prod(shape) * itemsize)
 
-        allocations[self.name] = Allocation(a.start, size, shape, a.dtype)
-        self.sw.allocations = allocations
+            allocations[self.name] = Allocation(a.start, size, shape, a.dtype)
+            self.sw.allocations = allocations
 
     @classmethod
     def merge(cls, *arrays: Self) -> Self:
@@ -275,41 +276,44 @@ class SharedArray(Generic[ScalarType]):
             If the allocations are not contiguous or have different dtypes or
             incompatible shapes.
         """
-        names = [a.name for a in arrays]
-        sw = arrays[0].sw
+        with global_lock:
+            names = [a.name for a in arrays]
+            sw = arrays[0].sw
 
-        allocations = sw.allocations
-        to_merge = [(name, a) for name, a in allocations.items() if name in names]
-        to_merge.sort(key=lambda t: t[-1].start)
+            allocations = sw.allocations
+            to_merge = [(name, a) for name, a in allocations.items() if name in names]
+            to_merge.sort(key=lambda t: t[-1].start)
 
-        # Check contiguous
-        for (_, a), (_, b) in pairwise(to_merge):
-            if a.start + a.size != b.start:
-                raise ValueError(f'Allocations "{a}" and "{b}" are not contiguous')
+            # Check contiguous
+            for (_, a), (_, b) in pairwise(to_merge):
+                if a.start + a.size != b.start:
+                    raise ValueError(f'Allocations "{a}" and "{b}" are not contiguous')
 
-        # Determine dtype
-        dtype_set = set(a.dtype for _, a in to_merge)
-        if len(dtype_set) != 1:
-            raise ValueError("Allocations have different dtypes")
-        (dtype,) = dtype_set
+            # Determine dtype
+            dtype_set = set(a.dtype for _, a in to_merge)
+            if len(dtype_set) != 1:
+                raise ValueError("Allocations have different dtypes")
+            (dtype,) = dtype_set
 
-        # determine size
-        start = min(a.start for _, a in to_merge)
-        size = sum(a.size for _, a in to_merge)
+            # determine size
+            start = min(a.start for _, a in to_merge)
+            size = sum(a.size for _, a in to_merge)
 
-        tile_shape_set = set(a.shape[:-1] for _, a in to_merge)
-        if len(tile_shape_set) != 1:
-            raise ValueError("Allocations have incompatible shapes")
-        (tile_shape,) = tile_shape_set
-        shape = tuple([*tile_shape, sum(a.shape[-1] for _, a in to_merge)])
+            tile_shape_set = set(a.shape[:-1] for _, a in to_merge)
+            if len(tile_shape_set) != 1:
+                raise ValueError("Allocations have incompatible shapes")
+            (tile_shape,) = tile_shape_set
+            shape = tuple([*tile_shape, sum(a.shape[-1] for _, a in to_merge)])
 
-        for name, _ in to_merge:
-            del allocations[name]
+            for name, _ in to_merge:
+                del allocations[name]
 
-        name, _ = to_merge[0]
-        allocations[name] = Allocation(start, size, shape, dtype)
-        logger.debug(f'Created merged allocation "{name}" at {start} with size {size}')
-        sw.allocations = allocations
+            name, _ = to_merge[0]
+            allocations[name] = Allocation(start, size, shape, dtype)
+            logger.debug(
+                f'Created merged allocation "{name}" at {start} with size {size}'
+            )
+            sw.allocations = allocations
 
         return cls(name, sw)
 
@@ -339,13 +343,13 @@ class SharedFloat64Array(SharedArray[np.float64]):
             return
 
         # update array shape
-        # with self.sw.lock:
-        allocations = self.sw.allocations
-        a = allocations[self.name]
+        with global_lock:
+            allocations = self.sw.allocations
+            a = allocations[self.name]
 
-        allocations[self.name] = Allocation(a.start, a.size, a.shape[::-1], a.dtype)
+            allocations[self.name] = Allocation(a.start, a.size, a.shape[::-1], a.dtype)
 
-        self.sw.allocations = allocations
+            self.sw.allocations = allocations
 
     @overload
     def triangularize(

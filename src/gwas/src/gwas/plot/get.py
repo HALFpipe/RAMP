@@ -68,8 +68,8 @@ def calculate_chi_squared_p_value(
     invalid_stat = np.logical_or(invalid_u_stat, invalid_v_stat)
     if np.any(invalid_stat):
         logger.warning(
-            f"Got invalid stats for u {u_stat[invalid_stat]} and v "
-            f"values {v_stat[invalid_stat]}"
+            f"Got {np.count_nonzero(invalid_stat)} invalid stats for u "
+            f"{u_stat[invalid_stat]} and v {v_stat[invalid_stat]}"
         )
 
     # Calculate chi-squared statistic in place
@@ -86,8 +86,8 @@ def calculate_chi_squared_p_value(
     invalid_p_value = np.logical_and(np.logical_not(invalid_stat), invalid_p_value)
     if np.any(invalid_p_value):
         logger.warning(
-            f"Got invalid p-values {u_stat[invalid_p_value]} for chi squared "
-            f"values {v_stat[invalid_p_value]}"
+            f"Got {np.count_nonzero(invalid_p_value)} invalid p-values "
+            f"{u_stat[invalid_p_value]} for chi squared values {v_stat[invalid_p_value]}"
         )
 
     invalid_mask = np.logical_or(invalid_stat, invalid_p_value)
@@ -101,8 +101,8 @@ def calculate_chi_squared_p_value(
     )
     if np.any(invalid_log_p_value):
         logger.warning(
-            f"Got invalid log p-values {v_stat[invalid_mask]} for p-values "
-            f"values {u_stat[invalid_mask]}"
+            f"Got {np.count_nonzero(invalid_log_p_value)} invalid log p-values "
+            f"{v_stat[invalid_mask]} for p-values values {u_stat[invalid_mask]}"
         )
 
 

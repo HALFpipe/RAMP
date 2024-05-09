@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum, auto
 from logging import LogRecord
 from multiprocessing import pool as mp_pool
+from multiprocessing.context import SpawnProcess
 from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event, RLock
 from queue import Empty
@@ -41,7 +42,7 @@ except ImportError:
 else:
     cleanup_on_sigterm()
 
-global_lock = multiprocessing_context.RLock()
+global_lock: RLock = multiprocessing_context.RLock()
 
 
 def parse_chromosome(chromosome: str) -> int | str:
@@ -114,7 +115,9 @@ def get_initargs() -> tuple[set[int] | None, Queue[LogRecord] | None, int | str,
     if hasattr(os, "sched_getaffinity"):
         sched_affinity = os.sched_getaffinity(0)
 
-    return (sched_affinity, logging_queue, logger.getEffectiveLevel(), global_lock)
+    initargs = (sched_affinity, logging_queue, logger.getEffectiveLevel(), global_lock)
+    logger.debug(f"Initializer arguments for child process are: {initargs}")
+    return initargs
 
 
 def initializer(
@@ -201,7 +204,7 @@ class SharedState:
                 return Action.EVENT
 
 
-class Process(mp.Process):
+class Process(SpawnProcess):
     def __init__(
         self,
         exception_queue: mp.Queue[Exception] | None,
@@ -224,6 +227,21 @@ class Process(mp.Process):
             logger.exception(f'An error occurred in process "{self.name}"', exc_info=e)
             if self.exception_queue is not None:
                 self.exception_queue.put_nowait(e)
+
+
+def soft_close(proc: Process) -> None:
+    try:
+        proc.terminate()
+        proc.join(timeout=1)
+        if proc.is_alive():
+            proc.kill()
+        proc.join()
+    except (ValueError, AttributeError, AssertionError):
+        pass
+    try:
+        proc.close()
+    except ValueError:
+        pass
 
 
 def invert_pivot(pivot: npt.NDArray[np.uint32]) -> npt.NDArray[np.uint32]:
@@ -349,3 +367,8 @@ def make_variant_mask(
         minor_allele_frequency_cutoff,
     ) & greater_or_close(r_squared, r_squared_cutoff)
     return variant_mask
+
+
+def get_lock_name(lock: RLock) -> str:
+    assert hasattr(lock, "_semlock")
+    return lock._semlock.name

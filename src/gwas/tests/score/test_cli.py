@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 
 from pathlib import Path
+from shutil import copyfile
 from typing import Mapping
 
 import numpy as np
 import pandas as pd
-from gwas.compression.pipe import CompressedTextReader
+from gwas.compression.pipe import CompressedTextReader, cache_suffix
 from gwas.eig import Eigendecomposition
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
@@ -13,6 +14,8 @@ from gwas.pheno import VariableCollection, combine
 from gwas.score.cli import parse_arguments
 from gwas.score.command import GwasCommand
 from gwas.score.job import SummaryCollection
+from gwas.vcf.base import VCFFile
+from pytest import FixtureRequest
 
 from ..conftest import chromosomes
 from ..utils import check_bias
@@ -24,19 +27,28 @@ def test_run(
     sw: SharedWorkspace,
     vcf_paths_by_chromosome: Mapping[int | str, Path],
     tri_paths_by_chromosome: Mapping[str | int, Path],
+    cache_path: Path,
     variable_collections: list[VariableCollection],
     eigendecompositions: list[Eigendecomposition],
     null_model_collections: list[NullModelCollection],
     chromosome: int | str,
     rmw_score: RmwScore,
+    request: FixtureRequest,
 ) -> None:
     for eig, b in zip(eigendecompositions, variable_collections, strict=True):
         assert eig.samples == b.samples
 
-    allocation_count = len(sw.allocations)
+    allocation_names = set(sw.allocations.keys())
+    new_allocation_names: set[str] = set()
 
-    vcf_paths = [str(vcf_paths_by_chromosome[c]) for c in chromosomes]
-    tri_paths = [str(tri_paths_by_chromosome[c]) for c in chromosomes if c != "X"]
+    vcf_paths = [vcf_paths_by_chromosome[c] for c in chromosomes]
+    tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes if c != "X"]
+
+    for vcf_path in vcf_paths:
+        vcf_metadata_cache_path = (
+            cache_path / f"{VCFFile.cache_key(vcf_path)}{cache_suffix}"
+        )
+        copyfile(vcf_metadata_cache_path, tmp_path / vcf_metadata_cache_path.name)
 
     phenotype_frames = [
         pd.DataFrame(
@@ -74,9 +86,9 @@ def test_run(
     arguments = parse_arguments(
         [
             "--vcf",
-            *vcf_paths,
+            *map(str, vcf_paths),
             "--tri",
-            *tri_paths,
+            *map(str, tri_paths),
             "--phenotypes",
             phenotype_path,
             "--covariates",
@@ -96,7 +108,11 @@ def test_run(
     for a, b in zip(command_variable_collections, variable_collections, strict=True):
         assert a.phenotype_names == b.phenotype_names
         assert a.samples == b.samples
-        a.free()
+
+        new_allocation_names.add(a.phenotypes.name)
+        new_allocation_names.add(a.covariates.name)
+
+        request.addfinalizer(a.free)
     del command
 
     command = GwasCommand(arguments, tmp_path, sw)
@@ -175,4 +191,4 @@ def test_run(
 
     assert is_ok
 
-    assert len(sw.allocations) == allocation_count
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)

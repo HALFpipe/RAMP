@@ -16,7 +16,7 @@ from numpy import typing as npt
 from psutil import virtual_memory
 
 from ..log import logger
-from ..utils import global_lock
+from ..utils import get_lock_name, global_lock
 from ._os import c_memfd_create
 
 if TYPE_CHECKING:
@@ -110,7 +110,9 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             numpy_dtype = np.dtype(dtype)
 
         with global_lock:
-            logger.debug(f"Acquired {global_lock}")
+            logger.debug(
+                f"Acquired {global_lock} with name {get_lock_name(global_lock)}"
+            )
             allocations = self.allocations
             if name in allocations:
                 raise ValueError(f'Allocation "{name}" already exists')
@@ -146,7 +148,9 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
 
     def free(self, name: str) -> None:
         with global_lock:
-            logger.debug(f"Acquired {global_lock}")
+            logger.debug(
+                f"Acquired {global_lock} with name {get_lock_name(global_lock)}"
+            )
             allocations = self.allocations
             del allocations[name]
             self.allocations = allocations
@@ -197,14 +201,20 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
 
     @allocations.setter
     def allocations(self, allocations: dict[str, Allocation]) -> None:
-        logger.debug(f"Updating allocations to be: {pformat(allocations)}")
-        dict_size = allocations["index"].size
-        dict_bytes = pickle.dumps(allocations)
+        acquired_lock = global_lock.acquire(block=False)
+        if acquired_lock is False:
+            raise RuntimeError("Global lock was not acquired")
+        logger.debug(f"Acquired {global_lock} with name {get_lock_name(global_lock)}")
+        try:
+            dict_size = allocations["index"].size
+            dict_bytes = pickle.dumps(allocations)
 
-        if len(dict_bytes) > dict_size:
-            raise ValueError
+            if len(dict_bytes) > dict_size:
+                raise ValueError
 
-        self.buf[: len(dict_bytes)] = dict_bytes
+            self.buf[: len(dict_bytes)] = dict_bytes
+        finally:
+            global_lock.release()
 
     def close(self) -> None:
         self.buf.close()

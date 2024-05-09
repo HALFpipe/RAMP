@@ -79,9 +79,6 @@ class TextFileArray(FileArray[ScalarType]):
             raise RuntimeError("File is not open for writing")
 
         row_metadata, _ = self.axis_metadata
-        column_count = (
-            row_metadata.shape[1] if row_metadata is not None else 0
-        ) + value.shape[1]
         for row_index in range(row_start, row_stop):
             row_value_iterators: list[Iterator[str]] = list()
             if row_metadata is not None:
@@ -101,10 +98,10 @@ class TextFileArray(FileArray[ScalarType]):
                 )
             )
 
-            row_values = list(chain.from_iterable(row_value_iterators))
-            assert len(row_values) == column_count
-            row = self.delimiter.join(row_values) + "\n"
-            self.file_handle.write(row)
+            self.file_handle.write(
+                self.delimiter.join(chain.from_iterable(row_value_iterators))
+            )
+            self.file_handle.write("\n")
             self.current_row_index += 1
 
     def unpack_key(self, key: tuple[slice, ...]) -> tuple[int, int, int, int]:

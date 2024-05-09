@@ -14,11 +14,14 @@ def test_calc_worker(
     vcf_file: VCFFile,
     genotypes_array: SharedFloat64Array,
     sw: SharedWorkspace,
-    eig: Eigendecomposition,
-    nm: NullModelCollection,
+    eigendecompositions: list[Eigendecomposition],
+    null_model_collections: list[NullModelCollection],
     request: pytest.FixtureRequest,
 ) -> None:
-    allocation_count = len(sw.allocations)
+    allocation_names = set(sw.allocations.keys())
+
+    eig = eigendecompositions[0]
+    nm = null_model_collections[0]
 
     sample_count, variant_count = genotypes_array.shape
     phenotype_count = nm.phenotype_count
@@ -31,14 +34,16 @@ def test_calc_worker(
     request.addfinalizer(stat_array.free)
 
     ec = EigendecompositionCollection.from_eigendecompositions(
-        vcf_file,
-        [eig],
+        vcf_file, [eig], base_samples=vcf_file.samples
     )
+    request.addfinalizer(ec.free)
 
     (
         inverse_variance_array,
         scaled_residuals_array,
     ) = nm.get_arrays_for_score_calc()
+    request.addfinalizer(inverse_variance_array.free)
+    request.addfinalizer(scaled_residuals_array.free)
     inverse_variance_arrays: list[SharedFloat64Array] = [inverse_variance_array]
     scaled_residuals_arrays: list[SharedFloat64Array] = [scaled_residuals_array]
 
@@ -61,4 +66,11 @@ def test_calc_worker(
     )
     calc_worker.func()
 
-    assert len(sw.allocations) == allocation_count + 2
+    new_allocation_names = {
+        test_rotated_genotypes_array.name,
+        stat_array.name,
+        ec.eigenvector_arrays[0].name,
+        inverse_variance_array.name,
+        scaled_residuals_array.name,
+    }
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
