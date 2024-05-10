@@ -27,6 +27,7 @@ variant_columns = [
 class CyVCF2VCFFile(VCFFile):
     def __init__(self, file_path: str | Path, samples: set[str] | None = None) -> None:
         super().__init__()
+        self.path = file_path
         if isinstance(file_path, Path):
             file_path = str(file_path)
         if file_path.endswith(".zst"):
@@ -56,6 +57,8 @@ class CyVCF2VCFFile(VCFFile):
         )
         self.variant_indices = np.array([], dtype=np.uint32)
 
+        self.vcf_variants = self.make_data_frame(self.vcf)
+
     # def set_samples(self, samples: set[str]):
     #    super().set_samples(samples)
     #    self.samples = [sample for sample in self.samples if sample in samples]
@@ -65,7 +68,7 @@ class CyVCF2VCFFile(VCFFile):
     #    )
 
     @staticmethod
-    def make_data_frame(vcf: VCF) -> pd.DataFrame:
+    def make_data_frame(vcf) -> pd.DataFrame:
         # Convert VCF data from cyvcf2 to a DataFrame
         variants = []
         for variant in vcf:
@@ -109,6 +112,7 @@ class CyVCF2VCFFile(VCFFile):
         #         f"Expected shape {(self.variant_count, self.sample_count)} for "
         #         f"variable `dosages` but received {dosages.shape}"
         #     )
+        self.vcf = VCF(self.path)
         for i, variant_idx in enumerate(self.variant_indices):
             variant = next((v for j, v in enumerate(self.vcf) if j == variant_idx), None)
             if variant is not None:
