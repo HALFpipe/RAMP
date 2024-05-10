@@ -25,7 +25,7 @@ variant_columns = [
 
 
 class CyVCF2VCFFile(VCFFile):
-    def __init__(self, file_path: str | Path) -> None:
+    def __init__(self, file_path: str | Path, samples: set[str] | None = None) -> None:
         super().__init__()
         if isinstance(file_path, Path):
             file_path = str(file_path)
@@ -34,6 +34,11 @@ class CyVCF2VCFFile(VCFFile):
                 self.vcf = VCF(f)
         else:
             self.vcf = VCF(file_path)
+
+        if samples is not None:
+            sample_list = ",".join(samples).encode("utf-8")
+            self.vcf.set_samples(sample_list)
+
         self.vcf_samples = list(self.vcf.samples)
 
         # self.all_variants = [v for v in self.vcf]
@@ -43,13 +48,13 @@ class CyVCF2VCFFile(VCFFile):
         self.sample_indices = np.array([], dtype=np.uint32)
         self.variant_indices = np.array([], dtype=np.uint32)
 
-    def set_samples(self, samples: set[str]):
-        super().set_samples(samples)
-        self.samples = [sample for sample in self.samples if sample in samples]
-        self.sample_indices = np.array(
-            [self.vcf_samples.index(s) for s in self.samples if s in self.vcf_samples],
-            dtype=np.uint32,
-        )
+    # def set_samples(self, samples: set[str]):
+    #    super().set_samples(samples)
+    #    self.samples = [sample for sample in self.samples if sample in samples]
+    #    self.sample_indices = np.array(
+    #        [self.vcf_samples.index(s) for s in self.samples if s in self.vcf_samples],
+    #        dtype=np.uint32,
+    #    )
 
     @staticmethod
     def make_data_frame(vcf: VCF) -> pd.DataFrame:
