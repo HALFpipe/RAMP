@@ -36,16 +36,24 @@ class CyVCF2VCFFile(VCFFile):
             self.vcf = VCF(file_path)
 
         if samples is not None:
-            sample_list = ",".join(samples).encode("utf-8")
+            # sample_list = ",".join(samples).encode("utf-8")
+            sample_list = list(samples)
             self.vcf.set_samples(sample_list)
 
         self.vcf_samples = list(self.vcf.samples)
 
         # self.all_variants = [v for v in self.vcf]
-        self.vcf_variants = self.make_data_frame(self.vcf)  # all variants in the file
-        self.samples: list[str]  # Samples selected for reading
+        # self.vcf_variants = self.make_data_frame(self.vcf)  # all variants in the file
 
-        self.sample_indices = np.array([], dtype=np.uint32)
+        self.samples: list[str] = (
+            list(samples) if samples else []
+        )  # why do we need this?
+
+        # self.sample_indices = np.array([], dtype=np.uint32)
+        self.sample_indices = np.array(
+            [self.vcf_samples.index(s) for s in self.samples if s in self.vcf_samples],
+            dtype=np.uint32,
+        )
         self.variant_indices = np.array([], dtype=np.uint32)
 
     # def set_samples(self, samples: set[str]):
