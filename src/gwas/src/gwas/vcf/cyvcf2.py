@@ -36,7 +36,7 @@ class CyVCF2VCFFile(VCFFile):
             self.vcf = VCF(file_path)
         self.vcf_samples = list(self.vcf.samples)
 
-        self.all_variants = [v for v in self.vcf]
+        # self.all_variants = [v for v in self.vcf]
         self.vcf_variants = self.make_data_frame(self.vcf)  # all variants in the file
         self.samples: list[str]  # Samples selected for reading
 
@@ -44,6 +44,7 @@ class CyVCF2VCFFile(VCFFile):
         self.variant_indices = np.array([], dtype=np.uint32)
 
     def set_samples(self, samples: set[str]):
+        super().set_samples(samples)
         self.samples = [sample for sample in self.samples if sample in samples]
         self.sample_indices = np.array(
             [self.vcf_samples.index(s) for s in self.samples if s in self.vcf_samples],
@@ -83,12 +84,14 @@ class CyVCF2VCFFile(VCFFile):
         ]
         self.variant_indices = np.array(cutoff_indices, dtype=np.uint32)
 
+    # def read(self, dosages: npt.NDArray) -> None:
+    #    for i, variant_idx in enumerate(self.variant_indices):
+    #        variant = self.all_variants[variant_idx]
+    #        dosages[i, :] = [
+    #            variant.format("DS")[idx][0] for idx in self.sample_indices
+    #        ]  # for loop rausnehmen?
     def read(self, dosages: npt.NDArray) -> None:
-        for i, variant_idx in enumerate(self.variant_indices):
-            variant = self.all_variants[variant_idx]
-            dosages[i, :] = [
-                variant.format("DS")[idx][0] for idx in self.sample_indices
-            ]  # for loop rausnehmen?
+        return super().read(dosages)
 
     def __exit__(
         self,
