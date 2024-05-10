@@ -7,6 +7,8 @@ import pandas as pd
 from cyvcf2 import VCF
 from numpy import typing as npt
 
+from gwas.compression.pipe import CompressedBytesReader
+
 from .base import VCFFile
 
 variant_columns = [
@@ -25,7 +27,13 @@ variant_columns = [
 class CyVCF2VCFFile(VCFFile):
     def __init__(self, file_path: str | Path) -> None:
         super().__init__()
-        self.vcf = VCF(file_path)
+        if isinstance(file_path, Path):
+            file_path = str(file_path)
+        if file_path.endswith(".zst"):
+            with CompressedBytesReader(file_path=file_path) as f:
+                self.vcf = VCF(f)
+        else:
+            self.vcf = VCF(file_path)
         self.vcf_samples = list(self.vcf.samples)
 
         self.all_variants = [v for v in self.vcf]
