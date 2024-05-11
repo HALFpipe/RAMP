@@ -113,7 +113,14 @@ class CyVCF2VCFFile(VCFFile):
         #         f"Expected shape {(self.variant_count, self.sample_count)} for "
         #         f"variable `dosages` but received {dosages.shape}"
         #     )
-        self.vcf = VCF(self.path)
+        if isinstance(self.path, Path):
+            file_path = str(self.path)
+        if file_path.endswith(".zst"):
+            with CompressedBytesReader(file_path=file_path) as f:
+                self.vcf = VCF(f)
+        else:
+            self.vcf = VCF(self.path)
+        # self.vcf = VCF(self.path)
         for i, variant_idx in enumerate(self.variant_indices):
             variant = next((v for j, v in enumerate(self.vcf) if j == variant_idx), None)
             if variant is not None:
