@@ -58,7 +58,7 @@ class CyVCF2VCFFile(VCFFile):
         )
         self.variant_indices = np.array([], dtype=np.uint32)
 
-        self.vcf_variants = self.make_data_frame(self.vcf)
+        # self.vcf_variants = self.make_data_frame(self.vcf)
 
     # def set_samples(self, samples: set[str]):
     #    super().set_samples(samples)
