@@ -27,48 +27,40 @@ variant_columns = [
 class CyVCF2VCFFile(VCFFile):
     def __init__(self, file_path: str | Path, samples: set[str] | None = None) -> None:
         super().__init__()
-        self.path = file_path
-        if isinstance(file_path, Path):
-            file_path = str(file_path)
-        if file_path.endswith(".zst"):
-            with CompressedBytesReader(file_path=file_path) as f:
+        # if isinstance(self.file_path, Path):
+        #     file_path = str(file_path)
+        self.file_path = str(file_path)
+        if samples is not None:
+            self.samples = list(samples)
+        self.initialize_vcf_file()
+
+    def initialize_vcf_file(self):
+        if self.file_path.endswith(".zst"):
+            with CompressedBytesReader(file_path=self.file_path) as f:
                 self.vcf = VCF(f)
         else:
-            self.vcf = VCF(file_path)
+            self.vcf = VCF(self.file_path)
 
-        self.vcf_samples = self.vcf.samples  # renamed to samples
+        if self.samples:
+            # Set samples if provided
+            self.vcf.set_samples(self.samples)
 
-        if samples is not None:
-            # sample_list = ",".join(samples).encode("utf-8")
-            sample_list = list(samples)
-            # self.vcf.set_samples(sample_list)
-            # self.vcf.set_samples(",".join(samples).encode("utf-8"))
-            self.vcf.set_samples(sample_list)
-            print(len(self.vcf_samples))
-
-        # self.all_variants = [v for v in self.vcf]
-        # self.vcf_variants = self.make_data_frame(self.vcf)  # all variants in the file
-
-        self.samples: list[str] = (
-            list(samples) if samples else []
-        )  # needed for sample count
-
-        # self.sample_indices = np.array([], dtype=np.uint32)
-        self.sample_indices = np.array(
-            [self.vcf_samples.index(s) for s in self.samples if s in self.vcf_samples],
-            dtype=np.uint32,
-        )
-        self.variant_indices = np.array([], dtype=np.uint32)
-
+        self.vcf_samples = list(self.vcf.samples)
+        print("Samples after setting:", self.vcf_samples)
         self.vcf_variants = self.create_dataframe()
 
-    # def set_samples(self, samples: set[str]):
-    #    super().set_samples(samples)
-    #    self.samples = [sample for sample in self.samples if sample in samples]
-    #    self.sample_indices = np.array(
-    #        [self.vcf_samples.index(s) for s in self.samples if s in self.vcf_samples],
-    #        dtype=np.uint32,
-    #    )
+        # self.vcf_samples = self.vcf.samples
+
+        # self.samples: list[str] = (
+        #     list(samples) if samples else []
+        # )  # needed for sample count
+
+        # self.sample_indices = np.array([], dtype=np.uint32)
+        # self.sample_indices = np.array(
+        #     [self.vcf_samples.index(s) for s in self.samples if s in self.vcf_samples],
+        #     dtype=np.uint32,
+        # )
+        # self.variant_indices = np.array([], dtype=np.uint32)
 
     def create_dataframe(self) -> pd.DataFrame:
         # Convert VCF data from cyvcf2 to a DataFrame
@@ -111,23 +103,12 @@ class CyVCF2VCFFile(VCFFile):
     #            variant.format("DS")[idx][0] for idx in self.sample_indices
     #        ]  # for loop rausnehmen?
     def read(self, dosages: npt.NDArray) -> None:
-        # if dosages.shape != (self.variant_count, self.sample_count):
-        #     raise ValueError(
-        #         f"Expected shape {(self.variant_count, self.sample_count)} for "
-        #         f"variable `dosages` but received {dosages.shape}"
-        #     )
-        print("IN READ")
-        if isinstance(self.path, Path):
-            file_path = str(self.path)
-        if file_path.endswith(".zst"):
-            with CompressedBytesReader(file_path=file_path) as f:
-                self.vcf = VCF(f)
-        else:
-            self.vcf = VCF(self.path)
-
-        if self.samples is not None:
-            self.vcf.set_samples(self.samples)
-            print("READ FUNC", len(self.vcf_samples))
+        if dosages.shape != (len(self.variant_indices), len(self.sample_indices)):
+            raise ValueError(
+                f"""Expected dosages array shape {(
+                len(self.variant_indices),
+                len(self.sample_indices))}, but got {dosages.shape}"""
+            )
 
         for i, variant_idx in enumerate(self.variant_indices):
             variant = next((v for j, v in enumerate(self.vcf) if j == variant_idx), None)
