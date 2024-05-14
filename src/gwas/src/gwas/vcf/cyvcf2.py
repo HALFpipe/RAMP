@@ -33,6 +33,7 @@ class CyVCF2VCFFile(VCFFile):
         self.samples = list(samples) if samples is not None else []
         self.vcf: VCF = None
         self.vcf_variants = None
+        self.variant_indices = np.array([], dtype=np.uint32)
         self.initialized = False
 
     def initialize_vcf_file(self):
