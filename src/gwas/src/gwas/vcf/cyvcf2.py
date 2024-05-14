@@ -108,12 +108,12 @@ class CyVCF2VCFFile(VCFFile):
     #            variant.format("DS")[idx][0] for idx in self.sample_indices
     #        ]  # for loop rausnehmen?
     def read(self, dosages: npt.NDArray) -> None:
-        if dosages.shape != (len(self.variant_indices), len(self.sample_indices)):
-            raise ValueError(
-                f"""Expected dosages array shape {(
-                len(self.variant_indices),
-                len(self.sample_indices))}, but got {dosages.shape}"""
-            )
+        # if dosages.shape != (len(self.variant_indices), len(self.sample_indices)):
+        #     raise ValueError(
+        #         f"""Expected dosages array shape {(
+        #         len(self.variant_indices),
+        #         len(self.sample_indices))}, but got {dosages.shape}"""
+        #     )
         self.initialize_vcf_file()
 
         variant_count = 0
