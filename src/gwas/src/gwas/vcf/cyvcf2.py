@@ -45,7 +45,7 @@ class CyVCF2VCFFile(VCFFile):
             else:
                 self.vcf = VCF(self.file_path)
 
-            self.vcf.set_samples(self.samples)
+            # self.vcf.set_samples(self.samples)
 
             if self.vcf:
                 self.vcf_samples = list(self.vcf.samples)
