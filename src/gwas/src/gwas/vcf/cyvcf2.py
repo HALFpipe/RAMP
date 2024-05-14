@@ -115,6 +115,7 @@ class CyVCF2VCFFile(VCFFile):
         #         f"Expected shape {(self.variant_count, self.sample_count)} for "
         #         f"variable `dosages` but received {dosages.shape}"
         #     )
+        print("IN READ")
         if isinstance(self.path, Path):
             file_path = str(self.path)
         if file_path.endswith(".zst"):
