@@ -114,6 +114,8 @@ class CyVCF2VCFFile(VCFFile):
         #         len(self.variant_indices),
         #         len(self.sample_indices))}, but got {dosages.shape}"""
         #     )
+        if dosages.size == 0:
+            return
         self.initialize_vcf_file()
 
         variant_count = 0
