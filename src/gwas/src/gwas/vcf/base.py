@@ -190,7 +190,10 @@ class VCFFile(AbstractContextManager):
             # from .cyvcf2 import CyVCF2VCFFile
             from gwas.vcf.cyvcf2 import CyVCF2VCFFile
 
-            vcf_file = CyVCF2VCFFile(file_path, samples=samples)
+            vcf_file = CyVCF2VCFFile(
+                file_path,
+                # samples=samples
+            )
         else:
             raise ValueError("Unsupported engine type: {}".format(engine))
 

@@ -24,7 +24,7 @@ variant_columns = [
 ]
 
 
-class CyVCF2VCFFile(VCFFile):
+class CyVCF2VCFFile2(VCFFile):
     def __init__(self, file_path: str | Path, samples: set[str] | None = None) -> None:
         super().__init__()
         # if isinstance(self.file_path, Path):
@@ -49,6 +49,15 @@ class CyVCF2VCFFile(VCFFile):
                 self.vcf.set_samples(self.samples)
             self.vcf_samples = list(self.vcf.samples)
             print("Samples after setting:", self.vcf_samples)
+            self.sample_indices = np.array(
+                [
+                    self.vcf_samples.index(s)
+                    for s in self.samples
+                    if s in self.vcf_samples
+                ],
+                dtype=np.uint32,
+            )
+            print("Sample indices:", self.sample_indices)
             self.initialized = True
 
         # self.vcf_samples = self.vcf.samples
@@ -152,6 +161,76 @@ class CyVCF2VCFFile(VCFFile):
             self.vcf.close()
             self.vcf = None
             self.initialized = False
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
+        return super().__exit__(exc_type, exc_value, traceback)
+
+
+class CyVCF2VCFFile(VCFFile):
+    def __init__(self, file_path: str | Path) -> None:
+        super().__init__()
+        self.file_path = str(file_path)
+        self.vcf: VCF = None
+        self.vcf_variants = None
+        self.vcf_variants: pd.DataFrame
+        self.variant_indices: npt.NDArray[np.uint32]
+
+    def return_vcf_object(self):
+        if self.file_path.endswith(".zst"):
+            with CompressedBytesReader(file_path=self.file_path) as f:
+                vcf = VCF(f)
+        else:
+            vcf = VCF(self.file_path)
+
+        return vcf
+
+    def create_dataframe(self) -> pd.DataFrame:
+        # Convert VCF data from cyvcf2 to a DataFrame
+        # self.vcf.set_samples(self.samples)
+        if not self.vcf:
+            vcf = self.return_vcf_object()
+            print("DATAFRAME CREATION")
+            variants = []
+            for variant in vcf:
+                variants.append(
+                    [
+                        variant.CHROM,
+                        variant.POS,
+                        variant.REF,
+                        variant.ALT[0] if variant.ALT else "",
+                        variant.INFO.get("IMPUTED", False),
+                        variant.INFO.get("AF", float("nan")),
+                        variant.INFO.get("MAF", float("nan")),
+                        variant.INFO.get("RSQ", float("nan")),
+                        variant.FORMAT,
+                    ]
+                )
+            self.vcf_variants = pd.DataFrame(variants, columns=variant_columns)
+            self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
+
+    def read(self, dosages: npt.NDArray) -> None:
+        if dosages.size == 0:
+            return
+        vcf = self.return_vcf_object()
+
+        variant_count = 0
+        for variant in vcf:
+            if variant_count in self.variant_indices:
+                if "DS" in variant.FORMAT:
+                    dosage_fields = variant.format("DS")
+                    if self.sample_indices is not None:
+                        dosage_fields = [dosage_fields[i] for i in self.sample_indices]
+                    dosages[variant_count, :] = dosage_fields
+                else:
+                    dosages[variant_count, :] = np.nan
+                variant_count += 1
+                if variant_count > max(self.variant_indices):
+                    break
 
     def __exit__(
         self,
