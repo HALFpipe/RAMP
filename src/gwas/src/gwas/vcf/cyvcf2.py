@@ -36,26 +36,27 @@ class CyVCF2VCFFile(VCFFile):
         else:
             self.vcf = VCF(file_path)
 
-        if samples is not None:
-            # sample_list = ",".join(samples).encode("utf-8")
-            sample_list = list(samples)
-            # self.vcf.set_samples(sample_list)
-            self.vcf.set_samples(",".join(sample_list).encode("utf-8"))
+        # if samples is not None:
+        #     # sample_list = ",".join(samples).encode("utf-8")
+        #     sample_list = list(samples)
+        #     # self.vcf.set_samples(sample_list)
+        #     #self.vcf.set_samples(",".join(samples).encode("utf-8"))
+        #     self.vcf.set_samples(sample_list)
 
-        self.vcf_samples = list(self.vcf.samples)  # renamed to samples
+        self.vcf_samples = self.vcf.samples  # renamed to samples
 
         # self.all_variants = [v for v in self.vcf]
         # self.vcf_variants = self.make_data_frame(self.vcf)  # all variants in the file
 
-        self.samples: list[str] = (
-            list(samples) if samples else []
-        )  # needed for sample count
-
-        # self.sample_indices = np.array([], dtype=np.uint32)
-        self.sample_indices = np.array(
-            [self.vcf_samples.index(s) for s in self.samples if s in self.vcf_samples],
-            dtype=np.uint32,
-        )
+        # self.samples: list[str] = (
+        #     list(samples) if samples else []
+        # )  # needed for sample count
+        #
+        # # self.sample_indices = np.array([], dtype=np.uint32)
+        # self.sample_indices = np.array(
+        #     [self.vcf_samples.index(s) for s in self.samples if s in self.vcf_samples],
+        #     dtype=np.uint32,
+        # )
         self.variant_indices = np.array([], dtype=np.uint32)
 
         self.vcf_variants = self.create_dataframe()
@@ -70,7 +71,7 @@ class CyVCF2VCFFile(VCFFile):
 
     def create_dataframe(self) -> pd.DataFrame:
         # Convert VCF data from cyvcf2 to a DataFrame
-
+        # self.vcf.set_samples(self.samples)
         variants = []
         for variant in self.vcf:
             variants.append(
@@ -120,7 +121,7 @@ class CyVCF2VCFFile(VCFFile):
                 self.vcf = VCF(f)
         else:
             self.vcf = VCF(self.path)
-        # self.vcf = VCF(self.path)
+
         for i, variant_idx in enumerate(self.variant_indices):
             variant = next((v for j, v in enumerate(self.vcf) if j == variant_idx), None)
             if variant is not None:
