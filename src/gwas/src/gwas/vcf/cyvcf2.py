@@ -44,19 +44,20 @@ class CyVCF2VCFFile(VCFFile):
         #     self.vcf.set_samples(sample_list)
 
         self.vcf_samples = self.vcf.samples  # renamed to samples
+        print(len(self.vcf_samples))
 
         # self.all_variants = [v for v in self.vcf]
         # self.vcf_variants = self.make_data_frame(self.vcf)  # all variants in the file
 
-        # self.samples: list[str] = (
-        #     list(samples) if samples else []
-        # )  # needed for sample count
-        #
-        # # self.sample_indices = np.array([], dtype=np.uint32)
-        # self.sample_indices = np.array(
-        #     [self.vcf_samples.index(s) for s in self.samples if s in self.vcf_samples],
-        #     dtype=np.uint32,
-        # )
+        self.samples: list[str] = (
+            list(samples) if samples else []
+        )  # needed for sample count
+
+        # self.sample_indices = np.array([], dtype=np.uint32)
+        self.sample_indices = np.array(
+            [self.vcf_samples.index(s) for s in self.samples if s in self.vcf_samples],
+            dtype=np.uint32,
+        )
         self.variant_indices = np.array([], dtype=np.uint32)
 
         self.vcf_variants = self.create_dataframe()
