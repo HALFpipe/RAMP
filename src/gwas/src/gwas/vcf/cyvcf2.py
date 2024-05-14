@@ -30,7 +30,7 @@ class CyVCF2VCFFile(VCFFile):
         # if isinstance(self.file_path, Path):
         #     file_path = str(file_path)
         self.file_path = str(file_path)
-        self.samples = list(samples) if samples is not None else []
+        self.samples = list(samples) if samples else []
         self.vcf: VCF = None
         self.vcf_variants = None
         self.variant_indices = np.array([], dtype=np.uint32)
@@ -45,10 +45,9 @@ class CyVCF2VCFFile(VCFFile):
             else:
                 self.vcf = VCF(self.file_path)
 
-            # self.vcf.set_samples(self.samples)
-
-            if self.vcf:
-                self.vcf_samples = list(self.vcf.samples)
+            if self.samples:
+                self.vcf.set_samples(self.samples)
+            self.vcf_samples = list(self.vcf.samples)
             print("Samples after setting:", self.vcf_samples)
             self.initialized = True
 
