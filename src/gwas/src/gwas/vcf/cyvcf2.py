@@ -30,8 +30,7 @@ class CyVCF2VCFFile(VCFFile):
         # if isinstance(self.file_path, Path):
         #     file_path = str(file_path)
         self.file_path = str(file_path)
-        if samples is not None:
-            self.samples = list(samples)
+        self.samples = list(samples) if samples is not None else []
         self.initialize_vcf_file()
 
     def initialize_vcf_file(self):
