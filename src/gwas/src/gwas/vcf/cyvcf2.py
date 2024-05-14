@@ -123,6 +123,10 @@ class CyVCF2VCFFile(VCFFile):
         else:
             self.vcf = VCF(self.path)
 
+        if self.samples is not None:
+            self.vcf.set_samples(self.samples)
+            print("READ FUNC", len(self.vcf_samples))
+
         for i, variant_idx in enumerate(self.variant_indices):
             variant = next((v for j, v in enumerate(self.vcf) if j == variant_idx), None)
             if variant is not None:
