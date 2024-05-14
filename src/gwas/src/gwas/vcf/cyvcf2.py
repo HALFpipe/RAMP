@@ -72,7 +72,7 @@ class CyVCF2VCFFile(VCFFile):
 
     def create_dataframe(self) -> pd.DataFrame:
         # Convert VCF data from cyvcf2 to a DataFrame
-        # self.vcf.set_samples(self.samples)
+        self.vcf.set_samples(self.samples)
         variants = []
         for variant in self.vcf:
             variants.append(
