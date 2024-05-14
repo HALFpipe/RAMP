@@ -31,22 +31,25 @@ class CyVCF2VCFFile(VCFFile):
         #     file_path = str(file_path)
         self.file_path = str(file_path)
         self.samples = list(samples) if samples is not None else []
-        self.initialize_vcf_file()
+        self.vcf: VCF = None
+        self.vcf_variants = None
+        self.initialized = False
 
     def initialize_vcf_file(self):
-        if self.file_path.endswith(".zst"):
-            with CompressedBytesReader(file_path=self.file_path) as f:
-                self.vcf = VCF(f)
-        else:
-            self.vcf = VCF(self.file_path)
+        if not self.initialized or self.vcf is None:
+            if self.file_path.endswith(".zst"):
+                with CompressedBytesReader(file_path=self.file_path) as f:
+                    self.vcf = VCF(f)
+            else:
+                self.vcf = VCF(self.file_path)
 
-        if self.samples:
-            # Set samples if provided
-            self.vcf.set_samples(self.samples)
+            if self.vcf and self.samples:
+                self.vcf.set_samples(self.samples)
 
-        self.vcf_samples = list(self.vcf.samples)
-        print("Samples after setting:", self.vcf_samples)
-        self.vcf_variants = self.create_dataframe()
+            if self.vcf:
+                self.vcf_samples = list(self.vcf.samples)
+            print("Samples after setting:", self.vcf_samples)
+            self.initialized = True
 
         # self.vcf_samples = self.vcf.samples
 
@@ -64,23 +67,26 @@ class CyVCF2VCFFile(VCFFile):
     def create_dataframe(self) -> pd.DataFrame:
         # Convert VCF data from cyvcf2 to a DataFrame
         # self.vcf.set_samples(self.samples)
-        print("DATAFRAME CREATION")
-        variants = []
-        for variant in self.vcf:
-            variants.append(
-                [
-                    variant.CHROM,
-                    variant.POS,
-                    variant.REF,
-                    variant.ALT[0] if variant.ALT else "",
-                    variant.INFO.get("IMPUTED", False),
-                    variant.INFO.get("AF", float("nan")),
-                    variant.INFO.get("MAF", float("nan")),
-                    variant.INFO.get("RSQ", float("nan")),
-                    variant.FORMAT,
-                ]
-            )
-        return pd.DataFrame(variants, columns=variant_columns)
+        if not self.vcf:
+            self.initialize_vcf_file()
+            print("DATAFRAME CREATION")
+            variants = []
+            for variant in self.vcf:
+                variants.append(
+                    [
+                        variant.CHROM,
+                        variant.POS,
+                        variant.REF,
+                        variant.ALT[0] if variant.ALT else "",
+                        variant.INFO.get("IMPUTED", False),
+                        variant.INFO.get("AF", float("nan")),
+                        variant.INFO.get("MAF", float("nan")),
+                        variant.INFO.get("RSQ", float("nan")),
+                        variant.FORMAT,
+                    ]
+                )
+            self.vcf_variants = pd.DataFrame(variants, columns=variant_columns)
+            self.close()
 
     def set_variants_from_cutoffs(
         self,
@@ -108,13 +114,42 @@ class CyVCF2VCFFile(VCFFile):
                 len(self.variant_indices),
                 len(self.sample_indices))}, but got {dosages.shape}"""
             )
+        self.initialize_vcf_file()
 
-        for i, variant_idx in enumerate(self.variant_indices):
-            variant = next((v for j, v in enumerate(self.vcf) if j == variant_idx), None)
-            if variant is not None:
-                dosages[i, :] = [
-                    float(variant.format("DS")[idx][0]) for idx in self.sample_indices
-                ]
+        variant_count = 0
+        for variant in self.vcf:
+            if variant_count in self.variant_indices:
+                for j, sample_idx in enumerate(self.sample_indices):
+                    try:
+                        dosages[variant_count, j] = (
+                            variant.format("DS")[sample_idx][0]
+                            if "DS" in variant.FORMAT
+                            else np.nan
+                        )
+                    except IndexError:
+                        dosages[variant_count, j] = np.nan
+                variant_count += 1
+                if variant_count > max(
+                    self.variant_indices
+                ):  # müssen max benutzen und nicht len!
+                    break
+
+        self.close()
+
+        # for i, variant_idx in enumerate(self.variant_indices):
+        #    variant = next((
+        # v for j, v in enumerate(self.vcf) if j == variant_idx), None
+        # )
+        #    if variant is not None:
+        #        dosages[i, :] = [
+        #            float(variant.format("DS")[idx][0]) for idx in self.sample_indices
+        #        ]
+
+    def close(self):
+        if self.vcf is not None:
+            self.vcf.close()
+            self.vcf = None
+            self.initialized = False
 
     def __exit__(
         self,
