@@ -36,15 +36,15 @@ class CyVCF2VCFFile(VCFFile):
         else:
             self.vcf = VCF(file_path)
 
-        # if samples is not None:
-        #     # sample_list = ",".join(samples).encode("utf-8")
-        #     sample_list = list(samples)
-        #     # self.vcf.set_samples(sample_list)
-        #     #self.vcf.set_samples(",".join(samples).encode("utf-8"))
-        #     self.vcf.set_samples(sample_list)
-
         self.vcf_samples = self.vcf.samples  # renamed to samples
         print(len(self.vcf_samples))
+
+        if samples is not None:
+            # sample_list = ",".join(samples).encode("utf-8")
+            sample_list = list(samples)
+            # self.vcf.set_samples(sample_list)
+            # self.vcf.set_samples(",".join(samples).encode("utf-8"))
+            self.vcf.set_samples(sample_list)
 
         # self.all_variants = [v for v in self.vcf]
         # self.vcf_variants = self.make_data_frame(self.vcf)  # all variants in the file
@@ -72,7 +72,7 @@ class CyVCF2VCFFile(VCFFile):
 
     def create_dataframe(self) -> pd.DataFrame:
         # Convert VCF data from cyvcf2 to a DataFrame
-        self.vcf.set_samples(self.samples)
+        # self.vcf.set_samples(self.samples)
         variants = []
         for variant in self.vcf:
             variants.append(
