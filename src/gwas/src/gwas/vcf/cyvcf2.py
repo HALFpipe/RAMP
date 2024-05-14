@@ -34,7 +34,7 @@ class CyVCF2VCFFile(VCFFile):
         self.vcf: VCF = None
         self.vcf_variants = None
         self.variant_indices = np.array([], dtype=np.uint32)
-        self.sample_indices: npt.NDArray[np.uint32]
+        self.sample_indices: npt.NDArray[np.uint32] = np.array([], dtype=np.uint32)
         self.initialized = False
 
     def initialize_vcf_file(self):
