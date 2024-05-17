@@ -175,6 +175,7 @@ class CyVCF2VCFFile(VCFFile):
     def __init__(
         self,
         file_path: str | Path,
+        samples: set[str] | None,
     ) -> None:
         super().__init__()
         self.file_path = str(file_path)
@@ -182,6 +183,8 @@ class CyVCF2VCFFile(VCFFile):
         self.vcf_variants = None
         self.vcf_variants: pd.DataFrame
         self.variant_indices: npt.NDArray[np.uint32]
+        if samples:
+            self.samples = list(samples)
         self.create_dataframe()
 
     def return_vcf_object(self):
@@ -197,6 +200,8 @@ class CyVCF2VCFFile(VCFFile):
         # Convert VCF data from cyvcf2 to a DataFrame
         # self.vcf.set_samples(self.samples)
         vcf = self.return_vcf_object()
+        if self.samples:
+            vcf.set_samples(self.samples)
         print("DATAFRAME CREATION")
         variants = []
         for i, variant in enumerate(vcf):
