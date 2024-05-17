@@ -178,11 +178,11 @@ class CyVCF2VCFFile(VCFFile):
     ) -> None:
         super().__init__()
         self.file_path = str(file_path)
-        # self.vcf: VCF = None
+        self.vcf: VCF = None
         self.vcf_variants = None
         self.vcf_variants: pd.DataFrame
         self.variant_indices: npt.NDArray[np.uint32]
-        self.create_dataframe()
+        # self.create_dataframe()
 
     def return_vcf_object(self):
         if self.file_path.endswith(".zst"):
