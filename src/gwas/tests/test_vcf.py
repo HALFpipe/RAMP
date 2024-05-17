@@ -32,7 +32,8 @@ def test_vcf_dataframe(
     vcf_path2 = "/fast/groups/ag_walter/work/opensnp/100/chr1.dose.vcf.zst"
     # vcf_path3 = "/fast/groups/ag_walter/work/opensnp/100/chr6.dose.vcf.zst"
     # vcf_file = VCFFile.from_path(vcf_path, engine=engine)
-    vcf_file = CyVCF2VCFFile(vcf_path2)
+    samples = {"1", "8"}
+    vcf_file = CyVCF2VCFFile(vcf_path2, samples)
 
     assert vcf_file.variant_count == 652195
 
