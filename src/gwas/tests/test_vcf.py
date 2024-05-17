@@ -28,9 +28,12 @@ def test_vcf_dataframe(
     # vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
 ):
     # vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
-    vcf_path = "/fast/groups/ag_walter/work/opensnp/100/chr2.dose.vcf.zst"
+    # vcf_path = "/fast/groups/ag_walter/work/opensnp/100/chr2.dose.vcf.zst"
+    vcf_path2 = "/fast/groups/ag_walter/work/opensnp/100/chr1.dose.vcf.zst"
+    # vcf_path3 = "/fast/groups/ag_walter/work/opensnp/100/chr6.dose.vcf.zst"
     # vcf_file = VCFFile.from_path(vcf_path, engine=engine)
-    vcf_file = CyVCF2VCFFile(vcf_path)
+    vcf_file = CyVCF2VCFFile(vcf_path2)
+
     assert vcf_file.variant_count == 652195
 
 
