@@ -199,14 +199,12 @@ class CyVCF2VCFFile(VCFFile):
     def create_dataframe(self) -> pd.DataFrame:
         # Convert VCF data from cyvcf2 to a DataFrame
         # self.vcf.set_samples(self.samples)
-        vcf = self.return_vcf_object()
+        vcf_df = self.return_vcf_object()
         if self.samples:
-            vcf.set_samples(self.samples)
+            vcf_df.set_samples(self.samples)
         print("DATAFRAME CREATION")
         variants = []
-        for i, variant in enumerate(vcf):
-            if i == 0:
-                continue
+        for _, variant in enumerate(vcf_df):
             variants.append(
                 [
                     variant.CHROM,
@@ -226,10 +224,12 @@ class CyVCF2VCFFile(VCFFile):
     def read(self, dosages: npt.NDArray) -> None:
         if dosages.size == 0:
             return
-        vcf = self.return_vcf_object()
+        vcf_read = self.return_vcf_object()
+        if self.samples:
+            vcf_read.set_samples(self.samples)
 
         variant_count = 0
-        for variant in vcf:
+        for variant in vcf_read:
             if variant_count in self.variant_indices:
                 if "DS" in variant.FORMAT:
                     dosage_fields = variant.format("DS")
