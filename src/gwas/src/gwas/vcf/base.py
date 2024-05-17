@@ -191,7 +191,7 @@ class VCFFile(AbstractContextManager):
             from .cyvcf2_test import CyVCF2VCFFile
 
             vcf_file = CyVCF2VCFFile(
-                # file_path,
+                file_path,
                 # samples=samples
             )
         else:

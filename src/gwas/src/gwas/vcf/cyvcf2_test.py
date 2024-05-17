@@ -174,8 +174,7 @@ class CyVCF2VCFFile2(VCFFile):
 class CyVCF2VCFFile(VCFFile):
     def __init__(
         self,
-        file_path: str
-        | Path = "/fast/groups/ag_walter/work/opensnp/100/chr22.dose.vcf.zst",
+        file_path: str | Path,
     ) -> None:
         super().__init__()
         self.file_path = str(file_path)

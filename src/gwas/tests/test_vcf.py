@@ -24,9 +24,10 @@ engines: Sequence[Engine] = list(Engine.__members__.values())
 @pytest.mark.parametrize("engine", engines)
 def test_vcf_dataframe(
     engine: Engine,
-    vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
+    # vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
 ):
-    vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
+    # vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
+    vcf_path = "/fast/groups/ag_walter/work/opensnp/100/chr22.dose.vcf.zst"
     vcf_file = VCFFile.from_path(vcf_path, engine=engine)
     assert vcf_file.variant_count == 652195
 
