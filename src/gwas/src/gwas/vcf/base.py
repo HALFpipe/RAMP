@@ -186,14 +186,14 @@ class VCFFile(AbstractContextManager):
             from .cpp import CppVCFFile
 
             vcf_file = CppVCFFile(file_path)
-        # elif engine == Engine.cyvcf2:
-        #     # from .cyvcf2 import CyVCF2VCFFile
-        #     from .cyvcf2_test import CyVCF2VCFFile
-        #
-        #     vcf_file = CyVCF2VCFFile(
-        #         file_path,
-        #         # samples=samples
-        #     )
+        elif engine == Engine.cyvcf2:
+            # from .cyvcf2 import CyVCF2VCFFile
+            from .cyvcf2_test import CyVCF2VCFFile
+
+            vcf_file = CyVCF2VCFFile(
+                file_path,
+                # samples=samples
+            )
         else:
             raise ValueError("Unsupported engine type: {}".format(engine))
 
