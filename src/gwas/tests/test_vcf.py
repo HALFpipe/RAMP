@@ -34,6 +34,8 @@ def test_vcf_dataframe(
     samples = None
     vcf_file = CyVCF2VCFFile(vcf_path, samples)
 
+    assert vcf_file is not None
+
     assert vcf_file.variant_count == 652195
 
 
