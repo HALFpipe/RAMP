@@ -178,7 +178,7 @@ class CyVCF2VCFFile(VCFFile):
     ) -> None:
         super().__init__()
         self.file_path = str(file_path)
-        self.vcf: VCF = None
+        # self.vcf: VCF = None
         self.vcf_variants = None
         self.vcf_variants: pd.DataFrame
         self.variant_indices: npt.NDArray[np.uint32]
@@ -196,26 +196,27 @@ class CyVCF2VCFFile(VCFFile):
     def create_dataframe(self) -> pd.DataFrame:
         # Convert VCF data from cyvcf2 to a DataFrame
         # self.vcf.set_samples(self.samples)
-        if not self.vcf:
-            vcf = self.return_vcf_object()
-            print("DATAFRAME CREATION")
-            variants = []
-            for variant in vcf:
-                variants.append(
-                    [
-                        variant.CHROM,
-                        variant.POS,
-                        variant.REF,
-                        variant.ALT[0] if variant.ALT else "",
-                        variant.INFO.get("IMPUTED", False),
-                        variant.INFO.get("AF", float("nan")),
-                        variant.INFO.get("MAF", float("nan")),
-                        variant.INFO.get("RSQ", float("nan")),
-                        variant.FORMAT,
-                    ]
-                )
-            self.vcf_variants = pd.DataFrame(variants, columns=variant_columns)
-            self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
+        vcf = self.return_vcf_object()
+        print("DATAFRAME CREATION")
+        variants = []
+        for i, variant in enumerate(vcf):
+            if i == 0:
+                continue
+            variants.append(
+                [
+                    variant.CHROM,
+                    variant.POS,
+                    variant.REF,
+                    variant.ALT[0] if variant.ALT else "",
+                    variant.INFO.get("IMPUTED", False),
+                    variant.INFO.get("AF", float("nan")),
+                    variant.INFO.get("MAF", float("nan")),
+                    variant.INFO.get("RSQ", float("nan")),
+                    variant.FORMAT,
+                ]
+            )
+        self.vcf_variants = pd.DataFrame(variants, columns=variant_columns)
+        self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
 
     def read(self, dosages: npt.NDArray) -> None:
         if dosages.size == 0:
