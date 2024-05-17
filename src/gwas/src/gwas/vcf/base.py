@@ -188,7 +188,7 @@ class VCFFile(AbstractContextManager):
             vcf_file = CppVCFFile(file_path)
         elif engine == Engine.cyvcf2:
             # from .cyvcf2 import CyVCF2VCFFile
-            from gwas.vcf.cyvcf2 import CyVCF2VCFFile
+            from gwas.src.gwas.vcf.cyvcf2_test import CyVCF2VCFFile
 
             vcf_file = CyVCF2VCFFile(
                 file_path,
