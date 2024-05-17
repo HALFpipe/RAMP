@@ -11,7 +11,7 @@ from gwas.compression.pipe import CompressedTextReader
 # from gwas.compression.pipe import CompressedTextReader
 # from gwas.vcf.base import Engine, Variant, VCFFile, VCFFileReader
 from gwas.vcf.base import Engine, Variant, VCFFile, VCFFileReader
-from gwas.vcf.cyvc2_test import CyVCF2VCFFile
+from gwas.vcf.cyvcf2 import CyVCF2VCFFile
 from numpy import typing as npt
 from tqdm.auto import tqdm
 
