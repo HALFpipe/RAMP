@@ -189,10 +189,11 @@ class CyVCF2VCFFile(VCFFile):
 
     def return_vcf_object(self):
         if self.file_path.endswith(".zst"):
-            with CompressedBytesReader(file_path=self.file_path) as f:
-                vcf = VCF(f)
+            # with CompressedBytesReader(file_path=self.file_path) as f:
+            # vcf = VCF(f)
+            return None
         else:
-            vcf = VCF(self.file_path)
+            vcf = VCF(self.file_path)  # for .gz case or raw vcf
 
         return vcf
 

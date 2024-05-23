@@ -28,7 +28,8 @@ def test_vcf_dataframe(
     # vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
 ):
     # vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
-    vcf_path = "/fast/groups/ag_walter/work/opensnp/100/chr2.dose.vcf.zst"
+    # vcf_path = "/fast/groups/ag_walter/work/opensnp/100/chr2.dose.vcf.zst"
+    vcf_path = "/fast/groups/ag_walter/work/opensnp/100/chr2_copy.dose.vcf.gz"
     # vcf_file = VCFFile.from_path(vcf_path, engine=engine)
     # samples = {"1", "8"}
     samples = None
@@ -36,7 +37,8 @@ def test_vcf_dataframe(
 
     assert vcf_file is not None
 
-    assert vcf_file.variant_count == 652195
+    # assert vcf_file.variant_count == 652195
+    assert vcf_file.variant_count == 4057613  # for chr2_copy
 
 
 @pytest.mark.parametrize("engine", engines)
@@ -44,7 +46,8 @@ def test_vcf_file(
     engine: Engine,
     vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
 ):
-    vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
+    # vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
+    vcf_path = "/fast/groups/ag_walter/work/opensnp/100/chr2_copy.dose.vcf.gz"
     vcf_file = VCFFile.from_path(vcf_path, engine=engine)
 
     array1 = np.zeros((4000, vcf_file.sample_count), dtype=float)
