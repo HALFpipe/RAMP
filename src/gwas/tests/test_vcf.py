@@ -12,6 +12,7 @@ from gwas.compression.pipe import CompressedTextReader
 # from gwas.vcf.base import Engine, Variant, VCFFile, VCFFileReader
 from gwas.vcf.base import Engine, Variant, VCFFile, VCFFileReader
 from numpy import typing as npt
+from pandas.testing import assert_frame_equal
 from tqdm.auto import tqdm
 
 from .utils import plink2, to_bgzip
@@ -125,7 +126,8 @@ def test_read(benchmark, vcf_path: Path, numpy_read_result: ReadResult, engine: 
     )
     read_result = benchmark(vcf_read, engine, vcf_path_adapted)
 
-    assert np.all(numpy_read_result.variants == read_result.variants)
+    # assert np.all(numpy_read_result.variants == read_result.variants)
+    assert assert_frame_equal(numpy_read_result.variants, read_result.variants)
     assert np.allclose(numpy_read_result.dosages, read_result.dosages)
 
 
