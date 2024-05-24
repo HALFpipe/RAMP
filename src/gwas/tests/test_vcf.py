@@ -67,7 +67,8 @@ def test_vcf_file(
     with vcf_file:
         vcf_file.variant_indices = np.arange(1000, dtype=np.uint32)
         vcf_file.read(array2)
-        vcf_file.variant_indices += 1000
+        # vcf_file.variant_indices += 1000
+        vcf_file.variant_indices = np.arange(1000, 2000, dtype=np.uint32)
         vcf_file.read(array3)
 
     assert np.allclose(array1[:1000, :], array2)
