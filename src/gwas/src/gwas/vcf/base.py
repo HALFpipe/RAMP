@@ -197,7 +197,7 @@ class VCFFile(AbstractContextManager):
                 )
             vcf_file = CyVCF2VCFFile(
                 file_path,
-                samples=samples,
+                # samples=samples,
             )
         else:
             raise ValueError("Unsupported engine type: {}".format(engine))

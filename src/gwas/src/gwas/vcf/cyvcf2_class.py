@@ -175,7 +175,7 @@ class CyVCF2VCFFile(VCFFile):
     def __init__(
         self,
         file_path: str | Path,
-        samples: set[str] | None,
+        # samples: set[str] | None,
     ) -> None:
         super().__init__()
         self.file_path = str(file_path)
@@ -183,7 +183,7 @@ class CyVCF2VCFFile(VCFFile):
         self.vcf_variants = None
         self.vcf_variants: pd.DataFrame
         self.variant_indices: npt.NDArray[np.uint32]
-        self.samples = list(samples) if samples else []
+        # self.samples = list(samples) if samples else []
 
         self.create_dataframe()
 
@@ -225,6 +225,11 @@ class CyVCF2VCFFile(VCFFile):
     def read(self, dosages: npt.NDArray) -> None:
         if dosages.size == 0:
             return
+        if dosages.shape[1] != self.sample_count:
+            raise ValueError(
+                "The output array does not match the number of samples "
+                f"({dosages.shape[1]} != {self.sample_count})"
+            )
         vcf_read = self.return_vcf_object()
         if self.samples:
             vcf_read.set_samples(self.samples)
