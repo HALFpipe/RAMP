@@ -226,10 +226,10 @@ class CyVCF2VCFFile(VCFFile):
                     variant.REF,
                     variant.ALT[0] if variant.ALT else "",
                     variant.INFO.get("IMPUTED", False),
-                    variant.INFO.get("AF", float("nan")),
-                    variant.INFO.get("MAF", float("nan")),
-                    variant.INFO.get("RSQ", float("nan")),
-                    variant.FORMAT,
+                    variant.INFO.get("AF", np.nan),
+                    variant.INFO.get("MAF", np.nan),
+                    variant.INFO.get("R2", np.nan),
+                    (":").join(variant.FORMAT),
                 ]
             )
         self.vcf_variants = pd.DataFrame(variants, columns=variant_columns)
