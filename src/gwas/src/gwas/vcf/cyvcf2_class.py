@@ -253,7 +253,15 @@ class CyVCF2VCFFile(VCFFile):
                 if "DS" in variant.FORMAT:
                     dosage_fields = variant.format("DS")
                     if self.sample_indices is not None:
-                        dosage_fields = [dosage_fields[i] for i in self.sample_indices]
+                        dosage_fields = np.array(
+                            [dosage_fields[i] for i in self.sample_indices]
+                        )
+                    if dosage_fields.shape[0] != dosages.shape[1]:
+                        raise ValueError(
+                            f"""Shape of dosage_fields does not match
+                            the number of samples"""
+                            f"({dosage_fields.shape[0]} != {dosages.shape[1]})"
+                        )
                     dosages[variant_count, :] = dosage_fields
                 else:
                     dosages[variant_count, :] = np.nan
