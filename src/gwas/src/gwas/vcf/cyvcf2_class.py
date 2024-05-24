@@ -248,33 +248,67 @@ class CyVCF2VCFFile(VCFFile):
             vcf_read.set_samples(self.samples)
 
         variant_index_iter = iter(self.variant_indices)
-        try:
-            current_index = next(variant_index_iter)
-        except StopIteration:
-            return  # if we have no variants
+        current_index = self.get_next_variant_index(variant_index_iter)
 
         pos_in_dosage = 0
         for variant_count, variant in enumerate(vcf_read):
             if variant_count == current_index:
-                if "DS" in variant.FORMAT:
-                    dosage_fields = variant.format("DS")
-                    dosage_fields = self.process_dosage_fields(
-                        dosage_fields=dosage_fields, sample_indices=self.sample_indices
-                    )
-                    if dosage_fields.shape[0] != dosages.shape[1]:
-                        raise ValueError(
-                            f"""Shape of dosage_fields does not match
-                            the number of samples"""
-                            f"({dosage_fields.shape[0]} != {dosages.shape[1]})"
-                        )
-                    dosages[pos_in_dosage, :] = dosage_fields
-                else:
-                    dosages[pos_in_dosage, :] = np.nan
+                self.process_variant(variant, pos_in_dosage, dosages)
                 pos_in_dosage += 1
-                try:
-                    current_index = next(variant_index_iter)
-                except StopIteration:
+                current_index = self.get_next_variant_index(variant_index_iter)
+                if current_index is None:
                     break
+
+        # variant_index_iter = iter(self.variant_indices)
+        # try:
+        #     current_index = next(variant_index_iter)
+        # except StopIteration:
+        #     return  # if we have no variants
+
+    #
+    # pos_in_dosage = 0
+    # for variant_count, variant in enumerate(vcf_read):
+    #     if variant_count == current_index:
+    #         if "DS" in variant.FORMAT:
+    #             dosage_fields = variant.format("DS")
+    #             dosage_fields = self.process_dosage_fields(
+    #                 dosage_fields=dosage_fields, sample_indices=self.sample_indices
+    #             )
+    #             if dosage_fields.shape[0] != dosages.shape[1]:
+    #                 raise ValueError(
+    #                     f"""Shape of dosage_fields does not match
+    #                     the number of samples"""
+    #                     f"({dosage_fields.shape[0]} != {dosages.shape[1]})"
+    #                 )
+    #             dosages[pos_in_dosage, :] = dosage_fields
+    #         else:
+    #             dosages[pos_in_dosage, :] = np.nan
+    #         pos_in_dosage += 1
+    #         try:
+    #             current_index = next(variant_index_iter)
+    #         except StopIteration:
+    #             break
+
+    def process_variant(self, variant, pos_in_dosage, dosages) -> None:
+        if "DS" in variant.FORMAT:
+            dosage_fields = variant.format("DS")
+            dosage_fields = self.process_dosage_fields(
+                dosage_fields, self.sample_indices
+            )
+            if dosage_fields.shape[0] != dosages.shape[1]:
+                raise ValueError(
+                    f"Shape of dosage_fields does not match the number of samples "
+                    f"({dosage_fields.shape[0]} != {dosages.shape[1]})"
+                )
+            dosages[pos_in_dosage, :] = dosage_fields
+        else:
+            dosages[pos_in_dosage, :] = np.nan
+
+    def get_next_variant_index(self, variant_index_iter):
+        try:
+            return next(variant_index_iter)
+        except StopIteration:
+            return None
 
     def process_dosage_fields(self, dosage_fields, sample_indices) -> np.ndarray:
         if sample_indices is not None:
