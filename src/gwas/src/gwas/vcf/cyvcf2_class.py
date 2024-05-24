@@ -175,7 +175,7 @@ class CyVCF2VCFFile(VCFFile):
     def __init__(
         self,
         file_path: str | Path,
-        # samples: set[str] | None,
+        samples: set[str] | None,
     ) -> None:
         super().__init__()
         self.file_path = str(file_path)
@@ -183,9 +183,12 @@ class CyVCF2VCFFile(VCFFile):
         self.vcf_variants = None
         self.vcf_variants: pd.DataFrame
         self.variant_indices: npt.NDArray[np.uint32]
-        # self.samples = list(samples) if samples else []
 
         self.create_dataframe()
+        # we set self.samples after the creation of our self.vcf object
+        # in make dataframe function to obtain all samples if samples
+        # is not specified we get all samples
+        self.samples = list(samples) if samples else self.vcf.samples
 
     def return_vcf_object(self):
         if self.file_path.endswith(".zst"):
@@ -199,13 +202,19 @@ class CyVCF2VCFFile(VCFFile):
 
     def create_dataframe(self) -> pd.DataFrame:
         # Convert VCF data from cyvcf2 to a DataFrame
+
+        # vcf_df = self.return_vcf_object()
+        self.vcf = self.return_vcf_object()
+        # we do not need to set samples here since we
+        # do not use sample columns to make the dataframe
+        # if self.samples:
+        # vcf_df.set_samples(self.samples)
         # self.vcf.set_samples(self.samples)
-        vcf_df = self.return_vcf_object()
-        if self.samples:
-            vcf_df.set_samples(self.samples)
+
         print("DATAFRAME CREATION")
         variants = []
-        for _, variant in enumerate(vcf_df):
+        # for _, variant in enumerate(vcf_df):
+        for _, variant in enumerate(self.vcf):
             variants.append(
                 [
                     variant.CHROM,
