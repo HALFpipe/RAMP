@@ -21,23 +21,25 @@ chromosome: int = 22
 engines: Sequence[Engine] = list(Engine.__members__.values())
 
 
+def get_vcf_path(
+    engine: Engine,
+    vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
+    tmp_path: Path,
+) -> Path:
+    vcf_zst_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
+    if engine == Engine.cyvcf2:
+        return to_bgzip(tmp_path, vcf_zst_path)
+    return vcf_zst_path
+
+
 @pytest.mark.parametrize("engine", engines)
 def test_vcf_dataframe(
     engine: Engine,
     vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
     tmp_path: Path,
 ):
-    # vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
-    # vcf_path = "/fast/groups/ag_walter/work/opensnp/100/chr2.dose.vcf.zst"
-    # vcf_path = "/fast/groups/ag_walter/work/opensnp/100/chr2_copy.dose.vcf.gz"
-    # vcf_file = VCFFile.from_path(vcf_path, engine=engine)
-    # samples = {"1", "8"}
-    # samples = None
-    # vcf_file = CyVCF2VCFFile(vcf_path, samples)
-    vcf_zst_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
-    vcf_gz_path = to_bgzip(tmp_path, vcf_zst_path)
-
-    vcf_file = VCFFile.from_path(vcf_gz_path, engine=engine)
+    vcf_path = get_vcf_path(engine, vcf_paths_by_size_and_chromosome, tmp_path)
+    vcf_file = VCFFile.from_path(vcf_path, engine=engine)
 
     assert vcf_file is not None
     assert vcf_file.variant_count > 0
@@ -49,9 +51,8 @@ def test_vcf_file(
     vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
     tmp_path: Path,
 ):
-    vcf_zst_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
-    vcf_gz_path = to_bgzip(tmp_path, vcf_zst_path)
-    vcf_file = VCFFile.from_path(vcf_gz_path, engine=engine)
+    vcf_path = get_vcf_path(engine, vcf_paths_by_size_and_chromosome, tmp_path)
+    vcf_file = VCFFile.from_path(vcf_path, engine=engine)
 
     array1 = np.zeros((4000, vcf_file.sample_count), dtype=float)
 
@@ -118,7 +119,11 @@ def vcf_read(engine: Engine, vcf_path: Path) -> ReadResult:
 
 @pytest.mark.parametrize("engine", engines)
 def test_read(benchmark, vcf_path: Path, numpy_read_result: ReadResult, engine: Engine):
-    read_result = benchmark(vcf_read, engine, vcf_path)
+    tmp_path = vcf_path.parent
+    vcf_path_adapted = get_vcf_path(
+        engine, {sample_size_label: {chromosome: vcf_path}}, tmp_path
+    )
+    read_result = benchmark(vcf_read, engine, vcf_path_adapted)
 
     assert np.all(numpy_read_result.variants == read_result.variants)
     assert np.allclose(numpy_read_result.dosages, read_result.dosages)
