@@ -264,9 +264,10 @@ class CyVCF2VCFFile(VCFFile):
                     dosages[variant_count, :] = dosage_fields
                 else:
                     dosages[variant_count, :] = np.nan
-                variant_count += 1
-                if variant_count > max(self.variant_indices):
-                    break
+            # update variant count
+            variant_count += 1
+            if variant_count > max(self.variant_indices):
+                break
 
     def process_dosage_fields(self, dosage_fields, sample_indices) -> np.ndarray:
         if sample_indices is not None:
