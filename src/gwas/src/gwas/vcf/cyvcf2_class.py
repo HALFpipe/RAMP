@@ -253,9 +253,9 @@ class CyVCF2VCFFile(VCFFile):
         except StopIteration:
             return  # if we have no variants
 
-        variant_position = 0
-        for variant in vcf_read:
-            if variant_position == current_index:
+        pos_in_dosage = 0
+        for variant_count, variant in enumerate(vcf_read):
+            if variant_count == current_index:
                 if "DS" in variant.FORMAT:
                     dosage_fields = variant.format("DS")
                     dosage_fields = self.process_dosage_fields(
@@ -267,14 +267,14 @@ class CyVCF2VCFFile(VCFFile):
                             the number of samples"""
                             f"({dosage_fields.shape[0]} != {dosages.shape[1]})"
                         )
-                    dosages[variant_position, :] = dosage_fields
+                    dosages[pos_in_dosage, :] = dosage_fields
                 else:
-                    dosages[variant_position, :] = np.nan
+                    dosages[pos_in_dosage, :] = np.nan
+                pos_in_dosage += 1
                 try:
                     current_index = next(variant_index_iter)
                 except StopIteration:
                     break
-            variant_position += 1
 
     def process_dosage_fields(self, dosage_fields, sample_indices) -> np.ndarray:
         if sample_indices is not None:
