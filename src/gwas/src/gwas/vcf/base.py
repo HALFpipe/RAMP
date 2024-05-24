@@ -190,6 +190,11 @@ class VCFFile(AbstractContextManager):
             # from .cyvcf2 import CyVCF2VCFFile
             from .cyvcf2_class import CyVCF2VCFFile
 
+            if str(file_path).endswith(".zst"):
+                raise ValueError(
+                    f"""CyVCF2 does not support zstandard
+                    compressed files check the file path {file_path}."""
+                )
             vcf_file = CyVCF2VCFFile(
                 file_path,
                 samples=samples,

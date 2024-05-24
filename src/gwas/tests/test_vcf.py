@@ -11,11 +11,10 @@ from gwas.compression.pipe import CompressedTextReader
 # from gwas.compression.pipe import CompressedTextReader
 # from gwas.vcf.base import Engine, Variant, VCFFile, VCFFileReader
 from gwas.vcf.base import Engine, Variant, VCFFile, VCFFileReader
-from gwas.vcf.cyvcf2_class import CyVCF2VCFFile
 from numpy import typing as npt
 from tqdm.auto import tqdm
 
-from .utils import plink2
+from .utils import plink2, to_bgzip
 
 sample_size_label = "small"
 chromosome: int = 22
@@ -25,30 +24,34 @@ engines: Sequence[Engine] = list(Engine.__members__.values())
 @pytest.mark.parametrize("engine", engines)
 def test_vcf_dataframe(
     engine: Engine,
-    # vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
+    vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
+    tmp_path: Path,
 ):
     # vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
     # vcf_path = "/fast/groups/ag_walter/work/opensnp/100/chr2.dose.vcf.zst"
-    vcf_path = "/fast/groups/ag_walter/work/opensnp/100/chr2_copy.dose.vcf.gz"
+    # vcf_path = "/fast/groups/ag_walter/work/opensnp/100/chr2_copy.dose.vcf.gz"
     # vcf_file = VCFFile.from_path(vcf_path, engine=engine)
     # samples = {"1", "8"}
-    samples = None
-    vcf_file = CyVCF2VCFFile(vcf_path, samples)
+    # samples = None
+    # vcf_file = CyVCF2VCFFile(vcf_path, samples)
+    vcf_zst_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
+    vcf_gz_path = to_bgzip(tmp_path, vcf_zst_path)
+
+    vcf_file = VCFFile.from_path(vcf_gz_path, engine=engine)
 
     assert vcf_file is not None
-
-    # assert vcf_file.variant_count == 652195
-    assert vcf_file.variant_count == 4057613  # for chr2_copy
+    assert vcf_file.variant_count > 0
 
 
 @pytest.mark.parametrize("engine", engines)
 def test_vcf_file(
     engine: Engine,
-    # vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
+    vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
+    tmp_path: Path,
 ):
-    # vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
-    vcf_path = "/fast/groups/ag_walter/work/opensnp/100/chr2_copy.dose.vcf.gz"
-    vcf_file = VCFFile.from_path(vcf_path, engine=engine)
+    vcf_zst_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
+    vcf_gz_path = to_bgzip(tmp_path, vcf_zst_path)
+    vcf_file = VCFFile.from_path(vcf_gz_path, engine=engine)
 
     array1 = np.zeros((4000, vcf_file.sample_count), dtype=float)
 
@@ -115,7 +118,6 @@ def vcf_read(engine: Engine, vcf_path: Path) -> ReadResult:
 
 @pytest.mark.parametrize("engine", engines)
 def test_read(benchmark, vcf_path: Path, numpy_read_result: ReadResult, engine: Engine):
-    vcf_path = Path("/fast/groups/ag_walter/work/opensnp/100/chr2_copy.dose.vcf.gz")
     read_result = benchmark(vcf_read, engine, vcf_path)
 
     assert np.all(numpy_read_result.variants == read_result.variants)
