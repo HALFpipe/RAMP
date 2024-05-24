@@ -189,6 +189,10 @@ class CyVCF2VCFFile(VCFFile):
         # in make dataframe function to obtain all samples if samples
         # is not specified we get all samples
         self.samples = list(samples) if samples else self.vcf.samples
+        self.sample_indices = np.array(
+            [i for i, s in enumerate(self.vcf.samples) if s in self.samples],
+            dtype=np.uint32,
+        )
 
     def return_vcf_object(self):
         if self.file_path.endswith(".zst"):
