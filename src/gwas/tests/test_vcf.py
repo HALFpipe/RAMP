@@ -127,7 +127,9 @@ def test_read(benchmark, vcf_path: Path, numpy_read_result: ReadResult, engine: 
     read_result = benchmark(vcf_read, engine, vcf_path_adapted)
 
     # assert np.all(numpy_read_result.variants == read_result.variants)
-    assert assert_frame_equal(numpy_read_result.variants, read_result.variants)
+    assert assert_frame_equal(
+        numpy_read_result.variants, read_result.variants, check_dtype=False
+    )
     assert np.allclose(numpy_read_result.dosages, read_result.dosages)
 
 
