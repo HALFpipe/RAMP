@@ -252,10 +252,9 @@ class CyVCF2VCFFile(VCFFile):
             if variant_count in self.variant_indices:
                 if "DS" in variant.FORMAT:
                     dosage_fields = variant.format("DS")
-                    if self.sample_indices is not None:
-                        dosage_fields = np.array(
-                            [dosage_fields[i] for i in self.sample_indices]
-                        )
+                    dosage_fields = self.process_dosage_fields(
+                        dosage_fields=dosage_fields, sample_indices=self.sample_indices
+                    )
                     if dosage_fields.shape[0] != dosages.shape[1]:
                         raise ValueError(
                             f"""Shape of dosage_fields does not match
@@ -268,6 +267,15 @@ class CyVCF2VCFFile(VCFFile):
                 variant_count += 1
                 if variant_count > max(self.variant_indices):
                     break
+
+    def process_dosage_fields(self, dosage_fields, sample_indices) -> np.ndarray:
+        if sample_indices is not None:
+            dosage_fields = np.array([dosage_fields[i] for i in sample_indices])
+        else:
+            dosage_fields = np.array(dosage_fields)
+        if dosage_fields.ndim > 1:
+            dosage_fields = dosage_fields.flatten()
+        return dosage_fields
 
     def __exit__(
         self,
