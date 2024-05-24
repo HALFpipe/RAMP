@@ -44,7 +44,7 @@ def test_vcf_dataframe(
 @pytest.mark.parametrize("engine", engines)
 def test_vcf_file(
     engine: Engine,
-    vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
+    # vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
 ):
     # vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
     vcf_path = "/fast/groups/ag_walter/work/opensnp/100/chr2_copy.dose.vcf.gz"
@@ -115,6 +115,7 @@ def vcf_read(engine: Engine, vcf_path: Path) -> ReadResult:
 
 @pytest.mark.parametrize("engine", engines)
 def test_read(benchmark, vcf_path: Path, numpy_read_result: ReadResult, engine: Engine):
+    vcf_path = Path("/fast/groups/ag_walter/work/opensnp/100/chr2_copy.dose.vcf.gz")
     read_result = benchmark(vcf_read, engine, vcf_path)
 
     assert np.all(numpy_read_result.variants == read_result.variants)
