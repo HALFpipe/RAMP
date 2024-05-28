@@ -126,8 +126,6 @@ def test_read(benchmark, vcf_path: Path, numpy_read_result: ReadResult, engine: 
     )
     read_result = benchmark(vcf_read, engine, vcf_path_adapted)
 
-    # assert np.all(numpy_read_result.variants == read_result.variants)
-    # try:
     assert (
         assert_frame_equal(
             numpy_read_result.variants,
@@ -140,22 +138,6 @@ def test_read(benchmark, vcf_path: Path, numpy_read_result: ReadResult, engine: 
         )
         is None
     )
-    # except AssertionError as e:
-    #     print("Dframes not equal")
-    #     print(e)
-    # diff = numpy_read_result.variants.compare(read_result.variants, align_axis=0)
-    # print("Difference")
-    # print(diff)
-    # columns = numpy_read_result.variants.columns
-    # for column in columns:
-    #     if not numpy_read_result.variants[column].equals(read_result.variants[column]):
-    #         print(f"Difference found in column: {column}")
-    #         print(
-    #             numpy_read_result.variants[column].compare(
-    #                read_result.variants[column]
-    # )
-    #         )
-
     assert np.allclose(numpy_read_result.dosages, read_result.dosages)
 
 
