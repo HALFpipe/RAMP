@@ -213,7 +213,7 @@ class CyVCF2VCFFile(VCFFile):
         for _, variant in enumerate(self.vcf):
             variants.append(
                 [
-                    variant.CHROM,
+                    str(variant.CHROM),
                     variant.POS,
                     variant.REF,
                     variant.ALT[0] if variant.ALT else "",
