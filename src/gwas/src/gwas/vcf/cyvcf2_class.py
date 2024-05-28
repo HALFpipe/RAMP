@@ -206,18 +206,10 @@ class CyVCF2VCFFile(VCFFile):
 
     def create_dataframe(self) -> pd.DataFrame:
         # Convert VCF data from cyvcf2 to a DataFrame
-
-        # vcf_df = self.return_vcf_object()
         self.vcf = self.return_vcf_object()
-        # we do not need to set samples here since we
-        # do not use sample columns to make the dataframe
-        # if self.samples:
-        # vcf_df.set_samples(self.samples)
-        # self.vcf.set_samples(self.samples)
 
         print("DATAFRAME CREATION")
         variants = []
-        # for _, variant in enumerate(vcf_df):
         for _, variant in enumerate(self.vcf):
             variants.append(
                 [
@@ -233,6 +225,21 @@ class CyVCF2VCFFile(VCFFile):
                 ]
             )
         self.vcf_variants = pd.DataFrame(variants, columns=variant_columns)
+
+        self.vcf_variants["chromosome_int"] = self.vcf_variants["chromosome_int"].astype(
+            "category"
+        )
+        self.vcf_variants["reference_allele"] = self.vcf_variants[
+            "reference_allele"
+        ].astype("category")
+        self.vcf_variants["alternate_allele"] = self.vcf_variants[
+            "alternate_allele"
+        ].astype("category")
+        self.vcf_variants["format_str"] = self.vcf_variants["format_str"].astype(
+            "category"
+        )
+        self.vcf_variants["position"] = self.vcf_variants["position"].astype("uint32")
+
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
 
     def read(self, dosages: npt.NDArray) -> None:
@@ -258,36 +265,6 @@ class CyVCF2VCFFile(VCFFile):
                 current_index = self.get_next_variant_index(variant_index_iter)
                 if current_index is None:
                     break
-
-        # variant_index_iter = iter(self.variant_indices)
-        # try:
-        #     current_index = next(variant_index_iter)
-        # except StopIteration:
-        #     return  # if we have no variants
-
-    #
-    # pos_in_dosage = 0
-    # for variant_count, variant in enumerate(vcf_read):
-    #     if variant_count == current_index:
-    #         if "DS" in variant.FORMAT:
-    #             dosage_fields = variant.format("DS")
-    #             dosage_fields = self.process_dosage_fields(
-    #                 dosage_fields=dosage_fields, sample_indices=self.sample_indices
-    #             )
-    #             if dosage_fields.shape[0] != dosages.shape[1]:
-    #                 raise ValueError(
-    #                     f"""Shape of dosage_fields does not match
-    #                     the number of samples"""
-    #                     f"({dosage_fields.shape[0]} != {dosages.shape[1]})"
-    #                 )
-    #             dosages[pos_in_dosage, :] = dosage_fields
-    #         else:
-    #             dosages[pos_in_dosage, :] = np.nan
-    #         pos_in_dosage += 1
-    #         try:
-    #             current_index = next(variant_index_iter)
-    #         except StopIteration:
-    #             break
 
     def process_variant(self, variant, pos_in_dosage, dosages) -> None:
         if "DS" in variant.FORMAT:
