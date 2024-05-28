@@ -9,6 +9,7 @@ from numpy import typing as npt
 
 from gwas.compression.pipe import CompressedBytesReader
 
+from ..utils import chromosome_to_int, parse_chromosome
 from .base import VCFFile
 
 variant_columns = [
@@ -213,7 +214,7 @@ class CyVCF2VCFFile(VCFFile):
         for _, variant in enumerate(self.vcf):
             variants.append(
                 [
-                    str(variant.CHROM),
+                    chromosome_to_int(parse_chromosome(variant.CHROM)),
                     variant.POS,
                     variant.REF,
                     variant.ALT[0] if variant.ALT else "",

@@ -131,7 +131,7 @@ def test_read(benchmark, vcf_path: Path, numpy_read_result: ReadResult, engine: 
         numpy_read_result.variants,
         read_result.variants,
         check_dtype=False,
-        check_categorical=False,
+        # check_categorical=False,
     )
     assert np.allclose(numpy_read_result.dosages, read_result.dosages)
 
