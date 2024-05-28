@@ -128,14 +128,17 @@ def test_read(benchmark, vcf_path: Path, numpy_read_result: ReadResult, engine: 
 
     # assert np.all(numpy_read_result.variants == read_result.variants)
     # try:
-    assert assert_frame_equal(
-        numpy_read_result.variants,
-        read_result.variants,
-        check_dtype=False,
-        # check_categorical=False,
-        check_exact=False,
-        rtol=1e-5,
-        atol=1e-8,
+    assert (
+        assert_frame_equal(
+            numpy_read_result.variants,
+            read_result.variants,
+            check_dtype=False,
+            # check_categorical=False,
+            check_exact=False,
+            rtol=1e-5,
+            atol=1e-8,
+        )
+        is None
     )
     # except AssertionError as e:
     #     print("Dframes not equal")
