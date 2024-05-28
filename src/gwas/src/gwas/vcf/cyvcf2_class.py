@@ -212,6 +212,9 @@ class CyVCF2VCFFile(VCFFile):
         print("DATAFRAME CREATION")
         variants = []
         for _, variant in enumerate(self.vcf):
+            r2_value = variant.INFO.get(
+                "ER2", variant.INFO.get("R2", np.nan)
+            )  # use ER2 value if present
             variants.append(
                 [
                     chromosome_to_int(parse_chromosome(variant.CHROM)),
@@ -221,7 +224,8 @@ class CyVCF2VCFFile(VCFFile):
                     variant.INFO.get("IMPUTED", False),
                     variant.INFO.get("AF", np.nan),
                     variant.INFO.get("MAF", np.nan),
-                    variant.INFO.get("R2", np.nan),
+                    # variant.INFO.get("R2", np.nan),
+                    r2_value,
                     (":").join(variant.FORMAT),
                 ]
             )
