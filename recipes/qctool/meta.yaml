@@ -18,6 +18,7 @@ requirements:
     - zlib
   run:
     - zlib
+    - blas
 
 test:
   commands:
