@@ -3,17 +3,15 @@ from argparse import Namespace
 from dataclasses import dataclass, field
 from pathlib import Path
 from pprint import pformat
-from typing import Callable, Iterable, Mapping, Sequence
+from typing import Iterable, Mapping, Sequence
 
 import numpy as np
 from threadpoolctl import threadpool_limits
 from tqdm.auto import tqdm
 
 from ..compression.arr.base import compression_methods
-from ..eig import Eigendecomposition
 from ..log import logger
 from ..mean import calc_mean
-from ..mem.arr import SharedFloat64Array
 from ..mem.wkspace import SharedWorkspace
 from ..pheno import VariableCollection
 from ..score.job import JobCollection
@@ -47,23 +45,6 @@ class GwasCommand:
             chromosomes = map(parse_chromosome, self.arguments.chromosome)
         return sorted(chromosomes, key=chromosome_to_int)
 
-    def get_eigendecomposition(
-        self, chromosome: int | str, vc: VariableCollection
-    ) -> Eigendecomposition:
-        # Leave out current chromosome from calculation.
-        other_chromosomes = sorted(
-            set(self.chromosomes) - {chromosome, "X"}, key=chromosome_to_int
-        )
-        tri_paths = [self.tri_paths_by_chromosome[c] for c in other_chromosomes]
-        # Calculate eigendecomposition and free tris.
-        eig = Eigendecomposition.from_files(
-            *tri_paths,
-            sw=self.sw,
-            samples=vc.samples,
-            num_threads=self.arguments.num_threads,
-        )
-        return eig
-
     def get_variable_collection(self) -> VariableCollection:
         return VariableCollection.from_txt(
             self.phenotype_paths,
@@ -76,10 +57,6 @@ class GwasCommand:
     @staticmethod
     def split_by_missing_values(
         base_variable_collection: VariableCollection,
-        add_principal_components: int = 0,
-        get_eigendecomposition: (
-            Callable[[int | str, VariableCollection], Eigendecomposition] | None
-        ) = None,
     ) -> list[VariableCollection]:
         sw = base_variable_collection.sw
         # Load phenotype and covariate data for all samples that have genetic data and
@@ -134,35 +111,6 @@ class GwasCommand:
                     f"Missing values remain in chunk {i}. This should not happen"
                 )
 
-            if add_principal_components > 0:
-                if get_eigendecomposition is None:
-                    raise RuntimeError(
-                        "Cannot add principal components without eigendecomposition "
-                        "function"
-                    )
-                eig = get_eigendecomposition("X", variable_collection)  # All autosomes
-
-                pc_array = eig.eigenvectors[:, :add_principal_components]
-                pc_names = [
-                    f"principal_component_{i + 1:02d}"
-                    for i in range(add_principal_components)
-                ]
-
-                # Merge the existing array with the principal components
-                covariates = np.hstack(
-                    [variable_collection.covariates.to_numpy(), pc_array]
-                )
-
-                # Clean up.
-                eig.free()
-                variable_collection.covariates.free()
-                variable_collection.sw.squash()
-
-                variable_collection.covariate_names.extend(pc_names)
-                variable_collection.covariates = SharedFloat64Array.from_numpy(
-                    covariates, variable_collection.sw, prefix="covariates"
-                )
-
             variable_collections.append(variable_collection)
             sw.squash()
 
@@ -212,9 +160,7 @@ class GwasCommand:
             )
         # Split into missing value chunks
         variable_collections: list[VariableCollection] = self.split_by_missing_values(
-            base_variable_collection,
-            self.arguments.add_principal_components,
-            self.get_eigendecomposition,
+            base_variable_collection
         )
         if len(variable_collections) == 0:
             raise ValueError(
@@ -314,7 +260,8 @@ class GwasCommand:
 
         job_collection = JobCollection(
             vcf_file,
-            self.get_eigendecomposition,
+            self.chromosomes,
+            self.tri_paths_by_chromosome,
             self.arguments.null_model_method,
             self.output_directory,
             compression_methods[self.arguments.compression_method],

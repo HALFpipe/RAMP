@@ -3,22 +3,21 @@
 from dataclasses import asdict, dataclass, field
 from itertools import chain
 from pathlib import Path
-from typing import Callable, Literal, Self
+from typing import Literal, Mapping, Self, Sequence
 
 import numpy as np
 import pandas as pd
 import yaml
-from tqdm import tqdm
 
 from ..compression.arr.base import CompressionMethod, FileArray
 from ..compression.pipe import CompressedTextReader, CompressedTextWriter
-from ..eig import Eigendecomposition
+from ..eig.base import Eigendecomposition, calc_eigendecompositions
 from ..log import logger
 from ..mem.arr import SharedFloat64Array
 from ..mem.wkspace import SharedWorkspace
 from ..null_model.base import NullModelCollection
 from ..pheno import VariableCollection, VariableSummary
-from ..utils import parse_obj_as
+from ..utils import chromosome_to_int, parse_obj_as
 from ..vcf.base import VCFFile
 from .run import calc_score
 
@@ -149,7 +148,8 @@ class SummaryCollection:
 @dataclass
 class JobCollection:
     vcf_file: VCFFile
-    get_eigendecomposition: Callable[[int | str, VariableCollection], Eigendecomposition]
+    chromosomes: Sequence[int | str]
+    tri_paths_by_chromosome: Mapping[int | str, Path]
     null_model_method: str
     output_directory: Path
     compression_method: CompressionMethod
@@ -214,6 +214,24 @@ class JobCollection:
         ) as file_handle:
             yaml.dump(value, file_handle, sort_keys=False, width=np.inf)
 
+    def get_eigendecompositions(
+        self, chromosome: int | str, variable_collections: list[VariableCollection]
+    ) -> list[Eigendecomposition]:
+        # Leave out current chromosome from calculation.
+        other_chromosomes = sorted(
+            set(self.chromosomes) - {chromosome, "X"}, key=chromosome_to_int
+        )
+        tri_paths = [self.tri_paths_by_chromosome[c] for c in other_chromosomes]
+        samples_lists: list[list[str]] = [vc.samples for vc in variable_collections]
+        # Calculate eigendecomposition and free tris.
+        return calc_eigendecompositions(
+            *tri_paths,
+            sw=self.sw,
+            samples_lists=samples_lists,
+            chromosome=chromosome,
+            num_threads=self.num_threads,
+        )
+
     def run(self) -> None:
         phenotype_offset: int = 0
         for variable_collections, summaries in zip(
@@ -221,14 +239,10 @@ class JobCollection:
             self.summary_collection.chunks.values(),
             strict=True,
         ):
-            eigendecompositions = [
-                self.get_eigendecomposition(self.chromosome, vc)
-                for vc in tqdm(
-                    variable_collections,
-                    unit="eigendecompositions",
-                    desc="decomposing kinship matrices",
-                )
-            ]
+            eigendecompositions = self.get_eigendecompositions(
+                self.chromosome, variable_collections
+            )
+            self.sw.squash()
             inverse_variance_arrays: list[SharedFloat64Array] = list()
             scaled_residuals_arrays: list[SharedFloat64Array] = list()
 

@@ -76,12 +76,6 @@ def parse_arguments(argv: list[str]) -> Namespace:
         default="zstd_ultra_text",
     )
     argument_parser.add_argument(
-        "--add-principal-components",
-        required=False,
-        type=int,
-        default=0,
-    )
-    argument_parser.add_argument(
         "--missing-value-strategy",
         required=False,
         choices=["complete_samples", "listwise_deletion"],

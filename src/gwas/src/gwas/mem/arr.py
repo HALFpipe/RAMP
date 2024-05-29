@@ -153,7 +153,7 @@ class SharedArray(Generic[ScalarType]):
         array_proxy: Blosc2FileArray = Blosc2FileArray.from_file(
             file_path, num_threads=num_threads
         )
-        shape = array_proxy.shape[::-1]
+        shape = array_proxy.shape[::-1]  # Reverse because of Fortran order
 
         if array_proxy.extra_metadata is not None:
             kwargs = array_proxy.extra_metadata
@@ -173,11 +173,9 @@ class SharedArray(Generic[ScalarType]):
         key = (start, stop)
 
         with array_proxy:
-            if array_proxy.array is not None:
-                array_proxy.array.get_slice_numpy(a, key)
-            else:
+            if array_proxy.array is None:
                 raise RuntimeError("Blosc2 array not initialized")
-
+            array_proxy.array.get_slice_numpy(a, key)
         return array
 
     def to_file(self, file_path: Path, num_threads: int = 1) -> Path:

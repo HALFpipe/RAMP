@@ -11,17 +11,23 @@ import numpy as np
 from numpy import typing as npt
 from tqdm.auto import tqdm
 
-from ._matrix_functions import dgesvdq
-from .mem.arr import SharedArray, SharedFloat64Array
-from .mem.wkspace import SharedWorkspace
-from .tri.base import Triangular
-from .utils import (
+from .._matrix_functions import dgesvdq
+from ..mem.arr import SharedFloat64Array
+from ..mem.wkspace import SharedWorkspace
+from ..tri.base import Triangular
+from ..utils import (
     IterationOrder,
     chromosomes_set,
     make_pool_or_null_context,
-    make_sample_boolean_vectors,
 )
-from .vcf.base import VCFFile
+
+
+@dataclass(frozen=True)
+class EigendecompositionJob:
+    tri_array: SharedFloat64Array
+    samples: list[str]
+    variant_count: int
+    chromosome: int | str | None = None
 
 
 @dataclass
@@ -111,48 +117,25 @@ class Eigendecomposition(SharedFloat64Array):
         return eig
 
     @classmethod
-    def from_tri(
-        cls,
-        *arrays: Triangular,
-        chromosome: int | str | None = None,
-        samples: list[str] | None = None,
-    ) -> Self:
-        if len(arrays) == 0:
-            raise ValueError
+    def from_job(cls, job: EigendecompositionJob) -> Self:
+        tri_array = job.tri_array
 
-        sw = arrays[0].sw
+        sw = tri_array.sw
 
-        chromosome = cls.get_chromosome(arrays, chromosome)
-
-        if samples is None:
-            samples = arrays[0].samples
-        else:
-            for tri in arrays:
-                if samples is not None:
-                    tri.subset_samples(samples)
-            sw.squash()
-
-        for tri in arrays:
-            if tri.samples != samples:
-                raise RuntimeError(f"Samples do not match: {tri.samples} != {samples}")
-
-        # Concatenate triangular matrices
-        tri_array = SharedFloat64Array.merge(*arrays)
         tri_array.transpose()
 
         a = tri_array.to_numpy()
         _, sample_count = a.shape
-        variant_count = sum(tri.variant_count for tri in arrays)
 
         # Allocate outputs
-        name = cls.get_name(sw, chromosome=chromosome)
+        name = cls.get_name(sw, chromosome=job.chromosome)
         sw.alloc(name, sample_count, sample_count + 1)
         eig = cls(
             name=name,
-            samples=samples,
+            samples=job.samples,
             sw=sw,
-            chromosome=chromosome,
-            variant_count=variant_count,
+            chromosome=job.chromosome,
+            variant_count=job.variant_count,
         )
 
         # Perform singular value decomposition
@@ -166,13 +149,45 @@ class Eigendecomposition(SharedFloat64Array):
 
         # The contents of the input arrays have been destroyed
         # so we remove them from the workspace
-        sw.free(tri_array.name)
-        sw.squash()
+        tri_array.free()
 
         # Transpose only the singular vectors to get the eigenvectors
         eig.transpose(shape=(sample_count, sample_count))
 
         return eig
+
+    @classmethod
+    def from_tri(
+        cls,
+        *arrays: Triangular,
+        chromosome: int | str | None = None,
+        samples: list[str] | None = None,
+    ) -> Self:
+        if len(arrays) == 0:
+            raise ValueError
+
+        chromosome = cls.get_chromosome(arrays, chromosome)
+
+        if samples is None:
+            samples = arrays[0].samples
+        else:
+            for tri in arrays:
+                if samples is not None:
+                    tri.subset_samples(samples)
+
+        for tri in arrays:
+            if tri.samples != samples:
+                raise RuntimeError(f"Samples do not match: {tri.samples} != {samples}")
+
+        variant_count = sum(tri.variant_count for tri in arrays)
+
+        # Concatenate triangular matrices
+        tri_array = SharedFloat64Array.merge(*arrays)
+        return cls.from_job(
+            EigendecompositionJob(
+                tri_array, samples, variant_count, chromosome=chromosome
+            )
+        )
 
     @classmethod
     def get_chromosome(
@@ -202,90 +217,83 @@ class Eigendecomposition(SharedFloat64Array):
         chromosome: int | str | None = None,
         num_threads: int = 1,
     ) -> Self:
-        load = partial(Triangular.from_file, sw=sw, dtype=np.float64)
-        pool, iterator = make_pool_or_null_context(
-            tri_paths,
-            load,
-            num_threads=num_threads,
-            iteration_order=IterationOrder.UNORDERED,
-        )
-        with pool:
-            tri_arrays = list(
-                tqdm(
-                    iterator,
-                    total=len(tri_paths),
-                    desc="loading triangular matrices",
-                    unit="matrices",
-                    leave=False,
-                )
-            )
-        tri_arrays.sort(key=attrgetter("start"))
-
+        tri_arrays = load_tri_arrays(tri_paths, sw, num_threads=num_threads)
         return cls.from_tri(*tri_arrays, chromosome=chromosome, samples=samples)
 
 
-@dataclass
-class EigendecompositionCollection:
-    chromosome: int | str | None
-    samples: list[str]
-    sample_boolean_vectors: list[npt.NDArray[np.bool_]]
-    eigenvector_arrays: list[SharedFloat64Array]
-
-    @property
-    def sample_count(self) -> int:
-        return len(self.samples)
-
-    @property
-    def job_count(self) -> int:
-        return len(self.eigenvector_arrays)
-
-    def free(self) -> None:
-        for array in self.eigenvector_arrays:
-            array.free()
-
-    @classmethod
-    def from_eigendecompositions(
-        cls,
-        vcf_file: VCFFile,
-        eigs: list[Eigendecomposition],
-        base_samples: list[str] | None = None,
-    ) -> Self:
-        sw: SharedWorkspace = eigs[0].sw
-
-        chromosomes = {eig.chromosome for eig in eigs}
-        if len(chromosomes) != 1:
-            raise ValueError("Eigendecompositions must be from the same chromosome")
-        (chromosome,) = chromosomes
-
-        if base_samples is None:
-            base_samples = [
-                sample
-                for sample in vcf_file.vcf_samples
-                if any(sample in eig.samples for eig in eigs)
-            ]
-        base_sample_count = len(base_samples)
-
-        sample_boolean_vectors = make_sample_boolean_vectors(
-            base_samples, (eig.samples for eig in eigs)
+def load_tri_arrays(
+    tri_paths: Sequence[Path], sw: SharedWorkspace, num_threads: int = 1
+) -> list[Triangular]:
+    load = partial(Triangular.from_file, sw=sw, dtype=np.float64)
+    pool, iterator = make_pool_or_null_context(
+        tri_paths,
+        load,
+        num_threads=num_threads,
+        iteration_order=IterationOrder.UNORDERED,
+    )
+    with pool:
+        tri_arrays = list(
+            tqdm(
+                iterator,
+                total=len(tri_paths),
+                desc="loading triangular matrices",
+                unit="matrices",
+                leave=False,
+            )
         )
-        eigenvector_arrays: list[SharedFloat64Array] = list()
+    tri_arrays.sort(key=attrgetter("start"))
+    return tri_arrays
 
-        for eig, sample_boolean_vector in zip(eigs, sample_boolean_vectors, strict=True):
-            sample_count = len(eig.samples)
 
-            prefix = eig.get_prefix(chromosome=eig.chromosome)
-            name = SharedArray.get_name(sw, f"expanded-{prefix}")
-            array = sw.alloc(name, base_sample_count, sample_count)
+def calc_eigendecompositions(
+    *tri_paths: Path,
+    sw: SharedWorkspace,
+    samples_lists: list[list[str]],
+    chromosome: int | str | None = None,
+    num_threads: int = 1,
+) -> list[Eigendecomposition]:
+    tri_arrays = load_tri_arrays(tri_paths, sw, num_threads=num_threads)
 
-            matrix = array.to_numpy()
-            matrix[:] = 0
-            matrix[sample_boolean_vector, :] = eig.eigenvectors
+    variant_count = sum(tri.variant_count for tri in tri_arrays)
+    column_count = sum(tri.sample_count for tri in tri_arrays)
 
-            eigenvector_arrays.append(array)
+    jobs: list[EigendecompositionJob] = list()
+    for samples in samples_lists:
+        subset_array = sw.alloc(Triangular.get_name(sw), len(samples), column_count)
 
-        return cls(
-            chromosome,
-            base_samples,
-            sample_boolean_vectors,
-            eigenvector_arrays,
+        i = 0
+        for tri in tri_arrays:
+            a = tri.to_numpy()
+            b = subset_array.to_numpy()[:, i : i + tri.sample_count]
+            i += tri.sample_count
+
+            sample_indices = tri.get_sample_indices(samples)
+            a.take(sample_indices, axis=0, out=b)
+
+        jobs.append(
+            EigendecompositionJob(
+                subset_array, samples, variant_count, chromosome=chromosome
+            )
         )
+
+    for tri in tri_arrays:
+        tri.free()
+
+    pool, iterator = make_pool_or_null_context(
+        jobs,
+        Eigendecomposition.from_job,
+        num_threads=num_threads,
+        iteration_order=IterationOrder.ORDERED,
+    )
+    with pool:
+        eigendecompositions = list(
+            tqdm(
+                iterator,
+                total=len(jobs),
+                desc="decomposing kinship matrices",
+                unit="eigendecompositions",
+                leave=False,
+            )
+        )
+
+    return eigendecompositions

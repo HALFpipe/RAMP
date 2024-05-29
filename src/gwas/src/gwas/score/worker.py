@@ -11,7 +11,7 @@ import scipy
 from numpy import typing as npt
 
 from ..compression.arr.base import FileArray
-from ..eig import EigendecompositionCollection
+from ..eig.collection import EigendecompositionCollection
 from ..log import logger, multiprocessing_context
 from ..mem.arr import SharedFloat64Array
 from ..utils import Action, Process, SharedState
