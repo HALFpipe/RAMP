@@ -18,7 +18,7 @@
           export PYTHONDONTWRITEBYTECODE=1
           export PYTHONUNBUFFERED=1
           eval "$(micromamba shell hook --shell=posix)"
-          micromamba activate gwas
+          micromamba activate gwas-protocol
         '';
       };
     };

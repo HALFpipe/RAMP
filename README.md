@@ -74,7 +74,7 @@ Then update your `.bashrc` or `.zshrc` with `mamba init`. This will allow you to
 Next, install `mamba` using `conda install mamba` and then create the environment using the following command:
 
 ```bash
-conda create --solver="libmamba" --name "gwas" \
+conda create --solver="libmamba" --name "gwas-protocol" \
   "boa" \
   "bzip2" "p7zip>=15.09" \
   "bcftools>=1.17" "plink" "plink2" "tabix" "gcta" \
