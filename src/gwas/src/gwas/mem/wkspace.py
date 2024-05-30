@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from itertools import pairwise
 from mmap import MAP_SHARED, mmap
 from multiprocessing import reduction as mp_reduction
+from operator import attrgetter
 from pprint import pformat
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Callable, Self, TypeVar, overload
@@ -33,6 +34,10 @@ class Allocation:
     shape: tuple[int, ...]
     dtype: np.dtype[Any]
 
+    @property
+    def end(self) -> int:
+        return self.start + self.size
+
 
 @dataclass
 class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
@@ -58,12 +63,12 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
 
     @property
     def unallocated_size(self) -> int:
-        end = max(a.start + a.size for a in self.allocations.values())
+        end = max(a.end for a in self.allocations.values())
         return self.size - end
 
     @property
     def proportion_allocated(self) -> float:
-        end = max(a.start + a.size for a in self.allocations.values())
+        end = max(a.end for a in self.allocations.values())
         return end / self.size
 
     def get_array(self, name: str) -> "SharedArray[Any]":
@@ -74,6 +79,32 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             return SharedFloat64Array(name, self)
         else:
             return SharedArray(name, self)
+
+    def get_allocation_start(self, allocation_size: int) -> int:
+        with global_lock:
+            allocations = self.allocations
+            allocations_list = sorted(allocations.values(), key=attrgetter("start"))
+
+            candidates: list[tuple[int, int]] = []
+
+            # Check if there is space at the end
+            end = allocations_list[-1].end
+            free_size = self.size - end
+            if free_size >= allocation_size:
+                candidates.append((free_size, end))
+
+            # Check if there is space between allocations
+            for a, b in pairwise(allocations_list):
+                free_size = b.start - a.end
+                if free_size >= allocation_size:
+                    candidates.append((free_size, b.start))
+
+            if len(candidates) == 0:
+                raise MemoryError(
+                    f"No space left in shared memory buffer: {pformat(allocations)}"
+                )
+
+        return min(candidates)[1]
 
     @overload
     def alloc(
@@ -119,22 +150,15 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             if name in allocations:
                 raise ValueError(f'Allocation "{name}" already exists')
 
-            # start at current end
-            start = max(a.start + a.size for a in allocations.values())
-
-            # calculate size in bytes
+            # Calculate size in bytes
             itemsize = numpy_dtype.itemsize
             size = int(np.prod(shape) * itemsize)
 
-            # check for overflow
-            end = start + size - 1
-            if end >= self.size:
-                raise MemoryError(
-                    f"No space left in shared memory buffer: {pformat(allocations)}"
-                )
-
+            # Calculate start
+            start = self.get_allocation_start(size)
             allocations[name] = Allocation(start, size, shape, numpy_dtype)
 
+            end = max(a.end for a in allocations.values())
             logger.debug(
                 f'Created new allocation "{name}" '
                 f"at {start} with size {size} "
@@ -160,9 +184,9 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             self.allocations = allocations
         logger.debug(f'Freed allocation "{name}" ')
 
-    def squash(self) -> None:
+    def squash(self, names: set[str] | None = None) -> None:
         """
-        Squashes all allocations in the shared memory buffer to make them
+        Squashes allocations in the shared memory buffer to make them
         contiguous and to reclaim space. This method moves each allocation up to the
         end of the previous allocation.
         """
@@ -179,6 +203,10 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             to_squash.sort(key=lambda t: allocations[t].start)
 
             for previous_name, name in pairwise(to_squash):
+                if names is not None:
+                    if name not in names:
+                        continue
+
                 a = allocations[previous_name]
                 b = allocations[name]
 

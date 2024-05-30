@@ -187,9 +187,9 @@ V = TypeVar("V")
 
 @dataclass
 class SharedState:
-    # Indicates that we should exit.
+    # Indicates that we should exit
     should_exit: Event = field(default_factory=multiprocessing_context.Event)
-    # Passes exceptions.
+    # Passes exceptions
     exception_queue: Queue[Exception] = field(
         default_factory=multiprocessing_context.Queue
     )

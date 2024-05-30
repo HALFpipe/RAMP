@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import gzip
 from contextlib import chdir
+from multiprocessing import cpu_count
 from pathlib import Path
 from random import sample, seed
 from subprocess import check_call
@@ -9,7 +10,8 @@ from typing import Mapping, Sequence
 import numpy as np
 import pytest
 import scipy
-from gwas.eig import Eigendecomposition
+from gwas.eig.base import Eigendecomposition
+from gwas.eig.multiple import calc_eigendecompositions
 from gwas.log import logger
 from gwas.mem.arr import SharedArray, SharedFloat64Array
 from gwas.mem.wkspace import SharedWorkspace
@@ -138,7 +140,9 @@ def test_eig(
     assert np.allclose(tri_r.transpose() @ tri_r / variant_count, c, atol=1e-3)
 
     tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes]
-    eig_array = Eigendecomposition.from_files(*tri_paths, sw=sw, samples=samples)
+    eig_array = Eigendecomposition.from_files(
+        *tri_paths, sw=sw, samples=samples, chromosome="X"
+    )
     request.addfinalizer(eig_array.free)
 
     scipy_eigenvalues = np.square(scipy_singular_values) / variant_count
@@ -312,4 +316,46 @@ def test_eig_mp(
     assert np.isfinite(eig_array.eigenvectors).all()
 
     new_allocation_names = {eig_array.name}
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
+
+
+def test_eig_multiple(
+    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
+    sw: SharedWorkspace,
+    request: pytest.FixtureRequest,
+) -> None:
+    allocation_names = set(sw.allocations.keys())
+    new_allocation_names: set[str] = set()
+
+    sample_size_label = "small"
+
+    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sample_size_label]
+    tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes if c != "X"]
+
+    tri_array = Triangular.from_file(tri_paths[0], sw, np.float64)
+    request.addfinalizer(tri_array.free)
+    new_allocation_names.add(tri_array.name)
+    samples = tri_array.samples
+
+    k = int(0.8 * len(samples))
+    n = 5
+    samples_lists = [sample(samples, k=k) for _ in range(n)]
+
+    eigendecompositions = calc_eigendecompositions(
+        *tri_paths,
+        sw=sw,
+        samples_lists=samples_lists,
+        chromosome="X",
+        num_threads=cpu_count(),
+    )
+    for eig in eigendecompositions:
+        request.addfinalizer(eig.free)
+        new_allocation_names.add(eig.name)
+
+        assert not np.isclose(eig.eigenvalues, 0).all()
+        assert not np.isclose(eig.eigenvectors, 0).all()
+
+        assert np.isfinite(eig.eigenvalues).all()
+        assert np.isfinite(eig.eigenvectors).all()
+
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)

@@ -7,7 +7,8 @@ import numpy as np
 import pytest
 import scipy
 import seaborn as sns
-from gwas.eig import Eigendecomposition, EigendecompositionCollection
+from gwas.eig.base import Eigendecomposition
+from gwas.eig.collection import EigendecompositionCollection
 from gwas.log import logger
 from gwas.mem.arr import SharedArray, SharedFloat64Array
 from gwas.mem.wkspace import SharedWorkspace

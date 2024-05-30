@@ -39,6 +39,14 @@ class SharedArray(Generic[ScalarType]):
         return self.allocation.start
 
     @property
+    def end(self) -> int:
+        return self.allocation.end
+
+    @property
+    def size(self) -> int:
+        return self.allocation.size
+
+    @property
     def dtype(self) -> np.dtype[ScalarType]:
         return np.dtype(self.allocation.dtype)
 

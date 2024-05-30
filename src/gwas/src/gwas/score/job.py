@@ -11,7 +11,8 @@ import yaml
 
 from ..compression.arr.base import CompressionMethod, FileArray
 from ..compression.pipe import CompressedTextReader, CompressedTextWriter
-from ..eig.base import Eigendecomposition, calc_eigendecompositions
+from ..eig.base import Eigendecomposition
+from ..eig.multiple import calc_eigendecompositions
 from ..log import logger
 from ..mem.arr import SharedFloat64Array
 from ..mem.wkspace import SharedWorkspace
