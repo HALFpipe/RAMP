@@ -108,13 +108,13 @@ def underscore(x: str) -> str:
 
 class InitArgs(NamedTuple):
     sched_affinity: set[int] | None
-    num_threads: int
+    num_threads: int | None
     logging_queue: Queue[LogRecord] | None
     log_level: int | str
     lock: RLock
 
 
-def get_initargs(num_threads: int = 1) -> InitArgs:
+def get_initargs(num_threads: int | None = None) -> InitArgs:
     from .log import logging_thread
 
     logging_queue: Queue[LogRecord] | None = None
@@ -138,7 +138,7 @@ def get_initargs(num_threads: int = 1) -> InitArgs:
 
 def initializer(
     sched_affinity: set[int] | None,
-    num_threads: int,
+    num_threads: int | None,
     logging_queue: Queue[LogRecord] | None,
     log_level: int | str,
     lock: RLock,
@@ -147,11 +147,12 @@ def initializer(
         if hasattr(os, "sched_setaffinity"):
             os.sched_setaffinity(0, sched_affinity)
 
-    threadpool_limits(limits=num_threads)
-    os.environ["XLA_FLAGS"] = (
-        f"--xla_cpu_multi_thread_eigen={str(num_threads > 1).lower()} "
-        f"intra_op_parallelism_threads={num_threads}"
-    )
+    if num_threads is not None:
+        threadpool_limits(limits=num_threads)
+        os.environ["XLA_FLAGS"] = (
+            f"--xla_cpu_multi_thread_eigen={str(num_threads > 1).lower()} "
+            f"intra_op_parallelism_threads={num_threads}"
+        )
 
     if logging_queue is not None:
         worker_configurer(logging_queue, log_level)
@@ -381,13 +382,14 @@ def make_variant_mask(
     r_squared: pd.Series,
     minor_allele_frequency_cutoff: float,
     r_squared_cutoff: float,
+    aggregate_func: str = "max",
 ) -> npt.NDArray[np.bool_]:
     allele_frequencies = allele_frequencies.copy()
     allele_frequencies = allele_frequencies.where(
         allele_frequencies.to_numpy() <= 0.5, 1 - allele_frequencies
     )
     if isinstance(allele_frequencies, pd.DataFrame):
-        allele_frequencies = allele_frequencies.max(axis="columns")
+        allele_frequencies = allele_frequencies.aggregate(aggregate_func, axis="columns")
     variant_mask = greater_or_close(
         allele_frequencies,
         minor_allele_frequency_cutoff,

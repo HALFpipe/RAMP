@@ -149,12 +149,14 @@ class VCFFile(CompressedTextReader):
         self,
         minor_allele_frequency_cutoff: float = -np.inf,
         r_squared_cutoff: float = -np.inf,
+        aggregate_func: str = "max",
     ) -> None:
         variant_mask = make_variant_mask(
             self.vcf_variants[self.allele_frequency_columns],
             self.vcf_variants.r_squared,
             minor_allele_frequency_cutoff,
             r_squared_cutoff,
+            aggregate_func=aggregate_func,
         )
         self.variant_indices = np.flatnonzero(variant_mask).astype(np.uint32)
 
