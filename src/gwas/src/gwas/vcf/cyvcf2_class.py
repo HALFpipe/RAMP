@@ -80,7 +80,7 @@ class CyVCF2VCFFile(VCFFile):
                 ]
             )
             if "DS" in variant.FORMAT:
-                self.variant_dosage_fields.append(variant.format["DS"])
+                self.variant_dosage_fields.append(variant.format("DS"))
             else:
                 self.variant_dosage_fields.append(np.nan)
         self.vcf_variants = pd.DataFrame(variants, columns=variant_columns)
