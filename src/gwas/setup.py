@@ -4,7 +4,6 @@ import sys
 import numpy as np
 from Cython.Build import cythonize
 from setuptools import Extension, setup
-from setuptools_rust import Binding, RustExtension
 
 # Adapted from https://github.com/pandas-dev/pandas/blob/main/setup.py
 debugging_symbols_requested = "--with-debugging-symbols" in sys.argv
@@ -35,9 +34,7 @@ setup(
                     ("NDEBUG", None),
                 ],
                 include_dirs=[np.get_include()],
-                libraries=[
-                    "mkl_rt",
-                ],
+                libraries=["mkl_rt"],
             ),
             Extension(
                 "gwas.mem._os",
@@ -62,9 +59,18 @@ setup(
                     ("NDEBUG", None),
                 ],
                 include_dirs=[np.get_include()],
-                libraries=[
-                    "blosc2",
+                libraries=["blosc2"],
+            ),
+            Extension(
+                "gwas.vcf._htslib",
+                [
+                    "src/gwas/vcf/_htslib.pyx",
                 ],
+                define_macros=[
+                    ("NDEBUG", None),
+                ],
+                include_dirs=[],
+                libraries=["hts"],
             ),
         ]
     )
@@ -77,8 +83,8 @@ setup(
             extra_link_args=extra_link_args,
         ),
     ],
-    rust_extensions=[
-        RustExtension("gwas._rust", path="src/rust/Cargo.toml", binding=Binding.PyO3)
-    ],
+    # rust_extensions=[
+    #     RustExtension("gwas._rust", path="src/rust/Cargo.toml", binding=Binding.PyO3)
+    # ],
     zip_safe=False,
 )
