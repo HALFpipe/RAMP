@@ -123,7 +123,7 @@ class CyVCF2VCFFile(VCFFile):
                 processed_dosage_fields = self.process_dosage_fields(
                     dosage_fields, self.sample_indices
                 )
-                if processed_dosage_fields[0] != dosages.shape[1]:
+                if processed_dosage_fields.shape[0] != dosages.shape[1]:
                     raise ValueError(
                         f"Shape of dosage_fields does not match the number of samples "
                         f"({dosage_fields.shape[0]} != {dosages.shape[1]})"
