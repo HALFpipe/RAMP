@@ -60,6 +60,7 @@ class CyVCF2VCFFile(VCFFile):
 
         print("DATAFRAME CREATION")
         variants = []
+        self.variant_dosage_fields = []
         for _, variant in enumerate(self.vcf):
             r2_value = variant.INFO.get(
                 "ER2", variant.INFO.get("R2", np.nan)
@@ -78,6 +79,10 @@ class CyVCF2VCFFile(VCFFile):
                     (":").join(variant.FORMAT),
                 ]
             )
+            if "DS" in variant.FORMAT:
+                self.variant_dosage_fields.append(variant.format["DS"])
+            else:
+                self.variant_dosage_fields.append(np.nan)
         self.vcf_variants = pd.DataFrame(variants, columns=variant_columns)
 
         self.vcf_variants["chromosome_int"] = self.vcf_variants["chromosome_int"].astype(
@@ -104,21 +109,36 @@ class CyVCF2VCFFile(VCFFile):
                 "The output array does not match the number of samples "
                 f"({dosages.shape[1]} != {self.sample_count})"
             )
-        vcf_read = self.return_vcf_object()
-        if self.samples:
-            vcf_read.set_samples(self.samples)
+        # vcf_read = self.return_vcf_object()
+        # if self.samples:
+        #    vcf_read.set_samples(self.samples)
 
-        variant_index_iter = iter(self.variant_indices)
-        current_index = self.get_next_variant_index(variant_index_iter)
+        # variant_index_iter = iter(self.variant_indices)
+        # current_index = self.get_next_variant_index(variant_index_iter)
 
         pos_in_dosage = 0
-        for variant_count, variant in enumerate(vcf_read):
-            if variant_count == current_index:
-                self.process_variant(variant, pos_in_dosage, dosages)
-                pos_in_dosage += 1
-                current_index = self.get_next_variant_index(variant_index_iter)
-                if current_index is None:
-                    break
+        for idx in self.variant_indices:
+            dosage_fields = self.variant_dosage_fields[idx]
+            if dosage_fields is not np.nan:
+                processed_dosage_fields = self.process_dosage_fields(
+                    dosage_fields, self.sample_indices
+                )
+                if processed_dosage_fields[0] != dosages.shape[1]:
+                    raise ValueError(
+                        f"Shape of dosage_fields does not match the number of samples "
+                        f"({dosage_fields.shape[0]} != {dosages.shape[1]})"
+                    )
+                dosages[pos_in_dosage, :] = processed_dosage_fields
+            else:
+                dosages[pos_in_dosage, :] = np.nan
+            pos_in_dosage += 1
+        # for variant_count, variant in enumerate(vcf_read):
+        #     if variant_count == current_index:
+        #         self.process_variant(variant, pos_in_dosage, dosages)
+        #         pos_in_dosage += 1
+        #         current_index = self.get_next_variant_index(variant_index_iter)
+        #         if current_index is None:
+        #             break
 
     def process_variant(self, variant, pos_in_dosage, dosages) -> None:
         if "DS" in variant.FORMAT:
