@@ -163,9 +163,11 @@ class CyVCF2VCFFile(VCFFile):
 
     def process_dosage_fields(self, dosage_fields, sample_indices) -> np.ndarray:
         if sample_indices is not None:
-            dosage_fields = np.array([dosage_fields[i] for i in sample_indices])
+            # dosage_fields = np.array([dosage_fields[i] for i in sample_indices])
+            dosage_fields = np.asarray(dosage_fields)  # numpy array
+            dosage_fields = dosage_fields[sample_indices]
         else:
-            dosage_fields = np.array(dosage_fields)
+            dosage_fields = np.asarray(dosage_fields)  # numpy array
         if dosage_fields.ndim > 1:
             dosage_fields = dosage_fields.flatten()
         return dosage_fields
