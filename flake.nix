@@ -1,6 +1,6 @@
 {
   description = "A basic flake with a shell";
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.11";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-24.05";
   outputs = { self, nixpkgs }:
     let
       pkgs = import nixpkgs {
@@ -10,9 +10,10 @@
           cudaSupport = true;
         };
       };
-    in {
+    in
+    {
       devShells.x86_64-linux.default = pkgs.mkShell {
-        packages = [ pkgs.micromamba pkgs.ruff ];
+        packages = [ pkgs.clang pkgs.clang-tools pkgs.gcc pkgs.gdb pkgs.micromamba pkgs.ruff ];
         shellHook = ''
           export PYTHONBREAKPOINT=ipdb.set_trace
           export PYTHONDONTWRITEBYTECODE=1

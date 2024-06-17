@@ -26,7 +26,7 @@ ENV PATH="/opt/conda/bin:$PATH"
 RUN curl --silent --show-error --location \
     "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh" \
     --output "conda.sh" && \
-    bash "conda.sh" -b -p /opt/conda && \
+    bash "conda.sh" -b -p "/opt/conda" && \
     rm "conda.sh" && \
     conda config --system  --set "solver" "libmamba" && \
     conda config --system --append "channels" "bioconda" && \
@@ -36,33 +36,37 @@ RUN curl --silent --show-error --location \
 # Build packages
 # ==============
 FROM conda as builder
-RUN conda install --yes "conda-build"
+RUN conda install --yes "c-compiler" "conda-build"
 COPY recipes/conda_build_config.yaml /root/conda_build_config.yaml
 
+# https://danieldk.eu/Posts/2020-08-31-MKL-Zen.html
+RUN echo "int mkl_serv_intel_cpu_true() {return 1;}" | \
+    gcc -x "c" -shared -fPIC -o "/opt/libfakeintel.so" -
+
 RUN --mount=source=recipes/dosage-convertor,target=/dosage-convertor \
-    conda build --no-anaconda-upload --numpy "1.26" "dosage-convertor" && \
-    conda build purge
+    conda build --no-anaconda-upload --numpy "1.26" "dosage-convertor"
 RUN --mount=source=recipes/qctool,target=/qctool \
-    conda build --no-anaconda-upload --numpy "1.26" --use-local "qctool" && \
-    conda build purge
+    conda build --no-anaconda-upload --numpy "1.26" --use-local "qctool"
 RUN --mount=source=recipes/raremetal,target=/raremetal \
+    --mount=source=recipes/raremetal-debug,target=/raremetal-debug \
     conda build --no-anaconda-upload --numpy "1.26" --use-local "raremetal" && \
-    conda build purge
+    conda build --no-anaconda-upload --numpy "1.26" --use-local "raremetal-debug"
 RUN --mount=source=recipes/r-gmmat,target=/r-gmmat \
-    conda build --no-anaconda-upload --numpy "1.26" --use-local "r-gmmat" && \
-    conda build purge
+    conda build --no-anaconda-upload --numpy "1.26" --use-local "r-gmmat"
 RUN --mount=source=recipes/r-saige,target=/r-saige \
-    conda build --no-anaconda-upload --numpy "1.26" --use-local "r-saige" && \
-    conda build purge
+    conda build --no-anaconda-upload --numpy "1.26" --use-local "r-saige"
 RUN --mount=source=recipes/upload,target=/upload \
-    conda build --no-anaconda-upload --numpy "1.26" --use-local "upload" && \
-    conda build purge
+    conda build --no-anaconda-upload --numpy "1.26" --use-local "upload"
+RUN --mount=source=recipes/c-blosc2,target=/c-blosc2 \
+    conda build --no-anaconda-upload --numpy "1.26" --use-local "c-blosc2"
+RUN --mount=source=recipes/python-blosc2,target=/python-blosc2 \
+    conda build --no-anaconda-upload --numpy "1.26" --use-local "python-blosc2"
 # Mount .git folder too for setuptools_scm
 RUN --mount=source=recipes/gwas,target=/gwas-protocol/recipes/gwas \
     --mount=source=src/gwas,target=/gwas-protocol/src/gwas \
     --mount=source=.git,target=/gwas-protocol/.git \
-    conda build --no-anaconda-upload --numpy "1.26" --use-local "gwas-protocol/recipes/gwas" && \
-    conda build purge
+    conda build --no-anaconda-upload --numpy "1.26" --use-local "gwas-protocol/recipes/gwas"
+RUN conda build purge
 
 RUN conda index /opt/conda/conda-bld
 
@@ -74,23 +78,16 @@ COPY --from=builder /opt/conda/conda-bld /opt/conda/conda-bld
 RUN mamba install --yes --use-local \
     "python=3.12" \
     "jaxlib=*=cpu*" \
-    "bcftools>=1.17" \
     "gemma" \
-    "plink" \
-    "plink2" \
+    "r-gmmat" \
+    "r-saige" \
     "r-skat" \
-    "tabix" \
     "p7zip>=15.09" \
     "parallel" \
     "dosage-convertor" \
-    "gcta" \
-    "gwas" \
-    "perl-vcftools-vcf" \
-    "python-blosc2" \
     "qctool" \
-    "raremetal" \
-    "r-gmmat" \
-    "r-saige" && \
+    "gwas" \
+    "raremetal-debug" && \
     sync && \
     rm -rf /opt/conda/conda-bld && \
     mamba clean --yes --all --force-pkgs-dirs
@@ -98,10 +95,13 @@ RUN mamba install --yes --use-local \
 # Final
 # =====
 FROM base
-COPY --from=install /opt/conda /opt/conda
+COPY --from=install --chown=ubuntu:ubuntu /opt/conda /opt/conda
 
 # Ensure that we can link to libraries installed via conda
 ENV PATH="/opt/conda/bin:$PATH" \
     CPATH="/opt/conda/include:${CPATH}"
 RUN echo /opt/conda/lib > /etc/ld.so.conf.d/conda.conf && \
     ldconfig
+
+ENV LD_PRELOAD="/opt/libfakeintel.so"
+COPY --from=builder --chown=ubuntu:ubuntu /opt/libfakeintel.so /opt/libfakeintel.so

@@ -27,7 +27,7 @@ requirements:
     - zlib
   run:
     - python
-    # Python dependencies
+    # python dependencies
     - "numpy>=1.22"
     - scipy
     - pandas
@@ -44,13 +44,21 @@ requirements:
     - more-itertools
     - typing_extensions
     - mkl
-    # Compression tools
+    - python-blosc2 >=2.6.3.dev0
+    # compression tools
     - zstd
     - htslib
     - xz
     - bzip2
     - lz4-c
-    # Transfer results
+    # genetics tools
+    - bcftools >=1.17
+    - gcta
+    - plink
+    - plink2
+    - raremetal
+    - tabix
+    # transfer tools
     - upload
 
 test:
