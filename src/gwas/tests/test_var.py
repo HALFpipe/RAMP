@@ -6,12 +6,12 @@ import numpy as np
 import pytest
 import scipy
 from gwas.log import logger
-from gwas.null_model.ml import (
-    MaximumLikelihood,
+from gwas.null_model.ml import MaximumLikelihood
+from gwas.null_model.pml import (
     OptimizeInput,
     ProfileMaximumLikelihood,
-    RestrictedMaximumLikelihood,
 )
+from gwas.null_model.reml import RestrictedMaximumLikelihood
 from jax import numpy as jnp
 
 

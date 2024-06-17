@@ -6,13 +6,13 @@ import numpy as np
 import pytest
 from gwas.log import logger
 from gwas.null_model.fastlmm import FaSTLMM
-from gwas.null_model.ml import (
-    MaximumLikelihood,
-    MaximumPenalizedLikelihood,
+from gwas.null_model.ml import MaximumLikelihood
+from gwas.null_model.mpl import MaximumPenalizedLikelihood
+from gwas.null_model.pml import (
     OptimizeInput,
     ProfileMaximumLikelihood,
-    RestrictedMaximumLikelihood,
 )
+from gwas.null_model.reml import RestrictedMaximumLikelihood
 from jax import numpy as jnp
 
 from ..utils import check_bias, check_types

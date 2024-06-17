@@ -12,6 +12,7 @@ from numpy import typing as npt
 from tqdm.auto import tqdm
 
 from .._matrix_functions import dgesvdq
+from ..log import logger
 from ..mem.arr import SharedFloat64Array
 from ..mem.wkspace import SharedWorkspace
 from ..tri.base import Triangular
@@ -85,7 +86,7 @@ class Eigendecomposition(SharedFloat64Array):
         a = tri_array.to_numpy()
         _, sample_count = a.shape
 
-        # Perform singular value decomposition
+        logger.debug("Performing singular value decomposition")
         s = self.singular_values
         v = self.eigenvectors
         numrank = dgesvdq(a, s, v)
@@ -98,7 +99,7 @@ class Eigendecomposition(SharedFloat64Array):
         # so we remove them from the workspace
         tri_array.free()
 
-        # Transpose only the singular vectors to get the eigenvectors
+        logger.debug("Transposing the right singular vectors to get the eigenvectors")
         self.transpose(shape=(sample_count, sample_count))
 
     @classmethod
@@ -224,6 +225,7 @@ class Eigendecomposition(SharedFloat64Array):
         chromosome: int | str | None = None,
         num_threads: int = 1,
     ) -> Self:
+        sw.squash()
         tri_arrays = load_tri_arrays(tri_paths, sw, num_threads=num_threads)
         return cls.from_tri(*tri_arrays, chromosome=chromosome, samples=samples)
 
@@ -249,4 +251,5 @@ def load_tri_arrays(
             )
         )
     tri_arrays.sort(key=attrgetter("start"))
+    logger.debug(f"Loaded {len(tri_arrays)}) triangular matrices: {tri_arrays}")
     return tri_arrays
