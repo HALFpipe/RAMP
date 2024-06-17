@@ -5,6 +5,7 @@ from __future__ import annotations
 import multiprocessing as mp
 import os
 import re
+import warnings
 from contextlib import nullcontext
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum, auto
@@ -13,6 +14,7 @@ from multiprocessing import pool as mp_pool
 from multiprocessing.context import SpawnProcess
 from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event, RLock
+from pathlib import Path
 from queue import Empty
 from shutil import which
 from typing import (
@@ -59,6 +61,8 @@ def parse_chromosome(chromosome: str) -> int | str:
 def chromosome_to_int(chromosome: int | str) -> int:
     if chromosome == "X":
         return 23
+    elif isinstance(chromosome, str) and chromosome.isdigit():
+        return int(chromosome)
     elif isinstance(chromosome, int):
         return chromosome
     raise ValueError(f'Unknown chromsome "{chromosome}"')
@@ -115,11 +119,7 @@ class InitArgs(NamedTuple):
 
 
 def get_initargs(num_threads: int | None = None) -> InitArgs:
-    from .log import logging_thread
-
-    logging_queue: Queue[LogRecord] | None = None
-    if logging_thread is not None:
-        logging_queue = logging_thread.logging_queue
+    from .log import logging_queue
 
     sched_affinity: set[int] | None = None
     if hasattr(os, "sched_getaffinity"):
@@ -136,6 +136,37 @@ def get_initargs(num_threads: int | None = None) -> InitArgs:
     return initargs
 
 
+num_threads_variables: Sequence[str] = [
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "NUMEXPR_MAX_THREADS",
+]
+
+
+def apply_num_threads(num_threads: int) -> None:
+    threadpool_limits(limits=num_threads)
+    for variable in num_threads_variables:
+        os.environ[variable] = str(num_threads)
+    os.environ["MKL_DYNAMIC"] = "FALSE"
+    os.environ["XLA_FLAGS"] = (
+        f"--xla_cpu_multi_thread_eigen={str(num_threads > 1).lower()} "
+        f"intra_op_parallelism_threads={num_threads}"
+    )
+
+    from chex import set_n_cpu_devices
+
+    set_n_cpu_devices(1)
+
+    import jax
+
+    jax.config.update("jax_enable_x64", True)
+    jax.config.update("jax_platform_name", "cpu")
+    # jax.config.update("jax_traceback_filtering", "off")
+
+
 def initializer(
     sched_affinity: set[int] | None,
     num_threads: int | None,
@@ -148,14 +179,12 @@ def initializer(
             os.sched_setaffinity(0, sched_affinity)
 
     if num_threads is not None:
-        threadpool_limits(limits=num_threads)
-        os.environ["XLA_FLAGS"] = (
-            f"--xla_cpu_multi_thread_eigen={str(num_threads > 1).lower()} "
-            f"intra_op_parallelism_threads={num_threads}"
-        )
+        apply_num_threads(num_threads)
 
     if logging_queue is not None:
         worker_configurer(logging_queue, log_level)
+    else:
+        warnings.warn("No logging queue provided to initializer", stacklevel=1)
     logger.debug(
         f'Configured process "{mp.current_process().name}" with {threadpool_info()}'
     )
@@ -347,11 +376,17 @@ def make_pool_or_null_context(
     if num_threads < 2:
         return nullcontext(), map(callable, iterable)
 
+    processes = max(1, num_threads)
     if isinstance(iterable, Sized):
-        processes = min(len(iterable), num_threads)
+        size = len(iterable)
+
+        if size == 0:
+            return nullcontext(), iter([])
+
+        processes = min(processes, size)
         # Apply logic from pool.map (multiprocessing/pool.py#L481) here as well
         if chunksize is None:
-            chunksize, extra = divmod(len(iterable), processes * 4)
+            chunksize, extra = divmod(size, processes * 4)
             if extra:
                 chunksize += 1
     if chunksize is None:
@@ -400,3 +435,17 @@ def make_variant_mask(
 def get_lock_name(lock: RLock) -> str:
     assert hasattr(lock, "_semlock")
     return lock._semlock.name
+
+
+def is_bfile(path: Path) -> bool:
+    return all(
+        (path.parent / f"{path.name}{suffix}").is_file()
+        for suffix in {".bed", ".bim", ".fam"}
+    )
+
+
+def is_pfile(path: Path) -> bool:
+    return all(
+        (path.parent / f"{path.name}{suffix}").is_file()
+        for suffix in {".pgen", ".pvar", ".psam"}
+    )

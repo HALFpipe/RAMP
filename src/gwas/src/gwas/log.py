@@ -1,30 +1,20 @@
 # -*- coding: utf-8 -*-
 import logging
 import warnings
-from logging.handlers import QueueHandler
+from logging.handlers import QueueHandler, QueueListener
 from multiprocessing import get_context
 from multiprocessing.queues import Queue
 from pathlib import Path
-from threading import Thread
 from typing import TextIO
 
 logger = logging.getLogger("gwas")
 multiprocessing_context = get_context("spawn")
 
 
-class LoggingThread(Thread):
-    def __init__(self) -> None:
-        super().__init__(daemon=True)
-        self.logging_queue: Queue[logging.LogRecord] = Queue(ctx=multiprocessing_context)
+logging_queue: Queue[logging.LogRecord] | None = None
+queue_listener: QueueListener | None = None
 
-    def run(self) -> None:
-        while True:
-            record = self.logging_queue.get()
-            logger = logging.getLogger(record.name)
-            logger.handle(record)
-
-
-logging_thread: LoggingThread | None = None
+handlers: list[logging.Handler] = []
 
 
 def _showwarning(
@@ -35,11 +25,14 @@ def _showwarning(
     file: TextIO | None = None,
     line: str | None = None,
 ) -> None:
-    logger = logging.getLogger("py.warnings")
-    logger.warning(
+    logging.getLogger("py.warnings").warning(
         warnings.formatwarning(message, category, filename, lineno, line),
         stack_info=True,
     )
+
+
+def capture_warnings() -> None:
+    warnings.showwarning = _showwarning
 
 
 def setup_logging(
@@ -49,11 +42,11 @@ def setup_logging(
     root.setLevel(level)
 
     formatter = logging.Formatter(
-        fmt="%(asctime)s [%(levelname)8s] %(funcName)s: "
+        fmt="%(asctime)s [%(levelname)8s] [%(processName)14s] %(funcName)s: "
         "%(message)s (%(filename)s:%(lineno)s)"
     )
 
-    handlers: list[logging.Handler] = []
+    global handlers
     if stream is True:
         handlers.append(logging.StreamHandler())
     if path is not None:
@@ -62,23 +55,46 @@ def setup_logging(
         )
     for handler in handlers:
         handler.setFormatter(formatter)
+        handler.setLevel(level)
         root.addHandler(handler)
 
-    warnings.showwarning = _showwarning
+    capture_warnings()
 
-    global logging_thread
-    logging_thread = LoggingThread()
-    logging_thread.start()
+    global logging_queue, queue_listener
+    logging_queue = multiprocessing_context.Queue()
+    queue_listener = QueueListener(logging_queue, *handlers, respect_handler_level=True)
+    queue_listener.start()
 
     logger.debug(f"Configured logging with handlers {handlers}")
+
+
+def teardown_logging() -> None:
+    global logging_queue, queue_listener
+    if queue_listener is not None:
+        queue_listener.stop()
+        queue_listener = None
+    if logging_queue is not None:
+        logging_queue.close()
+        logging_queue = None
+
+    root = logging.getLogger()
+
+    global handlers
+    for handler in handlers:
+        root.removeHandler(handler)
+        handler.close()
 
 
 def worker_configurer(
     logging_queue: Queue[logging.LogRecord], log_level: int | str
 ) -> None:
     queue_handler = QueueHandler(logging_queue)
+    queue_handler.setLevel(log_level)
+
     root = logging.getLogger()
     root.addHandler(queue_handler)
     root.setLevel(log_level)
 
-    logging.captureWarnings(True)
+    capture_warnings()
+
+    logger.debug(f"Configured logging with handler {queue_handler}")
