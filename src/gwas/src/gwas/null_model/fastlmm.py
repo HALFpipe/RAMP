@@ -11,7 +11,7 @@ from jaxtyping import Array, Float
 from numpy import typing as npt
 
 from ..log import logger
-from .ml import OptimizeInput, OptimizeResult, ProfileMaximumLikelihood
+from .pml import OptimizeInput, OptimizeResult, ProfileMaximumLikelihood
 
 terms_count = TypeVar("terms_count")
 
@@ -68,11 +68,12 @@ class FaSTLMM(ProfileMaximumLikelihood):
 
         upper_bound = float(np.log10(o.rotated_phenotype.var()))
         lower_bound = float(np.log10(self.minimum_variance) - upper_bound)
-        xa = np.arange(lower_bound, upper_bound, step=self.step)
         logger.debug(
             f"FaSTLMM will optimize between {lower_bound} to {upper_bound} "
-            f"in {xa.size} steps of size {self.step}"
+            f"in steps of size {self.step}"
         )
+        xa = np.arange(lower_bound, upper_bound, step=self.step)
+        logger.debug(f"FaSTLMM will optimize in {xa.size} steps")
 
         fmin = np.inf
         best_optimize_result: OptimizeResult | None = None

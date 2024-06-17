@@ -87,7 +87,7 @@ class NullModelCollection:
         )
         inverse_variance_matrix = inverse_variance_array.to_numpy()
         np.reciprocal(variance, out=inverse_variance_matrix)
-        # Pre-compute the inverse variance scaled residuals.
+        # Pre-compute the inverse variance scaled residuals
         scaled_residuals_array = self.sw.alloc(
             SharedArray.get_name(self.sw, "scaled-residuals"),
             sample_count,
@@ -108,21 +108,9 @@ class NullModelCollection:
         self.variance.free()
 
     @classmethod
-    def from_eig(
-        cls,
-        eig: Eigendecomposition,
-        vc: VariableCollection,
-        method: str | None = "fastlmm",
-        num_threads: int = cpu_count(),
+    def empty(
+        cls, eig: Eigendecomposition, vc: VariableCollection, method: str | None = None
     ) -> Self:
-        from .fastlmm import FaSTLMM, PenalizedFaSTLMM
-        from .ml import (
-            MaximumLikelihood,
-            MaximumPenalizedLikelihood,
-            ProfileMaximumLikelihood,
-            RestrictedMaximumLikelihood,
-        )
-
         if eig.samples != vc.samples:
             raise ValueError("Arguments `eig` and `vc` must have the same samples.")
 
@@ -149,15 +137,19 @@ class NullModelCollection:
             variance,
         )
 
-        if method is not None:
-            func = {
-                "fastlmm": FaSTLMM.fit,
-                "pfastlmm": PenalizedFaSTLMM.fit,
-                "pml": ProfileMaximumLikelihood.fit,
-                "mpl": MaximumPenalizedLikelihood.fit,
-                "reml": RestrictedMaximumLikelihood.fit,
-                "ml": MaximumLikelihood.fit,
-            }[method]
-            func(eig, vc, nm, num_threads=num_threads)
+        return nm
 
+    @classmethod
+    def from_eig(
+        cls,
+        eig: Eigendecomposition,
+        vc: VariableCollection,
+        method: str | None = "fastlmm",
+        num_threads: int = cpu_count(),
+    ) -> Self:
+        nm = cls.empty(eig, vc, method)
+        if method is not None:
+            from .fit import fit
+
+            fit(eig, vc, nm, method, num_threads)
         return nm
