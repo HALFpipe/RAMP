@@ -501,10 +501,6 @@ cdef np.ndarray format_field(bcf_hdr_t* hdr, bcf1_t* b, char* field, object vtyp
     elif vtype == "Float" or vtype == float:
         nret = bcf_get_format_float(hdr, b, tag, <float **>&buf, &n)
         typenum = np.NPY_FLOAT32
-    elif vtype == "String" or vtype == str or vtype == "Character":
-        vtype = str
-        nret = bcf_get_format_string(hdr, b, tag, <char ***>&buf, &n)
-        typenum = np.NPY_STRING
     else:
         raise Exception("type %s not supported in format()" % vtype)
 
@@ -517,17 +513,6 @@ cdef np.ndarray format_field(bcf_hdr_t* hdr, bcf1_t* b, char* field, object vtyp
     cdef list v
     shape[0] = bcf_hdr_nsamples(hdr)  # number of samples
     shape[1] = fmt.n  # values per sample
-
-    if vtype == str:
-        dst = <char **>buf
-        v = []
-        for i in range(bcf_hdr_nsamples(hdr)):
-            v.append(dst[i].decode('utf-8'))
-        #v = [dst[i] for i in range(bcf_hdr_nsamples(hdr))]
-        xret = np.array(v, dtype=str)
-        stdlib.free(dst[0])
-        # stdlib.free(dst) # couldnt free because of error can't convert char ** to python object
-        return xret
 
     iv = np.PyArray_SimpleNewFromData(2, shape, typenum, buf)
     array = np.asarray(iv)
