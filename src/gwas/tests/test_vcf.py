@@ -34,6 +34,19 @@ def get_vcf_path(
 
 
 @pytest.mark.parametrize("engine", engines)
+def test_vcf_dataframe(
+    engine: Engine,
+    vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
+    tmp_path: Path,
+):
+    vcf_path = get_vcf_path(engine, vcf_paths_by_size_and_chromosome, tmp_path)
+    vcf_file = VCFFile.from_path(vcf_path, engine=engine)
+
+    assert vcf_file is not None
+    assert vcf_file.variant_count > 0
+
+
+@pytest.mark.parametrize("engine", engines)
 def test_vcf_file(
     engine: Engine,
     vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
