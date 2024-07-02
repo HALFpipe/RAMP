@@ -408,6 +408,7 @@ def read_vcf_records(str file_path):
         raise RuntimeError(f"failed to read variant from {file_path}")
 
     cdef int32_t n_samples = bcf_hdr_nsamples(hdr)
+    cdef list samples = [hdr.samples[i].decode('utf-8') for i in range(n_samples)]
 
     cdef list variants = []
 
@@ -418,7 +419,7 @@ def read_vcf_records(str file_path):
     bcf_hdr_destroy(hdr)
     hts_close(fp)
 
-    return variants
+    return variants, samples
 
 
 def read(str file_path, np.ndarray dosages, np.ndarray sample_indices):

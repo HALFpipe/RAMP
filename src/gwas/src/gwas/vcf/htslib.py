@@ -30,7 +30,12 @@ class HTSLIBVCFFile(VCFFile):
         self.create_dataframe()
 
     def create_dataframe(self):
-        variants = read_vcf_records(str(self.file_path))
+        variants, samples = read_vcf_records(str(self.file_path))
+        self.samples = samples
+        self.sample_indices = np.array(
+            [i for i, s in enumerate(self.samples)],
+            dtype=np.uint32,
+        )
         self.vcf_variants = pd.DataFrame(variants, columns=variant_columns)
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
 
