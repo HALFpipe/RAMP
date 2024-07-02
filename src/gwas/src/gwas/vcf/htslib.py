@@ -23,7 +23,8 @@ class HTSLIBVCFFile(VCFFile):
     def __init__(self, file_path: Path | str) -> None:
         self.file_path = file_path
         self.vcf_variants: pd.DataFrame
-        self.variant_indices: npt.NDArray[np.uint32]        
+        self.variant_indices: npt.NDArray[np.uint32]
+        self.create_dataframe()        
 
     def create_dataframe(self):
         variants = read_vcf_records(self.file_path)
