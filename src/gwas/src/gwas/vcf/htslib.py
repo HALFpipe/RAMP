@@ -1,11 +1,13 @@
 from pathlib import Path
+
 import numpy as np
-from numpy import typing as npt
 import pandas as pd
-from .base import VCFFile
+from numpy import typing as npt
 
 # from ._htslib import read_vcf_records, read
-from gwas.vcf._htslib import read_vcf_records, read # from setup.py
+from gwas.vcf._htslib import read, read_vcf_records  # from setup.py
+
+from .base import VCFFile
 
 variant_columns = [
     "chromosome_int",
@@ -19,15 +21,16 @@ variant_columns = [
     # "format_str",
 ]
 
+
 class HTSLIBVCFFile(VCFFile):
-    def __init__(self, file_path: Path | str) -> None:
-        self.file_path = file_path
+    def __init__(self, file_path: str | Path) -> None:
+        self.file_path = Path(file_path)
         self.vcf_variants: pd.DataFrame
         self.variant_indices: npt.NDArray[np.uint32]
-        self.create_dataframe()        
+        self.create_dataframe()
 
     def create_dataframe(self):
-        variants = read_vcf_records(self.file_path)
+        variants = read_vcf_records(str(self.file_path))
         self.vcf_variants = pd.DataFrame(variants, variant_columns)
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
 
@@ -40,4 +43,3 @@ class HTSLIBVCFFile(VCFFile):
         #         f"({dosages.shape[1]} != {self.sample_count})"
         #     )
         read(self.file_path, dosages, self.sample_indices)
-        
