@@ -28,7 +28,7 @@ def get_vcf_path(
     tmp_path: Path,
 ) -> Path:
     vcf_zst_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
-    if engine == Engine.cyvcf2 or engine == Engine.htslib:
+    if engine == Engine.htslib:
         return to_bgzip(tmp_path, vcf_zst_path)
     return vcf_zst_path
 
