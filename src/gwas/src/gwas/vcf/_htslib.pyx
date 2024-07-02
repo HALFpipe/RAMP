@@ -11,7 +11,7 @@ from libc cimport stdlib
 # cdef extern from "htslib/hts.h":
 #     ctypedef struct htsFile:
 #         pass
-# 
+#
 #     htsFile *hts_open(const char *fn, const char *mode)
 #     int hts_close(htsFile *fp)
 
@@ -37,7 +37,7 @@ cdef extern from "htslib/hts.h":
 
     ctypedef struct htsFormat:
         htsExactFormat format
-    
+
     ctypedef struct htsFile:
         ufp fp
         htsFormat format
@@ -331,10 +331,10 @@ def read_vcf_file(str path):
 
 cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
     # from https://github.com/samtools/htslib/issues/848
-    # BCF_UN_STR  1       // up to ALT inclusive 
-    # BCF_UN_FLT  2       // up to FILTER 
-    # BCF_UN_INFO 4       // up to INFO 
-    # BCF_UN_FMT  8       // unpack format and each sample 
+    # BCF_UN_STR  1       // up to ALT inclusive
+    # BCF_UN_FLT  2       // up to FILTER
+    # BCF_UN_INFO 4       // up to INFO
+    # BCF_UN_FMT  8       // unpack format and each sample
     bcf_unpack(record, 4)
 
     cdef int64_t pos = record.pos + 1 # positions are off by one
@@ -358,9 +358,9 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
         raise ValueError()
 
     cdef float allele_frequency
-    cdef float minor_allele_frequency 
+    cdef float minor_allele_frequency
     cdef bint imputed
-    cdef float r2_value 
+    cdef float r2_value
     # variant.d.info[minor_allele_frequency_index].v1.f
 
     cdef bcf_info_t *info
@@ -375,7 +375,8 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
         elif info.key == r2_value_key:
             r2_value = info.v1.f
 
-    return (
+    #return (
+    return [
         chrom.decode(),
         pos,
         ref.decode(),
@@ -384,7 +385,9 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
         allele_frequency,
         minor_allele_frequency,
         r2_value,
-    )
+    ]
+    #)
+
 
 
 def read_vcf_records(str file_path):
@@ -394,22 +397,22 @@ def read_vcf_records(str file_path):
     cdef htsFile* fp = hts_open(path_char, b"r")
     if not fp:
         raise RuntimeError(f"failed to read {file_path}")
-    
+
     cdef bcf_hdr_t* hdr = bcf_hdr_read(fp)
     if not hdr:
         hts_close(fp)
         raise RuntimeError(f"failed to read header from {file_path}")
-    
+
     cdef bcf1_t* variant = bcf_init()
     if not variant:
         bcf_hdr_destroy(hdr)
         hts_close(fp)
         raise RuntimeError(f"failed to read variant from {file_path}")
-    
+
     cdef int32_t n_samples = bcf_hdr_nsamples(hdr)
 
     cdef list variants = []
-        
+
     while bcf_read(fp, hdr, variant) >=0:
         variants.append(read_variant(hdr, variant))
 
@@ -419,28 +422,6 @@ def read_vcf_records(str file_path):
 
     return variants
 
-    # # FORMAT field
-    # cdef char** format
-    # cdef int i
-    # cdef const char* key
-    # cdef bcf_fmt_t fmt
-    # cdef str format_str
-
-    # from https://github.com/brentp/cyvcf2/blob/main/cyvcf2/cyvcf2.pyx#L1368
-    # keys = []
-    # format_str = ""
-    # for i in range(variant.n_fmt):
-    #     fmt = variant.d.fmt[i]
-    #     if fmt.id != -1:
-    #         key = bcf_hdr_int2id(hdr, BCF_DT_ID, fmt.id)
-    #         if key:
-    #             if format_str:
-    #                  format_str += ":"
-    #             format_str += key.decode("utf-8")
-    
-        # b":".join([format[i] for i in range(len(format))]).decode() # adapted from https://github.com/brentp/cyvcf2/blob/main/cyvcf2/cyvcf2.pyx property format
-        # format_str,
-
 
 def read(str file_path, np.ndarray dosages, np.ndarray sample_indices):
     path_bytes = file_path.encode("utf-8")
@@ -448,23 +429,23 @@ def read(str file_path, np.ndarray dosages, np.ndarray sample_indices):
     cdef htsFile* fp = hts_open(path_char, b"r")
     if not fp:
         raise RuntimeError(f"failed to read {file_path}")
-    
+
     cdef bcf_hdr_t* hdr = bcf_hdr_read(fp)
     if not hdr:
         hts_close(fp)
         raise RuntimeError(f"failed to read header from {file_path}")
-    
+
     cdef bcf1_t* variant = bcf_init()
     if not variant:
         bcf_hdr_destroy(hdr)
         hts_close(fp)
         raise RuntimeError(f"failed to read variant from {file_path}")
-    
+
     # cdef int32_t n_samples = bcf_hdr_nsamples(hdr)
 
     cdef int pos_in_dosage = 0
     cdef int n_variants = dosages.shape[0]
-        
+
     while bcf_read(fp, hdr, variant) >=0:
         if pos_in_dosage >= n_variants:
             break
