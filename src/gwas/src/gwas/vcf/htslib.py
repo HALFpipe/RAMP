@@ -31,7 +31,7 @@ class HTSLIBVCFFile(VCFFile):
 
     def create_dataframe(self):
         variants = read_vcf_records(str(self.file_path))
-        self.vcf_variants = pd.DataFrame(variants, variant_columns)
+        self.vcf_variants = pd.DataFrame(variants, columns=variant_columns)
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
 
     def read(self, dosages: npt.NDArray[np.float64]) -> None:

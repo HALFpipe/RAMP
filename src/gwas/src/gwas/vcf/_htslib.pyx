@@ -375,8 +375,7 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
         elif info.key == r2_value_key:
             r2_value = info.v1.f
 
-    #return (
-    return [
+    return (
         chrom.decode(),
         pos,
         ref.decode(),
@@ -385,8 +384,7 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
         allele_frequency,
         minor_allele_frequency,
         r2_value,
-    ]
-    #)
+    )
 
 
 
