@@ -69,7 +69,7 @@ setup(
                 define_macros=[
                     ("NDEBUG", None),
                 ],
-                include_dirs=[],
+                include_dirs=[np.get_include()],
                 libraries=["hts"],
             ),
         ]
