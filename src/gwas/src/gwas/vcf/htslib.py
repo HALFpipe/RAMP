@@ -38,6 +38,21 @@ class HTSLIBVCFFile(VCFFile):
             dtype=np.uint32,
         )
         self.vcf_variants = pd.DataFrame(variants, columns=variant_columns)
+
+        self.vcf_variants["chromosome_int"] = self.vcf_variants["chromosome_int"].astype(
+            "category"
+        )
+        self.vcf_variants["reference_allele"] = self.vcf_variants[
+            "reference_allele"
+        ].astype("category")
+        self.vcf_variants["alternate_allele"] = self.vcf_variants[
+            "alternate_allele"
+        ].astype("category")
+        self.vcf_variants["format_str"] = self.vcf_variants["format_str"].astype(
+            "category"
+        )
+        self.vcf_variants["position"] = self.vcf_variants["position"].astype("uint32")
+        
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
 
     def read(self, dosages: npt.NDArray[np.float64]) -> None:
