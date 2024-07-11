@@ -41,7 +41,7 @@ class HTSLIBVCFFile(VCFFile):
 
         self.vcf_variants["chromosome_int"] = self.vcf_variants["chromosome_int"].astype(
             "int64"
-        )
+        ).astype('category')
         self.vcf_variants["reference_allele"] = self.vcf_variants[
             "reference_allele"
         ].astype("category")
