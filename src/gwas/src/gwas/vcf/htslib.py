@@ -24,6 +24,7 @@ variant_columns = [
 
 class HTSLIBVCFFile(VCFFile):
     def __init__(self, file_path: str | Path) -> None:
+        super().__init__()
         self.file_path = Path(file_path)
         self.vcf_variants: pd.DataFrame
         self.variant_indices: npt.NDArray[np.uint32]
