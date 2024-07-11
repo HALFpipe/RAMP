@@ -131,6 +131,10 @@ def test_read(
     read_result = benchmark(vcf_read, engine, vcf_path_adapted)
 
     # assert np.all(numpy_read_result.variants == read_result.variants)
+
+    # because we do not need the format str column in htslib hence we drop it
+    if engine == Engine.htslib and 'format_str' in numpy_read_result.variants.columns:
+        numpy_read_result.variants = numpy_read_result.variants.drop(columns=['format_str'])
     assert (
         assert_frame_equal(
             numpy_read_result.variants,
