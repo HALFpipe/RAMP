@@ -134,10 +134,13 @@ def test_read(
 
     # because we do not need the format str column in htslib hence we drop it
     if engine == Engine.htslib and 'format_str' in numpy_read_result.variants.columns:
-        numpy_read_result.variants = numpy_read_result.variants.drop(columns=['format_str'])
+        numpy_read_result_variants = numpy_read_result.variants.drop(columns=['format_str'])
+    else:
+        numpy_read_result_variants = numpy_read_result.variants
     assert (
         assert_frame_equal(
-            numpy_read_result.variants,
+            # numpy_read_result.variants,
+            numpy_read_result_variants,
             read_result.variants,
             check_dtype=False,
             # check_categorical=False,
