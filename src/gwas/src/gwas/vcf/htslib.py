@@ -40,7 +40,7 @@ class HTSLIBVCFFile(VCFFile):
         self.vcf_variants = pd.DataFrame(variants, columns=variant_columns)
 
         self.vcf_variants["chromosome_int"] = self.vcf_variants["chromosome_int"].astype(
-            "category"
+            "int64"
         )
         self.vcf_variants["reference_allele"] = self.vcf_variants[
             "reference_allele"
