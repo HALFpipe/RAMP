@@ -48,4 +48,4 @@ class HTSLIBVCFFile(VCFFile):
         #         "The output array does not match the number of samples "
         #         f"({dosages.shape[1]} != {self.sample_count})"
         #     )
-        read(self.file_path, dosages, self.sample_indices)
+        read(str(self.file_path), dosages, self.sample_indices)
