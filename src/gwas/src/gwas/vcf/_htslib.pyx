@@ -371,7 +371,7 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
         elif info.key == minor_allele_frequency_key:
             minor_allele_frequency = info.v1.f
         elif info.key == imputed_key:
-            imputed = (info.v1.i == 200)
+            imputed = (info.v1.i == 0) # as checked in my cython testing
         elif info.key == r2_value_key:
             r2_value = info.v1.f
 
