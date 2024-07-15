@@ -85,15 +85,17 @@ def plot_populations(
     k = component_count - 1
 
     # Populations
-    figure, axes = plt.subplots(
+    figure, axes_array = plt.subplots(
         ncols=k,
         nrows=k,
         layout="constrained",
         figsize=(6 * k, 6 * k),
         dpi=300,
     )
-    gridspec = axes[1][0].get_gridspec()
-    for ax in axes[-1][:-1]:
+    if not isinstance(axes_array, np.ndarray):
+        raise ValueError("Expected axes_array to be a numpy array")
+    gridspec = axes_array[1][0].get_gridspec()
+    for ax in axes_array[-1][:-1]:
         ax.remove()
     ax_bottom_left = figure.add_subplot(gridspec[-1, :-1])
     ax_bottom_left.axis("off")
@@ -114,10 +116,10 @@ def plot_populations(
             continue
 
         if (c1 - 1) != c2:
-            ax = axes[c1 - 1][c2]
+            ax = axes_array[c1 - 1][c2]
             ax.axis("off")
 
-        ax = axes[c2][c1 - 1]
+        ax = axes_array[c2][c1 - 1]
         ax.scatter(
             sample_components[:, c1],
             sample_components[:, c2],

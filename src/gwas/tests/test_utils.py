@@ -27,7 +27,7 @@ def test_process(
     from gwas.log import queue_listener
 
     assert queue_listener is not None
-    queue_listener.handlers = (*logging.getLogger().handlers, caplog.handler)
+    queue_listener.handlers = (*logging.getLogger().handlers,)
 
     exception_queue = multiprocessing_context.Queue()
     process = LogProcess(name="LogProcess", exception_queue=exception_queue)

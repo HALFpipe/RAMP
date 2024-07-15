@@ -76,6 +76,28 @@ class VariableCollection:
         return self.phenotypes.sw
 
     @property
+    def covariate_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            data=self.covariates.to_numpy(),
+            copy=False,
+            columns=self.covariate_names,
+            index=self.samples,
+        )
+
+    @property
+    def phenotype_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            data=self.phenotypes.to_numpy(),
+            copy=False,
+            columns=self.phenotype_names,
+            index=self.samples,
+        )
+
+    @property
+    def data_frame(self) -> pd.DataFrame:
+        return combine([self.covariate_frame, self.phenotype_frame])
+
+    @property
     def is_finite(self) -> bool:
         return bool(
             np.isfinite(self.phenotypes.to_numpy()).all()

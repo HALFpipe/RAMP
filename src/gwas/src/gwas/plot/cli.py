@@ -21,7 +21,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
         "--wd",
         type=str,
         required=True,
-        help="Insert path containing the chromosome score b2array data and metadata",
+        help="Insert path containing the chromosome score files and metadata",
     )
     paths_group.add_argument(
         "--output-directory",

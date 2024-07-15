@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, fields
-from pathlib import Path
 from subprocess import DEVNULL, PIPE, Popen
 from typing import Any, Callable
 
 import numpy as np
 import pytest
 from gwas.log import logger
+from gwas.raremetalworker.score import RaremetalworkerScoreCommand
 from gwas.utils import unwrap_which
 from more_itertools import peekable
 from numpy import typing as npt
@@ -96,9 +96,9 @@ def read_matrix(
 @pytest.fixture(scope="module")
 def rmw_debug(
     phenotype_index: int,
-    rmw_commands: list[tuple[Path, list[str]]],
+    raremetalworker_score_commands: list[RaremetalworkerScoreCommand],
 ) -> RmwDebug:
-    _, command = rmw_commands[phenotype_index]
+    command, _ = raremetalworker_score_commands[phenotype_index]
 
     command = [unwrap_which("raremetalworker-debug"), *command[1:]]
 

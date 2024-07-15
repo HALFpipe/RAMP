@@ -5,11 +5,12 @@ from pathlib import Path
 from typing import Literal, Mapping
 
 import pytest
-from gwas.log import setup_logging
+from gwas.compression.convert import to_bgzip
+from gwas.log import setup_logging, teardown_logging
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri.calc import calc_tri
 from gwas.utils import chromosome_to_int, chromosomes_set
-from gwas.vcf.base import VCFFile, calc_vcf
+from gwas.vcf.base import VCFFile, calc_vcf, load_vcf
 from psutil import virtual_memory
 from pytest import FixtureRequest
 
@@ -21,8 +22,9 @@ sample_sizes: Mapping[SampleSizeLabel, int] = dict(small=100, medium=500, large=
 
 
 @pytest.fixture(scope="session", autouse=True)
-def logging() -> None:
+def logging(request: FixtureRequest) -> None:
     setup_logging(level="DEBUG", stream=False)
+    request.addfinalizer(teardown_logging)
 
 
 @pytest.fixture(scope="session", params=[22, "X"])
@@ -34,7 +36,12 @@ def chromosome(request: FixtureRequest) -> str | int:
 
 @pytest.fixture(scope="session")
 def sw(request: FixtureRequest) -> SharedWorkspace:
-    size = int(virtual_memory().available * (2 / 3))
+    if "SLURM_MEM_PER_CPU" in os.environ:
+        size_per_cpu = int(os.environ["SLURM_MEM_PER_CPU"]) << 20
+        size = size_per_cpu * int(os.environ["SLURM_CPUS_ON_NODE"])
+    else:
+        size = virtual_memory().available
+    size = int(size * (2 / 3))
     size = min(size, 48 * 2**30)
     sw = SharedWorkspace.create(size=size)
 
@@ -45,9 +52,19 @@ def sw(request: FixtureRequest) -> SharedWorkspace:
 
 class DirectoryFactory:
     @staticmethod
-    def get(name: str | None = None, sample_size: int | None = None) -> Path:
+    def get(
+        name: str | None = None,
+        sample_size: int | None = None,
+        sample_size_label: SampleSizeLabel | None = None,
+    ) -> Path:
         p = Path(base_path / dataset / "pytest")
 
+        if sample_size_label is not None:
+            if sample_size is not None:
+                raise ValueError(
+                    "sample_size and sample_size_label are mutually exclusive"
+                )
+            sample_size = sample_sizes[sample_size_label]
         if sample_size is not None:
             p = p / str(sample_size)
 
@@ -194,3 +211,25 @@ def tri_paths_by_chromosome(
     tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sample_size_label]
     assert len(tri_paths_by_chromosome) > 0
     return tri_paths_by_chromosome
+
+
+@pytest.fixture(scope="session")
+def vcf_file(
+    chromosome: int | str,
+    vcf_files_by_chromosome: Mapping[int | str, VCFFile],
+) -> VCFFile:
+    return vcf_files_by_chromosome[chromosome]
+
+
+@pytest.fixture(scope="session")
+def vcf_gz_file(
+    vcf_file: VCFFile,
+    sample_size_label: SampleSizeLabel,
+    cache_path_by_size: Mapping[SampleSizeLabel, Path],
+    directory_factory: DirectoryFactory,
+) -> VCFFile:
+    tmp_path = directory_factory.get("bgzip", sample_size_label=sample_size_label)
+    vcf_gz_path = to_bgzip(vcf_file.file_path, tmp_path)
+    vcf_file = load_vcf(cache_path_by_size[sample_size_label], vcf_gz_path)
+    vcf_file.file_path = vcf_gz_path
+    return vcf_file

@@ -10,19 +10,22 @@ from typing import Mapping, Sequence
 import numpy as np
 import pytest
 import scipy
+from gwas.defaults import (
+    default_kinship_minor_allele_frequency_cutoff,
+    default_kinship_r_squared_cutoff,
+)
 from gwas.eig.base import Eigendecomposition
-from gwas.eig.multiple import calc_eigendecompositions
+from gwas.eig.calc import calc_eigendecompositions
 from gwas.log import logger
 from gwas.mem.arr import SharedArray, SharedFloat64Array
 from gwas.mem.wkspace import SharedWorkspace
+from gwas.raremetalworker.ped import write_dummy_ped_and_dat_files
+from gwas.tools import bcftools, raremetalworker, tabix
 from gwas.tri.base import Triangular
 from gwas.tri.tsqr import scale
 from gwas.vcf.base import VCFFile
 
 from .conftest import chromosomes
-from .utils import bcftools, rmw, tabix, to_bgzip
-
-minor_allele_frequency_cutoff: float = 0.05
 
 
 def load_genotypes(
@@ -46,7 +49,8 @@ def load_genotypes(
             logger.debug("Skipping chromosome %s", vcf_file.chromosome)
             continue
         vcf_file.set_variants_from_cutoffs(
-            minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
+            minor_allele_frequency_cutoff=default_kinship_minor_allele_frequency_cutoff,
+            r_squared_cutoff=default_kinship_r_squared_cutoff,
         )
         with vcf_file:
             start = variant_count
@@ -140,8 +144,8 @@ def test_eig(
     assert np.allclose(tri_r.transpose() @ tri_r / variant_count, c, atol=1e-3)
 
     tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes]
-    eig_array = Eigendecomposition.from_files(
-        *tri_paths, sw=sw, samples=samples, chromosome="X"
+    (eig_array,) = calc_eigendecompositions(
+        *tri_paths, sw=sw, samples_lists=[samples], chromosome="X"
     )
     request.addfinalizer(eig_array.free)
 
@@ -166,44 +170,32 @@ def test_eig(
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
 
 
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 def test_eig_rmw(
     tmp_path: Path,
-    vcf_files_by_size_and_chromosome: Mapping[str, Mapping[int | str, VCFFile]],
-    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
+    chromosome: int | str,
+    vcf_file: VCFFile,
+    tri_paths_by_chromosome: Mapping[str | int, Path],
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
 ) -> None:
     allocation_names = set(sw.allocations.keys())
 
-    c: int | str = 22
-    sample_size_label = "small"
-    vcf_file = vcf_files_by_size_and_chromosome[sample_size_label][c]
-    vcf_file.set_variants_from_cutoffs(
-        minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
-    )
-
-    tri_array = Triangular.from_file(
-        tri_paths_by_size_and_chromosome[sample_size_label][c], sw, np.float64
-    )
+    tri_array = Triangular.from_file(tri_paths_by_chromosome[chromosome], sw, np.float64)
     eig_array = Eigendecomposition.from_tri(
         tri_array,
-        chromosome=c,
+        chromosome=chromosome,
     )
     request.addfinalizer(eig_array.free)
 
-    vcf_zst_path = vcf_file.file_path
-    vcf_gz_path = to_bgzip(tmp_path, vcf_zst_path)
+    ped_path, dat_path = write_dummy_ped_and_dat_files(vcf_file.samples, tmp_path)
 
-    ped_path = tmp_path / f"chr{c}.ped"
-    with ped_path.open("wt") as file_handle:
-        for s in vcf_file.samples:
-            file_handle.write(f"{s} {s} 0 0 1 0\n")
-
-    dat_path = tmp_path / f"chr{c}.dat"
-    with dat_path.open("wt") as file_handle:
-        file_handle.write("T variable")
-
-    variants_path = tmp_path / f"chr{c}.variants.txt"
+    vcf_file.set_variants_from_cutoffs(
+        minor_allele_frequency_cutoff=default_kinship_minor_allele_frequency_cutoff,
+        r_squared_cutoff=default_kinship_r_squared_cutoff,
+    )
+    variants_path = tmp_path / f"chr{chromosome}.variants.txt"
     with variants_path.open("wt") as file_handle:
         variants_lines = (
             ":".join(
@@ -222,39 +214,39 @@ def test_eig_rmw(
         file_handle.write("\n".join(variants_lines))
 
     with chdir(tmp_path):
-        filtered_vcf_path = tmp_path / f"chr{c}.filt.vcf.gz"
+        vcf_path = tmp_path / vcf_file.file_path.with_suffix(".gz").name
+        with vcf_file as file_handle:
+            check_call(
+                [
+                    *bcftools,
+                    "view",
+                    "--include",
+                    f"ID=@{variants_path}",
+                    "--output-type",
+                    "z",
+                    "--output-file",
+                    str(vcf_path),
+                    "-",
+                ],
+                stdin=file_handle,
+            )
         check_call(
             [
-                bcftools,
-                "view",
-                "--include",
-                f"ID=@{variants_path}",
-                "--output-type",
-                "z",
-                "--output-file",
-                str(filtered_vcf_path),
-                str(vcf_gz_path),
-            ]
-        )
-
-        check_call(
-            [
-                tabix,
+                *tabix,
                 "-p",
                 "vcf",
-                str(filtered_vcf_path),
+                str(vcf_path),
             ]
         )
-
         check_call(
             [
-                rmw,
+                *raremetalworker,
                 "--ped",
                 str(ped_path),
                 "--dat",
                 str(dat_path),
                 "--vcf",
-                str(filtered_vcf_path),
+                str(vcf_path),
                 "--kinGeno",
                 "--kinSave",
                 "--kinOnly",

@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 import pickle
 from contextlib import AbstractContextManager
+from fcntl import F_GETPIPE_SZ, fcntl
 from multiprocessing import cpu_count
 from pathlib import Path
-from subprocess import DEVNULL, PIPE, Popen
+from subprocess import PIPE, Popen
 from threading import Thread
 from types import TracebackType
 from typing import IO, Any, Generic, Mapping, Type, TypeVar
@@ -20,7 +21,7 @@ decompress_commands: Mapping[str, list[str]] = {
         "--stdout",
         "--no-progress",
     ],
-    ".gz": ["bgzip", "-c", "-d"],
+    ".gz": ["bgzip", "--stdout", "--decompress"],
     ".xz": ["xz", "--decompress", "--stdout"],
     ".bz2": ["bzip2", "--decompress", "--stdout"],
     ".lz4": ["lz4", "-c", "-d"],
@@ -52,8 +53,15 @@ class CompressedReader(AbstractContextManager[IO[T]]):
             raise FileNotFoundError(self.file_path)
         self.is_text = is_text
 
+        self.input_file_handle: IO[bytes] | None = None
         self.process_handle: Popen[T] | None = None
-        self.file_handle: IO[T] | None = None
+        self.output_file_handle: IO[T] | None = None
+
+    @property
+    def pipesize(self) -> int:
+        if self.output_file_handle is None:
+            raise ValueError("Output file handle is not open")
+        return fcntl(self.output_file_handle.fileno(), F_GETPIPE_SZ)
 
     def __enter__(self) -> IO[T]:
         return self.open()
@@ -67,11 +75,13 @@ class CompressedReader(AbstractContextManager[IO[T]]):
         executable = unwrap_which(decompress_command[0])
         decompress_command[0] = executable
 
+        self.input_file_handle = self.file_path.open(mode="rb")
+
         bufsize = 1 if self.is_text else -1
         self.process_handle = Popen(
-            [*decompress_command, str(self.file_path)],
+            decompress_command,
             stderr=PIPE,
-            stdin=DEVNULL,
+            stdin=self.input_file_handle,
             stdout=PIPE,
             text=self.is_text,
             bufsize=bufsize,
@@ -84,8 +94,8 @@ class CompressedReader(AbstractContextManager[IO[T]]):
         stderr_thread = StderrThread(self.process_handle)
         stderr_thread.start()
 
-        self.file_handle = self.process_handle.stdout
-        return self.file_handle
+        self.output_file_handle = self.process_handle.stdout
+        return self.output_file_handle
 
     def __exit__(
         self,
@@ -101,12 +111,13 @@ class CompressedReader(AbstractContextManager[IO[T]]):
         value: BaseException | None = None,
         traceback: TracebackType | None = None,
     ) -> None:
-        if self.file_handle is not None:
-            self.file_handle.close()
+        if self.output_file_handle is not None:
+            self.output_file_handle.close()
         if self.process_handle is not None:
             self.process_handle.__exit__(exc_type, value, traceback)
         self.process_handle = None
-        self.file_handle = None
+        self.input_file_handle = None
+        self.output_file_handle = None
 
 
 class CompressedBytesReader(CompressedReader[bytes]):
@@ -122,11 +133,35 @@ class CompressedTextReader(CompressedReader[str]):
         super().__init__(file_path, is_text=True)
 
     def open(self) -> IO[str]:
-        if self.file_path.suffix in {".vcf", ".txt"}:
+        if self.file_path.suffix not in decompress_commands:
             # File is not compressed
-            self.file_handle = self.file_path.open(mode="rt")
-            return self.file_handle
+            self.output_file_handle = self.file_path.open(mode="rt")
+            return self.output_file_handle
         return super().open()
+
+
+def make_compress_command(
+    suffix: str, num_threads: int = cpu_count(), compression_level: int | None = None
+) -> list[str]:
+    zstd_compression_level_flag = "-22"
+    if compression_level is not None:
+        zstd_compression_level_flag = f"-{compression_level:d}"
+
+    compress_commands: Mapping[str, list[str]] = {
+        ".zst": [
+            "zstd",
+            f"--threads={num_threads:d}",
+            "--ultra",
+            zstd_compression_level_flag,
+            "--no-progress",
+        ],
+        ".gz": ["bgzip", "--threads", f"{num_threads:d}"],
+        ".xz": ["xz"],
+        ".bz2": ["bzip2", "-c"],
+        ".lz4": ["lz4"],
+    }
+
+    return compress_commands[suffix]
 
 
 class CompressedWriter(AbstractContextManager[IO[T]]):
@@ -158,24 +193,11 @@ class CompressedWriter(AbstractContextManager[IO[T]]):
 
         self.output_file_handle = self.file_path.open(mode="wb")
 
-        zstd_compression_level_flag = "-22"
-        if self.compression_level is not None:
-            zstd_compression_level_flag = f"-{self.compression_level:d}"
-
-        compress_commands: Mapping[str, list[str]] = {
-            ".zst": [
-                "zstd",
-                f"--threads={self.num_threads:d}",
-                "--ultra",
-                zstd_compression_level_flag,
-                "--no-progress",
-            ],
-            ".gz": ["bgzip", "--threads", f"{self.num_threads:d}"],
-            ".xz": ["xz"],
-            ".bz2": ["bzip2", "-c"],
-            ".lz4": ["lz4"],
-        }
-        compress_command: list[str] = compress_commands[suffix]
+        compress_command: list[str] = make_compress_command(
+            suffix,
+            num_threads=self.num_threads,
+            compression_level=self.compression_level,
+        )
 
         executable = unwrap_which(compress_command[0])
         compress_command[0] = executable

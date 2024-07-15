@@ -105,6 +105,21 @@ def set_triu(
 
 cdef extern from "mkl_lapacke.h":
     cdef int LAPACK_COL_MAJOR
+    # int LAPACKE_dgesvd(
+    #     int matrix_layout,
+    #     char jobu,
+    #     char jobvt,
+    #     int m,
+    #     int n,
+    #     double* a,
+    #     int lda,
+    #     double* s,
+    #     double* u,
+    #     int ldu,
+    #     double* vt,
+    #     int ldvt,
+    #     double* superb
+    # )
     int LAPACKE_dgesvdq(
         int matrix_layout,
         char joba,
@@ -123,6 +138,47 @@ cdef extern from "mkl_lapacke.h":
         int ldv,
         int* numrank
     )
+
+
+# def dgesvd(
+#     np.ndarray[double, ndim=2, mode="fortran"] a,
+#     np.ndarray[double, ndim=1, mode="fortran"] s,
+#     np.ndarray[double, ndim=2, mode="fortran"] v,
+# ):
+#     cdef int m = a.shape[0]
+#     check_strides(a, m)
+
+#     cdef int n = a.shape[1]
+#     check_strides(v, n)
+
+#     cdef char joba = b"H"  # Do not truncate
+#     cdef char jobp = b"P"  # Enable row pivoting
+#     cdef char jobr = b"N"  # No additional transpose
+#     cdef char jobu = b"N"  # No left singular vectors
+#     cdef char jobvt = b"A"  # All right singular vectors
+
+#     cdef int numrank = 0
+
+#     info = LAPACKE_dgesvd(
+#         LAPACK_COL_MAJOR,
+#         jobu,
+#         jobvt,
+#         m,
+#         n,
+#         &a[0, 0],
+#         m,  # lda
+#         &s[0],
+#         NULL,  # left singular vectors
+#         m,  # ldu
+#         &v[0, 0],
+#         n,  # ldv
+#         &numrank,
+#     )
+
+#     if info != 0:
+#         raise ValueError
+
+#     return numrank
 
 
 def dgesvdq(

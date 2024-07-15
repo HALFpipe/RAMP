@@ -20,6 +20,24 @@ from ..utils import chromosome_to_int, parse_chromosome
 from ..vcf.base import VCFFile, calc_vcf
 
 
+def subset_variable_collection(
+    base_variable_collection: VariableCollection,
+    pattern_samples: list[str],
+    pattern_phenotypes: list[str],
+) -> VariableCollection:
+    variable_collection = base_variable_collection.copy(
+        samples=pattern_samples, phenotype_names=pattern_phenotypes
+    )
+    variable_collection.remove_zero_variance_covariates()
+    if not variable_collection.is_finite:
+        # Sanity check.
+        raise RuntimeError(
+            f"Missing values remain in chunk {variable_collection.name}. This should "
+            "not happen"
+        )
+    return variable_collection
+
+
 @dataclass
 class GwasCommand:
     arguments: Namespace
@@ -59,10 +77,11 @@ class GwasCommand:
         base_variable_collection: VariableCollection,
     ) -> list[VariableCollection]:
         sw = base_variable_collection.sw
-        # Load phenotype and covariate data for all samples that have genetic data and
-        # count missing values.
         phenotype_names = base_variable_collection.phenotype_names
         samples = base_variable_collection.samples
+
+        # Load phenotype and covariate data for all samples that have genetic data and
+        # count missing values.
         (
             missing_value_patterns,
             missing_value_pattern_indices,
@@ -100,19 +119,11 @@ class GwasCommand:
                 continue
             if len(pattern_phenotypes) == 0:
                 raise RuntimeError(f"No phenotypes in chunk {i}. This should not happen")
-
-            variable_collection = base_variable_collection.copy(
-                samples=pattern_samples, phenotype_names=pattern_phenotypes
+            variable_collection = subset_variable_collection(
+                base_variable_collection, pattern_samples, pattern_phenotypes
             )
-            variable_collection.remove_zero_variance_covariates()
-            if not variable_collection.is_finite:
-                # Sanity check.
-                raise RuntimeError(
-                    f"Missing values remain in chunk {i}. This should not happen"
-                )
-
             variable_collections.append(variable_collection)
-            sw.squash()
+        sw.squash()
 
         # Sort by number of phenotypes
         variable_collections.sort(key=lambda vc: -vc.phenotype_count)
@@ -122,6 +133,20 @@ class GwasCommand:
             vc.name = f"variableCollection-{i + 1:02d}"
 
         return variable_collections
+
+    def update_allele_frequencies(
+        self, variable_collections: list[VariableCollection]
+    ) -> None:
+        # Update the VCF file allele frequencies based on variable collections
+        for chromosome in tqdm(
+            self.selected_chromosomes, desc="calculating allele frequencies"
+        ):
+            vcf_file = self.vcf_by_chromosome[chromosome]
+            if calc_mean(
+                vcf_file,
+                variable_collections,
+            ):
+                vcf_file.save_to_cache(self.output_directory)
 
     def setup_variable_collections(self) -> list[VariableCollection]:
         logger.debug("Arguments are %s", pformat(vars(self.arguments)))
@@ -169,16 +194,7 @@ class GwasCommand:
             )
         base_variable_collection.free()
 
-        # Update the VCF file allele frequencies based on variable collections
-        for chromosome in tqdm(
-            self.selected_chromosomes, desc="calculating allele frequencies"
-        ):
-            vcf_file = self.vcf_by_chromosome[chromosome]
-            if calc_mean(
-                vcf_file,
-                variable_collections,
-            ):
-                vcf_file.save_to_cache(self.output_directory)
+        self.update_allele_frequencies(variable_collections)
 
         # Load or calculate triangularized genotype data
         for vcf_file in vcf_files:  # Use all available samples
@@ -277,7 +293,7 @@ class GwasCommand:
         for chromosome in tqdm(
             self.selected_chromosomes,
             unit="chromosomes",
-            desc="calculating score statistics",
+            desc="processing chromosomes",
         ):
             self.run_chunk(chromosome, variable_collections.copy())
 

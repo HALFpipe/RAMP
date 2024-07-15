@@ -2,16 +2,18 @@
 from dataclasses import dataclass, fields
 from itertools import pairwise
 from pathlib import Path
-from typing import Any, ClassVar, Generic, Literal, Self, TypeVar, overload
+from typing import Any, ClassVar, Generic, Literal, Self, Type, TypeVar, overload
 
 import numpy as np
 import scipy
 from numpy import typing as npt
 
-from gwas.compression.arr.bin import Blosc2FileArray
-
 from .._matrix_functions import dimatcopy, set_tril
-from ..compression.arr.base import Blosc2CompressionMethod, default_compression_method
+from ..compression.arr.base import (
+    CompressionMethod,
+    FileArray,
+    default_compression_method,
+)
 from ..log import logger
 from ..utils import global_lock, invert_pivot
 from .wkspace import Allocation, SharedWorkspace
@@ -24,7 +26,7 @@ class SharedArray(Generic[ScalarType]):
     name: str
     sw: SharedWorkspace
 
-    compression_method: ClassVar[Blosc2CompressionMethod] = default_compression_method
+    compression_method: ClassVar[CompressionMethod] = default_compression_method
 
     @property
     def allocation(self) -> Allocation:
@@ -107,7 +109,7 @@ class SharedArray(Generic[ScalarType]):
         )
 
     def to_metadata(self) -> dict[str, Any]:
-        ignore = [field.name for field in fields(SharedArray)]
+        ignore: set[str] = {field.name for field in fields(SharedArray)}
         data = {
             field.name: getattr(self, field.name)
             for field in fields(self)
@@ -155,16 +157,14 @@ class SharedArray(Generic[ScalarType]):
         cls,
         file_path: Path,
         sw: SharedWorkspace,
-        dtype: type[ScalarType] | np.dtype[ScalarType],
+        dtype: Type[ScalarType],
         num_threads: int = 1,
     ) -> Self:
-        array_proxy: Blosc2FileArray = Blosc2FileArray.from_file(
-            file_path, num_threads=num_threads
-        )
-        shape = array_proxy.shape[::-1]  # Reverse because of Fortran order
+        reader = FileArray.from_file(file_path, dtype)
+        shape = reader.shape[::-1]  # Reverse because of Fortran order
 
-        if array_proxy.extra_metadata is not None:
-            kwargs = array_proxy.extra_metadata
+        if reader.extra_metadata is not None:
+            kwargs = reader.extra_metadata
         else:
             kwargs = {}
 
@@ -176,14 +176,9 @@ class SharedArray(Generic[ScalarType]):
         array = cls(name, sw, **kwargs)
         a = array.to_numpy().transpose()
 
-        start = [0] * len(a.shape)
-        stop = list(a.shape)
-        key = (start, stop)
-
-        with array_proxy:
-            if array_proxy.array is None:
-                raise RuntimeError("Blosc2 array not initialized")
-            array_proxy.array.get_slice_numpy(a, key)
+        s = slice(None)
+        with reader:
+            reader.read((s, s), a)
         return array
 
     def to_file(self, file_path: Path, num_threads: int = 1) -> Path:
@@ -191,7 +186,7 @@ class SharedArray(Generic[ScalarType]):
             file_path = file_path / self.to_file_name()
 
         array = self.to_numpy().transpose()
-        array_proxy: Blosc2FileArray = Blosc2FileArray(
+        writer = FileArray.create(
             file_path,
             array.shape,
             array.dtype.type,
@@ -199,8 +194,8 @@ class SharedArray(Generic[ScalarType]):
             extra_metadata=self.to_metadata(),
             num_threads=num_threads,
         )
-        with array_proxy:
-            array_proxy[:] = array
+        with writer:
+            writer[:, :] = array
 
         return file_path
 
@@ -381,7 +376,7 @@ class SharedFloat64Array(SharedArray[np.float64]):
 
             # Calculate lwork
             _, _, _, lwork, _ = func(a, lwork=-1, overwrite_a=True)
-            lwork = int(lwork)
+            lwork = int(lwork.item())
 
             # Run the computation
             _, jpvt, _, _, info = func(

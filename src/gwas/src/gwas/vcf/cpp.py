@@ -18,7 +18,7 @@ class CppVCFFile(VCFFile):
         super().__init__(file_path)
 
         vcf_variants: list[Variant] = list()
-        from ._read import read_str
+        from ..compression.arr._read_str import read_str
 
         with self as file_handle:
             read_str(
@@ -28,6 +28,7 @@ class CppVCFFile(VCFFile):
                 self.header_length,
                 len(self.columns),
                 self.metadata_column_indices,
+                ring_buffer_size=self.pipesize,
             )
         self.vcf_variants = self.make_data_frame(vcf_variants)
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
@@ -67,7 +68,7 @@ class CppVCFFile(VCFFile):
         self,
         dosages: npt.NDArray[np.float64],
     ) -> None:
-        if self.file_handle is None:
+        if self.output_file_handle is None:
             raise ValueError("Cannot read from a closed file")
 
         if dosages.size == 0:
@@ -79,18 +80,22 @@ class CppVCFFile(VCFFile):
                 f"({dosages.shape[1]} != {self.sample_count})"
             )
 
-        from ._read import create_float_reader, run_float_reader
+        from ..compression.arr._read_float import (
+            create_vcf_float_reader,
+            run_vcf_float_reader,
+        )
 
         if self.float_reader is None:
-            self.float_reader = create_float_reader(
-                self.file_handle.fileno(),
+            self.float_reader = create_vcf_float_reader(
+                self.output_file_handle.fileno(),
                 self.header_length,
                 self.column_count,
                 self.column_indices,
                 self.dosage_field_index,
+                ring_buffer_size=self.pipesize,
             )
 
-        run_float_reader(
+        run_vcf_float_reader(
             dosages.transpose(),
             self.float_reader,
             self.variant_indices,

@@ -11,11 +11,11 @@ import scipy
 from numpy import typing as npt
 from tqdm.auto import tqdm
 
-from . import __version__
-from .compression.pipe import CompressedTextReader, CompressedTextWriter
-from .null_model.base import NullModelCollection
-from .pheno import VariableCollection, VariableSummary
-from .utils import to_str, underscore
+from .. import __version__
+from ..compression.pipe import CompressedTextReader, CompressedTextWriter
+from ..null_model.base import NullModelCollection
+from ..pheno import VariableCollection, VariableSummary
+from ..utils import to_str, underscore
 
 
 @dataclass

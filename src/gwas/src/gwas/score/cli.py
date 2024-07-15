@@ -6,14 +6,18 @@ from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import Literal
 
-import numpy as np
-
 
 def parse_arguments(argv: list[str]) -> Namespace:
-    from gwas.compression.arr.base import compression_methods
-    from gwas.null_model.base import NullModelCollection
-    from gwas.utils import chromosomes_set
-    from gwas.vcf.base import Engine
+    from ..compression.arr.base import compression_methods
+    from ..defaults import (
+        default_kinship_minor_allele_frequency_cutoff,
+        default_kinship_r_squared_cutoff,
+        default_score_minor_allele_frequency_cutoff,
+        default_score_r_squared_cutoff,
+    )
+    from ..null_model.base import NullModelCollection
+    from ..utils import chromosomes_set
+    from ..vcf.base import Engine
 
     argument_parser = ArgumentParser()
 
@@ -33,35 +37,34 @@ def parse_arguments(argv: list[str]) -> Namespace:
         choices=chromosomes_list,
         nargs="+",
         required=False,
-        default=[*chromosomes_list],
     )
     argument_parser.add_argument(
         "--kinship-minor-allele-frequency-cutoff",
         "--kin-maf",
         required=False,
         type=float,
-        default=0.05,
+        default=default_kinship_minor_allele_frequency_cutoff,
     )
     argument_parser.add_argument(
         "--kinship-r-squared-cutoff",
         "--kinship-r2",
         required=False,
         type=float,
-        default=-np.inf,
+        default=default_kinship_r_squared_cutoff,
     )
     argument_parser.add_argument(
         "--score-minor-allele-frequency-cutoff",
         "--score-maf",
         required=False,
         type=float,
-        default=-np.inf,
+        default=default_score_minor_allele_frequency_cutoff,
     )
     argument_parser.add_argument(
         "--score-r-squared-cutoff",
         "--score-r2",
         required=False,
         type=float,
-        default=-np.inf,
+        default=default_score_r_squared_cutoff,
     )
     argument_parser.add_argument(
         "--null-model-method",
@@ -73,7 +76,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
         "--compression-method",
         required=False,
         choices=compression_methods.keys(),
-        default="zstd_ultra_text",
+        default="zstd_high_text",
     )
     argument_parser.add_argument(
         "--missing-value-strategy",
@@ -109,6 +112,7 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
 
     from gwas.log import logger, setup_logging
     from gwas.mem.wkspace import SharedWorkspace
+    from gwas.utils import apply_num_threads
 
     output_directory = Path(arguments.output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -119,13 +123,7 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
     if arguments.mem_gb is not None:
         size = int(arguments.mem_gb * 2**30)
 
-    from chex import set_n_cpu_devices
-    from jax import config
-
-    config.update("jax_enable_x64", True)
-    config.update("jax_platform_name", "cpu")
-    config.update("jax_traceback_filtering", "off")
-    set_n_cpu_devices(arguments.num_threads)
+    apply_num_threads(arguments.num_threads)
 
     with SharedWorkspace.create(size=size) as sw:
         try:

@@ -153,7 +153,7 @@ class TallSkinnyQR:
         if len(chromosome_set) == 1:
             (chromosome,) = chromosome_set
         else:
-            raise ValueError
+            chromosome = None
 
         cutoffs = sorted(a.minor_allele_frequency_cutoff for a in shared_arrays)
         if np.isclose(min(cutoffs), max(cutoffs)):

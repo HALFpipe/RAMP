@@ -102,6 +102,8 @@ def to_str(x: Any) -> str:
         if x.size == 1:
             x = x.item()
     if np.issubdtype(type(x), np.floating):
+        if np.isnan(x):
+            return "NA"
         return np.format_float_scientific(x)
     return str(x)
 

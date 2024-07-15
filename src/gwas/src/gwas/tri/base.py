@@ -21,7 +21,7 @@ def is_lower_triangular(a: npt.NDArray[Any]) -> bool:
 
 @dataclass
 class Triangular(SharedFloat64Array):
-    chromosome: int | str
+    chromosome: int | str | None
     samples: list[str]
     variant_count: int
 
@@ -57,7 +57,9 @@ class Triangular(SharedFloat64Array):
         self.samples = samples
 
     @classmethod
-    def get_file_name(cls, chromosome: int | str) -> str:
+    def get_file_name(cls, chromosome: int | str | None) -> str:
+        if chromosome is None:
+            return "tri"
         return f"chr{chromosome}.tri"
 
     @staticmethod

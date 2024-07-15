@@ -23,7 +23,6 @@ requirements:
     - "setuptools_scm>=6.2"
     - "setuptools-rust"
     - wheel
-    - c-blosc2
     - zlib
   run:
     - python
@@ -44,7 +43,6 @@ requirements:
     - more-itertools
     - typing_extensions
     - mkl
-    - python-blosc2 >=2.6.3.dev0
     # compression tools
     - zstd
     - htslib
@@ -59,7 +57,7 @@ requirements:
     - raremetal
     - tabix
     # transfer tools
-    - upload
+    # - upload
 
 test:
   commands:

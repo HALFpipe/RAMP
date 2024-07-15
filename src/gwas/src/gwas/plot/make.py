@@ -156,13 +156,16 @@ class PlotGenerator:
 
         try:
             plot_path = get_file_path(self.output_directory, job.name)
-            figure, (manhattan_axes, qq_axes) = plt.subplots(
+            figure, axes_array = plt.subplots(
                 nrows=1,
                 ncols=2,
                 width_ratios=(2, 1),
                 figsize=(18, 8),
                 constrained_layout=True,
             )
+            if not isinstance(axes_array, np.ndarray):
+                raise ValueError("Expected axes_array to be a numpy array")
+            (manhattan_axes, qq_axes) = axes_array
             figure.suptitle(job.name)
 
             plot_manhattan(chromosome_int, position, log_p_value, manhattan_axes)

@@ -36,8 +36,9 @@ def check_tri_path(
 ) -> tuple[int | str, Path] | None:
     try:
         tri = Triangular.from_file(tri_path, sw, np.float64)
-        chromosome = tri.chromosome
-        samples = samples_by_chromosome[chromosome]
+        if tri.chromosome is None:
+            return None
+        samples = samples_by_chromosome[tri.chromosome]
         tri.free()
     except FileNotFoundError:
         return None
@@ -51,9 +52,9 @@ def check_tri_path(
     if set(tri.samples) <= set(samples):
         logger.debug(
             f"Using existing triangularized file {tri_path} "
-            f"for chromosome {chromosome}"
+            f"for chromosome {tri.chromosome}"
         )
-        return chromosome, tri_path
+        return tri.chromosome, tri_path
     else:
         logger.warning(
             f"Will re-calculate tri file {tri_path} because samples do not match"

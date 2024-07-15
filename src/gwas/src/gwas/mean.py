@@ -58,7 +58,13 @@ def calc_mean(
     name = SharedArray.get_name(sw, "genotypes")
     genotypes_array = sw.alloc(name, sample_count, variant_count)
 
-    with vcf_file, tqdm(total=variant_count, unit="variants") as progress_bar:
+    progress_bar = tqdm(
+        total=variant_count,
+        unit="variants",
+        desc="calculating allele frequencies",
+        leave=False,
+    )
+    with vcf_file, progress_bar:
         variant_offset = 0
         while len(variant_indices) > 0:
             # Read the genotypes

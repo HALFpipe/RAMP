@@ -4,12 +4,11 @@ from functools import partial
 from pathlib import Path
 
 import pandas as pd
-import yaml
 from tqdm.auto import tqdm
 
 from ..compression.arr.bin import Blosc2FileArray
-from ..compression.pipe import CompressedTextReader
 from ..log import logger
+from ..summary import SummaryCollection
 from ..utils import IterationOrder, chromosomes_list, make_pool_or_null_context
 
 
@@ -39,7 +38,7 @@ def get_chromosome_metadata(
         else:
             raise ValueError(message)
 
-    array_proxy: Blosc2FileArray = Blosc2FileArray.from_file(score_path)
+    array_proxy: Blosc2FileArray = Blosc2FileArray.from_file(score_path, "r")
     row_metadata, column_metadata = array_proxy.axis_metadata
 
     if row_metadata is None or column_metadata is None:
@@ -104,12 +103,11 @@ def get_variable_collection_names(
     metadata_path = input_directory / "chr1.metadata.yaml.gz"
     if not metadata_path.exists():
         raise ValueError(f"Missing metadata file: {metadata_path}")
-    with CompressedTextReader(metadata_path) as file_handle:
-        metadata = yaml.load(file_handle, Loader=yaml.CBaseLoader)
+    summary_collection = SummaryCollection.from_file(metadata_path)
     variable_collection_names: dict[str, str] = dict()
-    for chunk in metadata["chunks"].values():
+    for chunk in summary_collection.chunks.values():
         for variable_collection_name, variable_collection in chunk.items():
-            for phenotype_name in variable_collection["phenotypes"].keys():
+            for phenotype_name in variable_collection.phenotypes.keys():
                 variable_collection_names[phenotype_name] = variable_collection_name
     return variable_collection_names
 

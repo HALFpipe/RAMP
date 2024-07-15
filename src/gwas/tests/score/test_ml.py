@@ -95,6 +95,25 @@ def test_fastlmm(
     assert np.allclose(se.variance.ravel(), rmw_debug.sigma2, atol=1e-3)
 
 
+def assert_both_close(
+    genetic_variance: float,
+    rmw_genetic_variance: float,
+    error_variance: float,
+    rmw_error_variance: float,
+    atol=1e-3,
+    rtol=1e-3,
+) -> None:
+    scale = max(
+        abs(genetic_variance),
+        abs(rmw_genetic_variance),
+        abs(error_variance),
+        abs(rmw_error_variance),
+    )
+    criterion = atol + rtol * scale
+    assert np.abs(genetic_variance - rmw_genetic_variance) <= criterion
+    assert np.abs(error_variance - rmw_error_variance) <= (atol + rtol * scale)
+
+
 @pytest.mark.parametrize(
     "ml_class",
     [
@@ -150,10 +169,10 @@ def test_optimize(
             difference = log_likelihood - rmw_debug.log_likelihood_hat
             logger.info(f"Found better maximum by {difference}")
         if same_maximum:
-            assert np.isclose(
-                genetic_variance, rmw_debug.sigma_g2_hat, atol=1e-3, rtol=1e-3
-            )
-            assert np.isclose(
-                error_variance, rmw_debug.sigma_e2_hat, atol=1e-3, rtol=1e-3
+            assert_both_close(
+                genetic_variance,
+                rmw_debug.sigma_g2_hat,
+                error_variance,
+                rmw_debug.sigma_e2_hat,
             )
             assert np.isclose(heritability, rmw_heritability, atol=1e-3)

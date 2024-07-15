@@ -23,6 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
+benchmark = "gwas.benchmark.cli:main"
 plot = "gwas.plot.cli:main"
 score = "gwas.score.cli:main"
 stratify = "gwas.stratify.cli:main"
@@ -49,19 +50,19 @@ line-length = 89
 
 [tool.ruff.lint]
 select = [
-    "F", # pyflakes
-    "E", # pycodestyle
-    "W", # pycodestyle
-    "I", # isort
-    "B", # bugbears
-    "N", # pep8-naming
-    "C90", # McCabe complexity
-    "PD", # pandas-vet
-    "PTH", # flake8-use-pathlib
+  "F",   # pyflakes
+  "E",   # pycodestyle
+  "W",   # pycodestyle
+  "I",   # isort
+  "B",   # bugbears
+  "N",   # pep8-naming
+  "C90", # McCabe complexity
+  "PD",  # pandas-vet
+  "PTH", # flake8-use-pathlib
 ]
 ignore = [
   "F722",  # Syntax error in forward annotation
-  "PD008",  # Use .loc instead of .at. If speed is important, use NumPy.
+  "PD008", # Use .loc instead of .at. If speed is important, use NumPy.
 ]
 
 [tool.pytest.ini_options]

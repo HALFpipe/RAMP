@@ -7,13 +7,13 @@ import numpy as np
 import pandas as pd
 import pytest
 from gwas.compression.pipe import CompressedTextReader
+from gwas.testing.convert import convert_vcf_to_bgen
+from gwas.tools import plink2
 from gwas.vcf.base import Engine, VCFFile
 from gwas.vcf.variant import Variant
 from numpy import typing as npt
 from pytest_benchmark.fixture import BenchmarkFixture
 from tqdm.auto import tqdm
-
-from .utils import plink2
 
 sample_size_label = "small"
 chromosome: int = 22
@@ -120,24 +120,11 @@ def test_cpp(vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]])
 
 def test_converted(vcf_path: Path, tmp_path: Path) -> None:
     converted_prefix = tmp_path / f"chr{chromosome}-converted"
-    check_call(
-        [
-            plink2,
-            "--vcf",
-            str(vcf_path),
-            "dosage=DS",
-            "--export",
-            "bgen-1.3",
-            "--out",
-            str(converted_prefix),
-        ]
-    )
-    converted_bgen_path = converted_prefix.with_suffix(".bgen")
-    assert converted_bgen_path.is_file()
+    converted_bgen_path = convert_vcf_to_bgen(vcf_path, converted_prefix)
 
     check_call(
         [
-            plink2,
+            *plink2,
             "--bgen",
             str(converted_bgen_path),
             "ref-unknown",

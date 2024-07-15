@@ -6,7 +6,7 @@ from typing import Callable
 import numpy as np
 from tqdm import tqdm
 
-from ..compression.arr.base import FileArray
+from ..compression.arr.base import FileArrayWriter
 from ..eig.base import Eigendecomposition
 from ..eig.collection import EigendecompositionCollection
 from ..log import logger
@@ -28,7 +28,7 @@ def calc_score(
     eigendecompositions: list[Eigendecomposition],
     inverse_variance_arrays: list[SharedFloat64Array],
     scaled_residuals_arrays: list[SharedFloat64Array],
-    stat_file_array: FileArray[np.float64],
+    stat_file_array: FileArrayWriter[np.float64],
     phenotype_offset: int = 0,
     variant_offset: int = 0,
 ) -> None:
@@ -85,11 +85,12 @@ def calc_score(
     writer_proc = ScoreWriter(
         t, stat_array, stat_file_array, phenotype_offset, variant_offset
     )
-    # Start the loop.
+    # Start the loop
     procs = [reader_proc, calc_proc, writer_proc]
     with tqdm(
-        total=variant_count,
+        total=vcf_file.variant_count,
         unit="variants",
+        desc="calculating score statistics",
         leave=False,
     ) as progress_bar:
 

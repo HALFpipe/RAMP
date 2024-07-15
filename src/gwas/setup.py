@@ -4,7 +4,6 @@ import sys
 import numpy as np
 from Cython.Build import cythonize
 from setuptools import Extension, setup
-from setuptools_rust import Binding, RustExtension
 
 # Adapted from https://github.com/pandas-dev/pandas/blob/main/setup.py
 debugging_symbols_requested = "--with-debugging-symbols" in sys.argv
@@ -52,33 +51,33 @@ setup(
                 include_dirs=[],
                 libraries=[],
             ),
-            Extension(
-                "gwas.compression.arr._get",
-                [
-                    "src/gwas/compression/arr/_get.pyx",
-                ],
-                define_macros=[
-                    ("NPY_NO_DEPRECATED_API", None),
-                    ("NDEBUG", None),
-                ],
-                include_dirs=[np.get_include()],
-                libraries=[
-                    "blosc2",
-                ],
-            ),
         ]
     )
     + [
         Extension(
-            "gwas.vcf._read",
-            ["src/gwas/vcf/_read.cpp"],
+            "gwas.compression.arr._read_str",
+            ["src/gwas/compression/arr/_read_str.cpp"],
+            include_dirs=[np.get_include()],
+            extra_compile_args=extra_compile_args,
+            extra_link_args=extra_link_args,
+        ),
+        Extension(
+            "gwas.compression.arr._read_float",
+            ["src/gwas/compression/arr/_read_float.cpp"],
+            include_dirs=[np.get_include()],
+            extra_compile_args=extra_compile_args,
+            extra_link_args=extra_link_args,
+        ),
+        Extension(
+            "gwas.compression.arr._write_float",
+            ["src/gwas/compression/arr/_write_float.cpp"],
             include_dirs=[np.get_include()],
             extra_compile_args=extra_compile_args,
             extra_link_args=extra_link_args,
         ),
     ],
     rust_extensions=[
-        RustExtension("gwas._rust", path="src/rust/Cargo.toml", binding=Binding.PyO3)
+        # RustExtension("gwas._rust", path="src/rust/Cargo.toml", binding=Binding.PyO3)
     ],
     zip_safe=False,
 )

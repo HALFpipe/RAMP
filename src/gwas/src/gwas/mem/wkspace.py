@@ -4,6 +4,7 @@ import os
 import pickle
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
+from functools import cache
 from itertools import pairwise
 from mmap import MAP_SHARED, mmap
 from multiprocessing import reduction as mp_reduction
@@ -87,24 +88,33 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
 
             candidates: list[tuple[int, int]] = []
 
+            def add_candidate(free_start: int, free_end: int) -> None:
+                free_size = free_end - free_start
+                if free_size >= allocation_size:
+                    candidates.append((free_size, free_start))
+
             # Check if there is space at the end
-            end = allocations_list[-1].end
-            free_size = self.size - end
-            if free_size >= allocation_size:
-                candidates.append((free_size, end))
+            free_start = allocations_list[-1].end
+            free_end = self.size
+            add_candidate(free_start, free_end)
 
             # Check if there is space between allocations
             for a, b in pairwise(allocations_list):
-                free_size = b.start - a.end
-                if free_size >= allocation_size:
-                    candidates.append((free_size, b.start))
+                free_start = a.end
+                free_end = b.start
+                add_candidate(free_start, free_end)
 
             if len(candidates) == 0:
                 raise MemoryError(
                     f"No space left in shared memory buffer: {pformat(allocations)}"
                 )
 
-        return min(candidates)[1]
+        start = min(candidates)[1]
+        logger.debug(
+            f"Found space of {allocation_size} bytes at {start} "
+            f"from the following candidates: {pformat(candidates)}"
+        )
+        return start
 
     @overload
     def alloc(
@@ -200,7 +210,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             allocations = self.allocations
 
             to_squash = list(allocations.keys())
-            to_squash.sort(key=lambda t: allocations[t].start)
+            to_squash.sort(key=lambda name: allocations[name].start)
 
             for previous_name, name in pairwise(to_squash):
                 if names is not None:
@@ -210,18 +220,24 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
                 a = allocations[previous_name]
                 b = allocations[name]
 
-                if a.start + a.size == b.start:
+                new_start = a.start + a.size
+                if new_start == b.start:
                     continue  # already contiguous
+                elif new_start > b.start:
+                    raise ValueError(
+                        f'Allocation "{name}" overlaps with preceding allocation '
+                        f'"{previous_name}"'
+                    )
 
-                # move memory up to start of previous allocation
-                start = a.start + a.size
-                data[start : start + b.size] = data[b.start : b.start + b.size]
-
+                # Move memory up to start of previous allocation
                 logger.debug(
-                    f'Moved allocation "{name}" from {b.start} to {start} '
-                    f'to be contiguous with preceding allocation "{previous_name}"'
+                    f'Moving allocation "{name}" from {b.start} to {new_start} '
+                    f'to be contiguous with preceding allocation "{previous_name}" '
+                    f"({a.start}-{a.end})"
                 )
-                allocations[name] = Allocation(start, b.size, b.shape, b.dtype)
+                data[new_start : new_start + b.size] = data[b.start : b.start + b.size]
+
+                allocations[name] = Allocation(new_start, b.size, b.shape, b.dtype)
 
             self.allocations = allocations
 
@@ -298,6 +314,11 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         sw.allocations = allocations
         return sw
 
+    @classmethod
+    @cache
+    def rebuild(cls, fd: int, size: int) -> Self:
+        return cls(fd, size)
+
 
 def _reduce(
     a: SharedWorkspace,
@@ -306,7 +327,7 @@ def _reduce(
 
 
 def _rebuild(dupfd: Any, size: int) -> SharedWorkspace:
-    return SharedWorkspace(dupfd.detach(), size)
+    return SharedWorkspace.rebuild(dupfd.detach(), size)
 
 
 mp_reduction.register(SharedWorkspace, _reduce)

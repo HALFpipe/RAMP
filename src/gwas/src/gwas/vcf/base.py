@@ -15,7 +15,12 @@ from tqdm.auto import tqdm
 
 from ..compression.pipe import CompressedTextReader, load_from_cache, save_to_cache
 from ..log import logger
-from ..utils import IterationOrder, make_pool_or_null_context, make_variant_mask
+from ..utils import (
+    IterationOrder,
+    chromosome_to_int,
+    make_pool_or_null_context,
+    make_variant_mask,
+)
 from .variant import Variant
 
 
@@ -35,6 +40,31 @@ variant_columns = [
     "r_squared",
     "format_str",
 ]
+
+
+def read_header(reader: CompressedTextReader) -> tuple[int, list[str], list[str]]:
+    header_length: int = 0
+    column_names_line: str | None = None
+    example_lines: list[str] = list()
+    with reader as file_handle:
+        for line in file_handle:
+            if line.startswith("#"):
+                header_length += len(line)
+                if not line.startswith("##"):
+                    column_names_line = line
+                continue
+            if len(example_lines) < 2:
+                example_lines.append(line)
+                continue
+            break
+
+    if not isinstance(column_names_line, str):
+        raise ValueError(f"Could not find column names in {reader.file_path}")
+    if not len(example_lines) > 0:
+        raise ValueError(f"Could not find example lines in {reader.file_path}")
+
+    columns = column_names_line.strip().removeprefix("#").split()
+    return header_length, columns, example_lines
 
 
 class VCFFile(CompressedTextReader):
@@ -94,31 +124,9 @@ class VCFFile(CompressedTextReader):
         self.r_squared_cutoff = -np.inf
 
         # Read header information and example line.
-        self.header_length: int = 0
-        column_names_line: str | None = None
-        example_lines: list[str] = list()
-        with self as file_handle:
-            for line in file_handle:
-                if line.startswith("#"):
-                    self.header_length += len(line)
-                    if not line.startswith("##"):
-                        column_names_line = line
-                    continue
-                if len(example_lines) < 2:
-                    example_lines.append(line)
-                    continue
-                break
-
-        if not isinstance(column_names_line, str):
-            raise ValueError(f"Could not find column names in {file_path}")
-
-        if not len(example_lines) > 0:
-            raise ValueError(f"Could not find example lines in {file_path}")
-
-        self.example_lines = example_lines
+        self.header_length, self.columns, self.example_lines = read_header(self)
 
         # Extract and check column names.
-        self.columns = column_names_line.strip().removeprefix("#").split()
         if tuple(self.columns[: len(self.mandatory_columns)]) != self.mandatory_columns:
             raise ValueError
 
@@ -196,6 +204,7 @@ class VCFFile(CompressedTextReader):
         v = load_from_cache(cache_path, cls.cache_key(vcf_path))
         if not isinstance(v, VCFFile):
             raise ValueError(f"Expected VCFFile, got {type(v)}: {v}")
+        v.file_path = vcf_path
         return v
 
     @staticmethod
@@ -276,4 +285,5 @@ def calc_vcf(
                 desc="loading vcf metadata",
             )
         )
+    vcf_files.sort(key=lambda v: chromosome_to_int(v.chromosome))
     return vcf_files

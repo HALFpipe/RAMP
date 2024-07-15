@@ -62,7 +62,7 @@ class Variant(NamedTuple):
         if is_imputed:
             r_squared = float(info.get("R2", np.nan))
         else:
-            r_squared = float(info.get("ER2", np.nan))
+            r_squared = np.inf
 
         return cls(
             chromosome_to_int(chromosome),

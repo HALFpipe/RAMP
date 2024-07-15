@@ -84,7 +84,7 @@ class FaSTLMM(ProfileMaximumLikelihood):
                         func,
                         args=(o,),
                         bounds=bounds,
-                        # options=dict(disp=disp),
+                        options=dict(disp=disp),
                     )
                     if optimize_result.fun < fmin:
                         fmin = optimize_result.fun

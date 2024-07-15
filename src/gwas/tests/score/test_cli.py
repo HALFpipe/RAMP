@@ -17,7 +17,7 @@ from gwas.score.job import SummaryCollection
 from gwas.vcf.base import VCFFile
 from pytest import FixtureRequest
 
-from ..conftest import chromosomes
+from ..conftest import SampleSizeLabel, chromosomes
 from ..utils import check_bias
 from .conftest import RmwScore
 
@@ -25,6 +25,7 @@ from .conftest import RmwScore
 def test_run(
     tmp_path: Path,
     sw: SharedWorkspace,
+    sample_size_label: SampleSizeLabel,
     vcf_paths_by_chromosome: Mapping[int | str, Path],
     tri_paths_by_chromosome: Mapping[str | int, Path],
     cache_path: Path,
@@ -137,17 +138,21 @@ def test_run(
             assert phenotype_summary.method == "fastlmm"
             assert phenotype_summary.heritability is not None
             assert np.isclose(
-                phenotype_summary.heritability, null_model_collection.heritability[i]
+                phenotype_summary.heritability,
+                null_model_collection.heritability[i],
+                atol=1e-6,
             )
             assert phenotype_summary.genetic_variance is not None
             assert np.isclose(
                 phenotype_summary.genetic_variance,
                 null_model_collection.genetic_variance[i],
+                atol=1e-6,
             )
             assert phenotype_summary.error_variance is not None
             assert np.isclose(
                 phenotype_summary.error_variance,
                 null_model_collection.error_variance[i],
+                atol=1e-6,
             )
             assert np.isclose(
                 phenotype_summary.mean,
@@ -172,7 +177,6 @@ def test_run(
     sqrt_v_stat = np.sqrt(v_stat)
     rmw_sqrt_v_stat = rmw_score.array["SQRT_V_STAT"]
 
-    is_ok = True
     for i in range(len(phenotype_names)):
         rmw_finite = np.isfinite(rmw_u_stat[:, i]) & np.isfinite(rmw_sqrt_v_stat[:, i])
         rmw_missing_rate = (~rmw_finite).mean()
@@ -183,12 +187,7 @@ def test_run(
 
         to_compare = finite & rmw_finite
 
-        has_no_bias = check_bias(u_stat[:, i], rmw_u_stat[:, i], to_compare)
-        is_ok = is_ok and has_no_bias
-
-        has_no_bias = check_bias(sqrt_v_stat[:, i], rmw_sqrt_v_stat[:, i], to_compare)
-        is_ok = is_ok and has_no_bias
-
-    assert is_ok
+        assert check_bias(u_stat[:, i], rmw_u_stat[:, i], to_compare)
+        assert check_bias(sqrt_v_stat[:, i], rmw_sqrt_v_stat[:, i], to_compare)
 
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)

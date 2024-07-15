@@ -62,7 +62,7 @@ class PyVCFFile(VCFFile):
         self,
         dosages: npt.NDArray[np.float64],
     ) -> None:
-        if self.file_handle is None:
+        if self.output_file_handle is None:
             raise ValueError("File handle is not open")
 
         if dosages.size == 0 or self.variant_count == 0 or self.sample_count == 0:
@@ -77,7 +77,7 @@ class PyVCFFile(VCFFile):
         n_mandatory_columns = len(self.mandatory_columns)
 
         variant_indices_index = 0
-        for line in self.file_handle:
+        for line in self.output_file_handle:
             if line.startswith("#"):
                 continue
 

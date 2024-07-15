@@ -10,7 +10,7 @@ import numpy as np
 import scipy
 from numpy import typing as npt
 
-from ..compression.arr.base import FileArray
+from ..compression.arr.base import FileArrayWriter
 from ..eig.collection import EigendecompositionCollection
 from ..log import logger, multiprocessing_context
 from ..mem.arr import SharedFloat64Array
@@ -250,7 +250,7 @@ class ScoreWriter(Worker):
         self,
         t: TaskSyncCollection,
         stat_array: SharedFloat64Array,
-        stat_file_array: FileArray[np.float64],
+        stat_file_array: FileArrayWriter[np.float64],
         phenotype_offset: int,
         variant_offset: int,
     ) -> None:
