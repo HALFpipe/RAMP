@@ -359,7 +359,7 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
 
     cdef float allele_frequency
     cdef float minor_allele_frequency
-    cdef bint imputed
+    cdef bint imputed = False
     cdef float r2_value
     # variant.d.info[minor_allele_frequency_index].v1.f
 
@@ -371,7 +371,7 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
         elif info.key == minor_allele_frequency_key:
             minor_allele_frequency = info.v1.f
         elif info.key == imputed_key:
-            imputed = (info.v1.i == 0) # as checked in my cython testing
+            imputed = True # mere presence of key suffices for imputed flag  
         elif info.key == r2_value_key:
             r2_value = info.v1.f
 
