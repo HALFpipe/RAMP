@@ -379,7 +379,7 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
         elif info.key == imputed_key:
             imputed = True # mere presence of key suffices for imputed flag
         elif info.key == typed_key:
-            imputed = True # typed means both genotyped and imputed
+            imputed = False # typed means both genotyped and imputed
         elif info.key == typed_only_key:
             imputed = False  
         elif info.key == r2_value_key:
