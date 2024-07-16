@@ -351,6 +351,12 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
     cdef int imputed_key = bcf_hdr_id2int(hdr, BCF_DT_ID, b"IMPUTED")
     if imputed_key < 0:
         raise ValueError()
+    cdef int typed_key = bcf_hdr_id2int(hdr, BCF_DT_ID, b"TYPED")
+    if typed_key < 0:
+        raise ValueError()
+    cdef int typed_only_key = bcf_hdr_id2int(hdr, BCF_DT_ID, b"TYPED_ONLY")
+    if typed_only_key < 0:
+        raise ValueError()
     cdef int r2_value_key = bcf_hdr_id2int(hdr, BCF_DT_ID, b"R2")
     if r2_value_key < 0:
         r2_value_key = bcf_hdr_id2int(hdr, BCF_DT_ID, b"ER2")
