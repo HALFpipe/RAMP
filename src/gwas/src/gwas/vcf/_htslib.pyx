@@ -358,8 +358,7 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
     if typed_only_key < 0:
         raise ValueError()
     cdef int r2_value_key = bcf_hdr_id2int(hdr, BCF_DT_ID, b"R2")
-    if r2_value_key < 0:
-        r2_value_key = bcf_hdr_id2int(hdr, BCF_DT_ID, b"ER2")
+
     if r2_value_key < 0:
         raise ValueError()
 
@@ -367,7 +366,6 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
     cdef float minor_allele_frequency
     cdef bint imputed = False
     cdef float r2_value
-    # variant.d.info[minor_allele_frequency_index].v1.f
 
     cdef bcf_info_t *info
     for i in range(record.n_info):
@@ -432,7 +430,7 @@ def read_vcf_records(str file_path):
     return variants, samples
 
 
-def read(str file_path, np.ndarray dosages, np.ndarray sample_indices):
+def read(str file_path, np.ndarray dosages, np.ndarray sample_indices, np.ndarray variant_indices):
     path_bytes = file_path.encode("utf-8")
     cdef char* path_char = path_bytes
     cdef htsFile* fp = hts_open(path_char, b"r")
@@ -455,11 +453,30 @@ def read(str file_path, np.ndarray dosages, np.ndarray sample_indices):
     cdef int pos_in_dosage = 0
     cdef int n_variants = dosages.shape[0]
 
+    cdef int variant_counter = 0
+    cdef int var_indices_counter = 0
+    cdef int n_variant_indices = variant_indices.shape[0]
+
+    # wenn variant_counter == var_indices[var_indices_counter]:
+    #   do stuff
+    #   var_indices_counter++
+    #variant_counter++
+
+
+
     while bcf_read(fp, hdr, variant) >=0:
-        if pos_in_dosage >= n_variants:
+        # if pos_in_dosage >= n_variants:
+        #     break
+        # read only dosages from variant_indices, double indices für variant_index idx und idx for current_variant
+        if var_indices_counter >= n_variant_indices:
             break
-        read_dosages(hdr, variant, dosages, pos_in_dosage, sample_indices)
-        pos_in_dosage += 1
+        if variant_counter == variant_indices[var_indices_counter]:
+            if pos_in_dosage >= n_variants:
+                break
+            read_dosages(hdr, variant, dosages, pos_in_dosage, sample_indices)
+            pos_in_dosage += 1
+            var_indices_counter += 1
+        variant_counter += 1
 
     bcf_destroy(variant)
     bcf_hdr_destroy(hdr)
