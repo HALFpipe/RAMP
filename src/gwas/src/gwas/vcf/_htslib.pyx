@@ -372,7 +372,7 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
         elif info.key == typed_key:
             imputed = False # typed means both genotyped and imputed
         elif info.key == typed_only_key:
-            imputed = False  
+            imputed = False
         elif info.key == r2_value_key:
             r2_value = info.v1.f
 
@@ -408,7 +408,7 @@ def read_vcf_records(str file_path):
         raise RuntimeError(f"failed to read variant from {file_path}")
 
     cdef int32_t n_samples = bcf_hdr_nsamples(hdr)
-    cdef list samples = [hdr.samples[i].decode('utf-8') for i in range(n_samples)]
+    cdef list samples = [hdr.samples[i].decode("utf-8") for i in range(n_samples)]
 
     cdef list variants = []
 

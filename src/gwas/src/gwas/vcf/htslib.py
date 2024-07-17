@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from numpy import typing as npt
 
-from gwas.vcf._htslib import read, read_vcf_records  
+from gwas.vcf._htslib import read, read_vcf_records
 
 from .base import VCFFile
 
@@ -37,9 +37,9 @@ class HTSLIBVCFFile(VCFFile):
         )
         self.vcf_variants = pd.DataFrame(variants, columns=variant_columns)
 
-        self.vcf_variants["chromosome_int"] = self.vcf_variants["chromosome_int"].astype(
-            "int64"
-        ).astype('category')
+        self.vcf_variants["chromosome_int"] = (
+            self.vcf_variants["chromosome_int"].astype("int64").astype("category")
+        )
         self.vcf_variants["reference_allele"] = self.vcf_variants[
             "reference_allele"
         ].astype("category")

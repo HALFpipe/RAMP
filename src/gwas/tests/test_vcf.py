@@ -75,7 +75,7 @@ def test_vcf_file(
         vcf_file.read(array3)
 
     assert np.allclose(array1[:1000, :], array2)
-    assert np.allclose(array1[1000:2000, :], array3) 
+    assert np.allclose(array1[1000:2000, :], array3)
 
 
 @pytest.fixture(scope="session")
@@ -134,8 +134,10 @@ def test_read(
     # assert np.all(numpy_read_result.variants == read_result.variants)
 
     # because we do not need the format str column in htslib hence we drop it
-    if engine == Engine.htslib and 'format_str' in numpy_read_result.variants.columns:
-        numpy_read_result_variants = numpy_read_result.variants.drop(columns=['format_str'])
+    if engine == Engine.htslib and "format_str" in numpy_read_result.variants.columns:
+        numpy_read_result_variants = numpy_read_result.variants.drop(
+            columns=["format_str"]
+        )
     else:
         numpy_read_result_variants = numpy_read_result.variants
     assert (
