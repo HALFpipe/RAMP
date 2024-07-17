@@ -4,8 +4,7 @@ import numpy as np
 import pandas as pd
 from numpy import typing as npt
 
-# from ._htslib import read_vcf_records, read
-from gwas.vcf._htslib import read, read_vcf_records  # from setup.py
+from gwas.vcf._htslib import read, read_vcf_records  
 
 from .base import VCFFile
 
@@ -18,7 +17,6 @@ variant_columns = [
     "alternate_allele_frequency",
     "minor_allele_frequency",
     "r_squared",
-    # "format_str",
 ]
 
 
@@ -55,9 +53,4 @@ class HTSLIBVCFFile(VCFFile):
     def read(self, dosages: npt.NDArray[np.float64]) -> None:
         if dosages.size == 0:
             return
-        # if dosages.shape[1] != self.sample_count:
-        #     raise ValueError(
-        #         "The output array does not match the number of samples "
-        #         f"({dosages.shape[1]} != {self.sample_count})"
-        #     )
         read(str(self.file_path), dosages, self.sample_indices, self.variant_indices)

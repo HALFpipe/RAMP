@@ -8,13 +8,6 @@ from libc.string cimport memcpy
 from libc cimport stdlib
 
 
-# cdef extern from "htslib/hts.h":
-#     ctypedef struct htsFile:
-#         pass
-#
-#     htsFile *hts_open(const char *fn, const char *mode)
-#     int hts_close(htsFile *fp)
-
 # from https://github.com/brentp/cyvcf2/blob/main/cyvcf2/cyvcf2.pxd
 cdef extern from "htslib/hfile.h":
     ctypedef struct hFILE:
@@ -399,7 +392,6 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
 def read_vcf_records(str file_path):
     path_bytes = file_path.encode("utf-8")
     cdef char* path_char = path_bytes
-    # cdef htsFile* fp = read_vcf_file(file_path)
     cdef htsFile* fp = hts_open(path_char, b"r")
     if not fp:
         raise RuntimeError(f"failed to read {file_path}")
@@ -448,8 +440,6 @@ def read(str file_path, np.ndarray dosages, np.ndarray sample_indices, np.ndarra
         hts_close(fp)
         raise RuntimeError(f"failed to read variant from {file_path}")
 
-    # cdef int32_t n_samples = bcf_hdr_nsamples(hdr)
-
     cdef int pos_in_dosage = 0
     cdef int n_variants = dosages.shape[0]
 
@@ -457,17 +447,7 @@ def read(str file_path, np.ndarray dosages, np.ndarray sample_indices, np.ndarra
     cdef int var_indices_counter = 0
     cdef int n_variant_indices = variant_indices.shape[0]
 
-    # wenn variant_counter == var_indices[var_indices_counter]:
-    #   do stuff
-    #   var_indices_counter++
-    #variant_counter++
-
-
-
     while bcf_read(fp, hdr, variant) >=0:
-        # if pos_in_dosage >= n_variants:
-        #     break
-        # read only dosages from variant_indices, double indices für variant_index idx und idx for current_variant
         if var_indices_counter >= n_variant_indices:
             break
         if variant_counter == variant_indices[var_indices_counter]:
@@ -495,7 +475,6 @@ cdef void read_dosages(bcf_hdr_t* hdr, bcf1_t* record, np.ndarray dosages, int p
 
 
 cdef np.ndarray format_field(bcf_hdr_t* hdr, bcf1_t* b, char* field, object vtype):
-    # cdef bytes tag = to_bytes(field)
     cdef bytes tag = field
     cdef bcf_fmt_t *fmt = bcf_get_fmt(hdr, b, tag)
     cdef int n = 0, nret
