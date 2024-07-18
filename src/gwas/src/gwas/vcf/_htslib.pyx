@@ -1,4 +1,5 @@
 # cython: language_level=3
+# define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 from libc.stdint cimport int64_t, uint64_t, int32_t, uint32_t, uint8_t
 import numpy as np
 cimport numpy as np
@@ -433,10 +434,10 @@ cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
     if r2_value_key < 0:
         raise ValueError()
 
-    cdef float allele_frequency
-    cdef float minor_allele_frequency
+    cdef float allele_frequency = np.nan
+    cdef float minor_allele_frequency = np.nan
     cdef bint imputed = False
-    cdef float r2_value
+    cdef float r2_value = np.nan
 
     cdef bcf_info_t *info
     for i in range(record.n_info):
