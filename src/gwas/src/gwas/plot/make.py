@@ -11,7 +11,7 @@ from matplotlib.colors import BoundaryNorm, LinearSegmentedColormap
 from numpy import typing as npt
 from scipy import stats
 
-from gwas.mem.arr import SharedArray, SharedFloat64Array
+from gwas.mem.arr import SharedArray
 
 from ..log import logger
 from ..utils import chromosomes_list
@@ -124,7 +124,7 @@ def plot_q_q(
 class PlotGenerator:
     chromosome_array: SharedArray[np.int64]
     position_array: SharedArray[np.int64]
-    p_value_array: SharedFloat64Array
+    p_value_array: SharedArray
     mask_array: SharedArray[np.bool_]
 
     output_directory: Path

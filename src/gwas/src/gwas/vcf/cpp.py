@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
-
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from numpy import typing as npt
 
+from ..compression.arr._read_float import (
+    create_vcf_float_reader,
+    run_vcf_float_reader,
+)
 from ..utils import chromosome_from_int
 from .base import VCFFile
 from .variant import Variant
@@ -28,7 +29,6 @@ class CppVCFFile(VCFFile):
                 self.header_length,
                 len(self.columns),
                 self.metadata_column_indices,
-                ring_buffer_size=self.pipesize,
             )
         self.vcf_variants = self.make_data_frame(vcf_variants)
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
@@ -80,11 +80,6 @@ class CppVCFFile(VCFFile):
                 f"({dosages.shape[1]} != {self.sample_count})"
             )
 
-        from ..compression.arr._read_float import (
-            create_vcf_float_reader,
-            run_vcf_float_reader,
-        )
-
         if self.float_reader is None:
             self.float_reader = create_vcf_float_reader(
                 self.output_file_handle.fileno(),
@@ -92,11 +87,10 @@ class CppVCFFile(VCFFile):
                 self.column_count,
                 self.column_indices,
                 self.dosage_field_index,
-                ring_buffer_size=self.pipesize,
             )
 
         run_vcf_float_reader(
-            dosages.transpose(),
+            dosages,
             self.float_reader,
             self.variant_indices,
         )

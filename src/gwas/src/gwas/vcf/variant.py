@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
-
-from __future__ import annotations
-
 from typing import NamedTuple, Self
 
 import numpy as np
 
-# from ..log import logger
 from ..utils import chromosome_to_int
 
 
@@ -33,14 +29,6 @@ class Variant(NamedTuple):
         info_str: str,
         format_str: str,
     ) -> Self:
-        # logger.debug(
-        #     f"Reading variant "
-        #     f"chromosome_str: {chromosome_str}, position_str: {position_str}, "
-        #     f"reference_allele: {reference_allele}, "
-        #     f"alternate_allele: {alternate_allele}, info_str: {info_str}, "
-        #     f"format_str: {format_str}"
-        # )
-
         chromosome: int | str = chromosome_str
         if isinstance(chromosome, str) and chromosome.isdigit():
             chromosome = int(chromosome)
@@ -58,11 +46,7 @@ class Variant(NamedTuple):
         is_imputed = "IMPUTED" in info_tokens
         alternate_allele_frequency = float(info.get("AF", np.nan))
         minor_allele_frequency = float(info.get("MAF", np.nan))
-
-        if is_imputed:
-            r_squared = float(info.get("R2", np.nan))
-        else:
-            r_squared = np.inf
+        r_squared = float(info.get("R2", np.nan))
 
         return cls(
             chromosome_to_int(chromosome),

@@ -60,3 +60,22 @@ def check_bias(
     if check_residuals:
         is_ok = is_ok and np.isclose(mean_residuals, 0, atol=tolerance, rtol=tolerance)
     return bool(is_ok)
+
+
+def assert_both_close(
+    genetic_variance: float,
+    rmw_genetic_variance: float,
+    error_variance: float,
+    rmw_error_variance: float,
+    atol=1e-3,
+    rtol=1e-3,
+) -> None:
+    scale = max(
+        abs(genetic_variance),
+        abs(rmw_genetic_variance),
+        abs(error_variance),
+        abs(rmw_error_variance),
+    )
+    criterion = atol + rtol * scale
+    assert np.abs(genetic_variance - rmw_genetic_variance) <= criterion
+    assert np.abs(error_variance - rmw_error_variance) <= (atol + rtol * scale)

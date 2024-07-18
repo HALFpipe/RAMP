@@ -10,7 +10,7 @@ from ..compression.arr.base import FileArrayWriter
 from ..eig.base import Eigendecomposition
 from ..eig.collection import EigendecompositionCollection
 from ..log import logger
-from ..mem.arr import SharedArray, SharedFloat64Array
+from ..mem.arr import SharedArray
 from ..utils import soft_close
 from ..vcf.base import VCFFile
 from .worker import (
@@ -26,8 +26,8 @@ from .worker import (
 def calc_score(
     vcf_file: VCFFile,
     eigendecompositions: list[Eigendecomposition],
-    inverse_variance_arrays: list[SharedFloat64Array],
-    scaled_residuals_arrays: list[SharedFloat64Array],
+    inverse_variance_arrays: list[SharedArray],
+    scaled_residuals_arrays: list[SharedArray],
     stat_file_array: FileArrayWriter[np.float64],
     phenotype_offset: int = 0,
     variant_offset: int = 0,
@@ -69,7 +69,7 @@ def calc_score(
     name = SharedArray.get_name(sw, "rotated-genotypes")
     rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
     name = SharedArray.get_name(sw, "stat")
-    stat_array: SharedFloat64Array = sw.alloc(name, 2, phenotype_count, variant_count)
+    stat_array: SharedArray = sw.alloc(name, 2, phenotype_count, variant_count)
     # Create the worker processes.
     t = TaskSyncCollection(job_count=job_count)
     reader_proc = GenotypeReader(t, vcf_file, genotypes_array)

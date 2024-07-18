@@ -6,7 +6,7 @@ from typing import Self
 import numpy as np
 from numpy import typing as npt
 
-from ..mem.arr import SharedArray, SharedFloat64Array
+from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..utils import (
     make_sample_boolean_vectors,
@@ -20,7 +20,7 @@ class EigendecompositionCollection:
     chromosome: int | str | None
     samples: list[str]
     sample_boolean_vectors: list[npt.NDArray[np.bool_]]
-    eigenvector_arrays: list[SharedFloat64Array]
+    eigenvector_arrays: list[SharedArray]
 
     @property
     def sample_count(self) -> int:
@@ -59,7 +59,7 @@ class EigendecompositionCollection:
         sample_boolean_vectors = make_sample_boolean_vectors(
             base_samples, (eig.samples for eig in eigs)
         )
-        eigenvector_arrays: list[SharedFloat64Array] = list()
+        eigenvector_arrays: list[SharedArray] = list()
 
         for eig, sample_boolean_vector in zip(eigs, sample_boolean_vectors, strict=True):
             sample_count = len(eig.samples)

@@ -66,7 +66,7 @@ class StandardErrors(NamedTuple):
     variance: Float[Array, " sample_count 1"]
 
 
-@dataclass
+@dataclass(frozen=True, eq=True)
 class ProfileMaximumLikelihood:
     sample_count: int
     covariate_count: int

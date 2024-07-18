@@ -10,7 +10,7 @@ from tqdm.auto import tqdm
 
 from ..compression.arr._get import get_orthogonal_selection
 from ..log import logger
-from ..mem.arr import ScalarType, SharedArray, SharedFloat64Array
+from ..mem.arr import ScalarType, SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..utils import (
     IterationOrder,
@@ -27,7 +27,7 @@ class LoadPValueJob:
     row_count: int
     column_indices: npt.NDArray[np.int64]
     urlpath: bytes
-    data_array: SharedFloat64Array
+    data_array: SharedArray
     mask_array: SharedArray[np.bool_]
     num_threads: int = 1
 
@@ -155,7 +155,7 @@ class DataLoader:
 
     chromosome_array: SharedArray[np.int64] = field(init=False)
     position_array: SharedArray[np.int64] = field(init=False)
-    data_array: SharedFloat64Array = field(init=False)
+    data_array: SharedArray = field(init=False)
     mask_array: SharedArray[np.bool_] = field(init=False)
 
     variant_count: int = field(init=False)

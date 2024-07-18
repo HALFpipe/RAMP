@@ -103,7 +103,6 @@ def parse_arguments(argv: list[str]) -> Namespace:
 
 
 def main() -> None:
-    mp.set_start_method("spawn")
     run(sys.argv[1:])
 
 

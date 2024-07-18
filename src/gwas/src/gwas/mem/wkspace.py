@@ -11,7 +11,7 @@ from multiprocessing import reduction as mp_reduction
 from operator import attrgetter
 from pprint import pformat
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Callable, Self, TypeVar, overload
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Self, TypeVar, overload
 
 import numpy as np
 from numpy import typing as npt
@@ -22,9 +22,14 @@ from ..utils import get_lock_name, global_lock
 from ._os import c_memfd_create
 
 if TYPE_CHECKING:
-    from .arr import ScalarType, SharedArray, SharedFloat64Array
+    from .arr import ScalarType, SharedArray
 
 DType = TypeVar("DType", bound=np.dtype[Any])
+
+
+class Candidate(NamedTuple):
+    start: int
+    size: int
 
 
 @dataclass(frozen=True)
@@ -73,11 +78,11 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         return end / self.size
 
     def get_array(self, name: str) -> "SharedArray[Any]":
-        from .arr import SharedArray, SharedFloat64Array
+        from .arr import SharedArray
 
         dtype = self.allocations[name].dtype
         if np.issubdtype(dtype, np.float64):
-            return SharedFloat64Array(name, self)
+            return SharedArray(name, self)
         else:
             return SharedArray(name, self)
 
@@ -86,12 +91,12 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             allocations = self.allocations
             allocations_list = sorted(allocations.values(), key=attrgetter("start"))
 
-            candidates: list[tuple[int, int]] = []
+            candidates: list[Candidate] = []
 
             def add_candidate(free_start: int, free_end: int) -> None:
                 free_size = free_end - free_start
                 if free_size >= allocation_size:
-                    candidates.append((free_size, free_start))
+                    candidates.append(Candidate(free_size, free_start))
 
             # Check if there is space at the end
             free_start = allocations_list[-1].end
@@ -119,7 +124,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
     @overload
     def alloc(
         self, name: str, *shape: int, dtype: type[np.float64] | None = None
-    ) -> "SharedFloat64Array": ...
+    ) -> "SharedArray": ...
 
     @overload
     def alloc(

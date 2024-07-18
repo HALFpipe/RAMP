@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from multiprocessing import cpu_count
 from pathlib import Path
 from random import sample
 
@@ -121,12 +122,13 @@ def test_tri_file(
         r_squared_cutoff=-np.inf,
     )
 
-    tri_path = tri.to_file(tmp_path)
+    tri_path = tri.to_file(tmp_path, num_threads=cpu_count())
     assert f"chr{tri.chromosome}" in tri_path.name
 
     b = Triangular.from_file(tri_path, sw, np.float64)
     request.addfinalizer(b.free)
     assert f"chr{tri.chromosome}" in b.name
+    assert b.samples == tri.samples
     assert b.chromosome == tri.chromosome
     assert b.variant_count == tri.variant_count
     assert np.isclose(

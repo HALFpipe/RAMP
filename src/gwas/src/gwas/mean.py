@@ -26,7 +26,7 @@ def calc_mean(
 
     sw = variable_collections[0].sw
 
-    variant_indices = vcf_file.variant_indices.copy()
+    variant_indices = vcf_file.variant_indices
     vcf_variant_count = len(variant_indices)
 
     base_samples = vcf_file.samples

@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
-
 from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, ContextManager
@@ -10,7 +8,7 @@ from numpy import typing as npt
 from threadpoolctl import threadpool_limits
 
 from ..log import logger
-from ..mem.arr import SharedFloat64Array
+from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..vcf.base import VCFFile
 from .base import TaskSyncCollection, Triangular
@@ -45,7 +43,7 @@ class TallSkinnyQR:
     num_threads: int = 1
 
     @staticmethod
-    def triangularize(shared_array: SharedFloat64Array, pivoting: bool = True) -> None:
+    def triangularize(shared_array: SharedArray, pivoting: bool = True) -> None:
         """Triangularize the given array to a lower triangular matrix"""
         _, sample_count = shared_array.shape
         # Triangularize to upper triangle
@@ -143,7 +141,7 @@ class TallSkinnyQR:
 
         logger.debug(f"Reducing {len(shared_arrays)} chunks")
 
-        reduce_array = SharedFloat64Array.merge(*shared_arrays)
+        reduce_array = SharedArray.merge(*shared_arrays)
         reduce_array.transpose()
         # Triangularize to lower triangle
         cls.triangularize(reduce_array)

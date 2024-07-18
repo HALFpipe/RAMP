@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import TextIO
 
 logger = logging.getLogger("gwas")
-multiprocessing_context = get_context("spawn")
+multiprocessing_context = get_context("forkserver")
+multiprocessing_context.set_forkserver_preload(["gwas"])
 
 
 logging_queue: Queue[logging.LogRecord] | None = None
@@ -38,6 +39,21 @@ def capture_warnings() -> None:
 def setup_logging(
     level: str | int, path: Path | None = None, stream: bool = True
 ) -> None:
+    setup_live_logging(level, path, stream)
+    capture_warnings()
+    setup_logging_queue()
+
+    logger.debug(f"Configured logging with handlers {handlers}")
+
+
+def add_handler(handler: logging.Handler) -> None:
+    global handlers
+    handlers.append(handler)
+
+
+def setup_live_logging(
+    level: str | int = logging.DEBUG, path: Path | None = None, stream: bool = True
+) -> None:
     root = logging.getLogger()
     root.setLevel(level)
 
@@ -58,14 +74,14 @@ def setup_logging(
         handler.setLevel(level)
         root.addHandler(handler)
 
-    capture_warnings()
 
-    global logging_queue, queue_listener
+def setup_logging_queue() -> None:
+    global logging_queue, queue_listener, handlers
+    if logging_queue is not None:
+        return
     logging_queue = multiprocessing_context.Queue()
     queue_listener = QueueListener(logging_queue, *handlers, respect_handler_level=True)
     queue_listener.start()
-
-    logger.debug(f"Configured logging with handlers {handlers}")
 
 
 def teardown_logging() -> None:

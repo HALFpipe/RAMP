@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event
@@ -13,7 +11,7 @@ from numpy import typing as npt
 from ..compression.arr.base import FileArrayWriter
 from ..eig.collection import EigendecompositionCollection
 from ..log import logger, multiprocessing_context
-from ..mem.arr import SharedFloat64Array
+from ..mem.arr import SharedArray
 from ..utils import Action, Process, SharedState
 from ..vcf.base import VCFFile
 from .calc import calc_u_stat, calc_v_stat
@@ -60,7 +58,7 @@ class GenotypeReader(Worker):
         self,
         t: TaskSyncCollection,
         vcf_file: VCFFile,
-        genotypes_array: SharedFloat64Array,
+        genotypes_array: SharedArray,
     ) -> None:
         if genotypes_array.shape[0] != vcf_file.sample_count:
             raise ValueError(
@@ -110,12 +108,12 @@ class Calc(Worker):
     def __init__(
         self,
         t: TaskSyncCollection,
-        genotypes_array: SharedFloat64Array,
+        genotypes_array: SharedArray,
         ec: EigendecompositionCollection,
-        rotated_genotypes_array: SharedFloat64Array,
-        inverse_variance_arrays: list[SharedFloat64Array],
-        scaled_residuals_arrays: list[SharedFloat64Array],
-        stat_array: SharedFloat64Array,
+        rotated_genotypes_array: SharedArray,
+        inverse_variance_arrays: list[SharedArray],
+        scaled_residuals_arrays: list[SharedArray],
+        stat_array: SharedArray,
     ) -> None:
         self.genotypes_array = genotypes_array
         self.rotated_genotypes_array = rotated_genotypes_array
@@ -249,7 +247,7 @@ class ScoreWriter(Worker):
     def __init__(
         self,
         t: TaskSyncCollection,
-        stat_array: SharedFloat64Array,
+        stat_array: SharedArray,
         stat_file_array: FileArrayWriter[np.float64],
         phenotype_offset: int,
         variant_offset: int,

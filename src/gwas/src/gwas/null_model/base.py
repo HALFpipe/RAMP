@@ -7,7 +7,7 @@ import numpy as np
 from numpy import typing as npt
 
 from ..eig.base import Eigendecomposition
-from ..mem.arr import SharedArray, SharedFloat64Array
+from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..pheno import VariableCollection
 
@@ -39,10 +39,10 @@ class NullModelCollection:
     genetic_variance: npt.NDArray[np.float64]
     error_variance: npt.NDArray[np.float64]
 
-    regression_weights: SharedFloat64Array
-    standard_errors: SharedFloat64Array
-    half_scaled_residuals: SharedFloat64Array
-    variance: SharedFloat64Array
+    regression_weights: SharedArray
+    standard_errors: SharedArray
+    half_scaled_residuals: SharedArray
+    variance: SharedArray
 
     methods: ClassVar[list[str]] = ["fastlmm", "pfastlmm", "pml", "mpl", "reml", "ml"]
 
@@ -75,7 +75,7 @@ class NullModelCollection:
         residuals[:, phenotype_index] = np.ravel(r.half_scaled_residuals)
         variance[:, phenotype_index] = np.ravel(r.variance)
 
-    def get_arrays_for_score_calc(self) -> tuple[SharedFloat64Array, SharedFloat64Array]:
+    def get_arrays_for_score_calc(self) -> tuple[SharedArray, SharedArray]:
         variance = self.variance.to_numpy()
         (sample_count, phenotype_count) = variance.shape
         half_scaled_residuals = self.half_scaled_residuals.to_numpy()

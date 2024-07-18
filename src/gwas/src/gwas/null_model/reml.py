@@ -7,7 +7,7 @@ from .pml import OptimizeInput, ProfileMaximumLikelihood, logdet
 from .pml import terms_count as terms_count
 
 
-@dataclass
+@dataclass(frozen=True, eq=True)
 class RestrictedMaximumLikelihood(ProfileMaximumLikelihood):
     def minus_two_log_likelihood(
         self, terms: Float[Array, " terms_count"], o: OptimizeInput

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import annotations
 
 import multiprocessing as mp
 import os
@@ -11,7 +10,6 @@ from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum, auto
 from logging import LogRecord
 from multiprocessing import pool as mp_pool
-from multiprocessing.context import SpawnProcess
 from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event, RLock
 from pathlib import Path
@@ -155,7 +153,8 @@ def apply_num_threads(num_threads: int) -> None:
     os.environ["MKL_DYNAMIC"] = "FALSE"
     os.environ["XLA_FLAGS"] = (
         f"--xla_cpu_multi_thread_eigen={str(num_threads > 1).lower()} "
-        f"intra_op_parallelism_threads={num_threads}"
+        f"intra_op_parallelism_threads={num_threads} "
+        "--xla_cpu_enable_fast_math=false"
     )
 
     from chex import set_n_cpu_devices
@@ -262,10 +261,10 @@ class SharedState:
                 return Action.EVENT
 
 
-class Process(SpawnProcess):
+class Process(multiprocessing_context.Process):  # type: ignore
     def __init__(
         self,
-        exception_queue: mp.Queue[Exception] | None,
+        exception_queue: "mp.Queue[Exception] | None",
         name: str | None = None,
     ) -> None:
         self.initargs = get_initargs()

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import pickle
 from contextlib import AbstractContextManager
-from fcntl import F_GETPIPE_SZ, fcntl
 from multiprocessing import cpu_count
 from pathlib import Path
 from subprocess import PIPE, Popen
@@ -12,7 +11,6 @@ from typing import IO, Any, Generic, Mapping, Type, TypeVar
 from ..log import logger
 from ..utils import unwrap_which
 
-pipe_max_size: int = int(Path("/proc/sys/fs/pipe-max-size").read_text())
 decompress_commands: Mapping[str, list[str]] = {
     ".zst": [
         "zstd",
@@ -57,12 +55,6 @@ class CompressedReader(AbstractContextManager[IO[T]]):
         self.process_handle: Popen[T] | None = None
         self.output_file_handle: IO[T] | None = None
 
-    @property
-    def pipesize(self) -> int:
-        if self.output_file_handle is None:
-            raise ValueError("Output file handle is not open")
-        return fcntl(self.output_file_handle.fileno(), F_GETPIPE_SZ)
-
     def __enter__(self) -> IO[T]:
         return self.open()
 
@@ -85,7 +77,6 @@ class CompressedReader(AbstractContextManager[IO[T]]):
             stdout=PIPE,
             text=self.is_text,
             bufsize=bufsize,
-            pipesize=pipe_max_size,
         )
 
         if self.process_handle.stdout is None:
@@ -143,7 +134,7 @@ class CompressedTextReader(CompressedReader[str]):
 def make_compress_command(
     suffix: str, num_threads: int = cpu_count(), compression_level: int | None = None
 ) -> list[str]:
-    zstd_compression_level_flag = "-22"
+    zstd_compression_level_flag = "-19"
     if compression_level is not None:
         zstd_compression_level_flag = f"-{compression_level:d}"
 
@@ -212,7 +203,6 @@ class CompressedWriter(AbstractContextManager[IO[T]]):
             stdout=self.output_file_handle,
             text=self.is_text,
             bufsize=bufsize,
-            pipesize=pipe_max_size,
         )
 
         if self.process_handle.stdin is None:

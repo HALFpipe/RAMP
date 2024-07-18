@@ -14,7 +14,7 @@ from .compression.arr.base import (
     FileArray,
 )
 from .log import logger
-from .mem.arr import SharedFloat64Array
+from .mem.arr import SharedArray
 from .mem.wkspace import SharedWorkspace
 
 
@@ -47,10 +47,10 @@ class VariableCollection:
     samples: list[str]
 
     phenotype_names: list[str]
-    phenotypes: SharedFloat64Array
+    phenotypes: SharedArray
 
     covariate_names: list[str]
-    covariates: SharedFloat64Array
+    covariates: SharedArray
 
     name: str | None = None
 
@@ -163,7 +163,7 @@ class VariableCollection:
             self.phenotypes.to_numpy(), self.phenotype_names, subset_phenotype_names
         )
         self.phenotypes.free()
-        self.phenotypes = SharedFloat64Array.from_numpy(
+        self.phenotypes = SharedArray.from_numpy(
             new_phenotypes, self.phenotypes.sw, prefix="phenotypes"
         )
         logger.debug(
@@ -196,7 +196,7 @@ class VariableCollection:
             ]
             new_covariates = new_covariates[:, ~zero_variance]
 
-            self.covariates = SharedFloat64Array.from_numpy(
+            self.covariates = SharedArray.from_numpy(
                 new_covariates, sw, prefix="covariates"
             )
             old_covariates.free()
@@ -229,14 +229,10 @@ class VariableCollection:
 
         self.samples = samples
 
-        self.phenotypes = SharedFloat64Array.from_numpy(
-            new_phenotypes, sw, prefix="phenotypes"
-        )
+        self.phenotypes = SharedArray.from_numpy(new_phenotypes, sw, prefix="phenotypes")
         old_phenotypes.free()
 
-        self.covariates = SharedFloat64Array.from_numpy(
-            new_covariates, sw, prefix="covariates"
-        )
+        self.covariates = SharedArray.from_numpy(new_covariates, sw, prefix="covariates")
         old_covariates.free()
         self.remove_zero_variance_covariates()
 
@@ -288,9 +284,9 @@ class VariableCollection:
         return cls(
             samples,
             phenotype_names,
-            SharedFloat64Array.from_numpy(phenotypes, sw, prefix="phenotypes"),
+            SharedArray.from_numpy(phenotypes, sw, prefix="phenotypes"),
             covariate_names,
-            SharedFloat64Array.from_numpy(covariates, sw, prefix="covariates"),
+            SharedArray.from_numpy(covariates, sw, prefix="covariates"),
         )
 
     @classmethod

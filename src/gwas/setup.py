@@ -10,13 +10,13 @@ debugging_symbols_requested = "--with-debugging-symbols" in sys.argv
 if debugging_symbols_requested:
     sys.argv.remove("--with-debugging-symbols")
 
-extra_compile_args: list[str] = ["-O3", "-std=c++20"]
-extra_link_args: list[str] = ["-g3"]
+extra_compile_args: list[str] = ["-O3", "-std=c++20", "-ggdb"]
+extra_link_args: list[str] = ["-ggdb"]
 if debugging_symbols_requested:
     extra_compile_args.append("-Wall")
     extra_compile_args.append("-Werror")
-    extra_compile_args.append("-UNDEBUG")
-    extra_compile_args.append("-O0")
+    # extra_compile_args.append("-UNDEBUG")
+    # extra_compile_args.append("-O0")
     extra_compile_args.append("-march=native")
 
 

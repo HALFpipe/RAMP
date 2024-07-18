@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass, fields
 from subprocess import DEVNULL, PIPE, Popen
@@ -77,7 +75,7 @@ class RmwDebug:
 
 
 def read_matrix(
-    file_handle: peekable[str],
+    file_handle: "peekable[str]",
 ) -> npt.NDArray[np.float64]:
     pattern = re.compile(r"^[0-9-]")
 
@@ -192,7 +190,7 @@ def rmw_debug(
 
 
 def process_data(
-    peekable_stdout: peekable[str],
+    peekable_stdout: "peekable[str]",
     data: dict[str, Any],
     put_match: Callable[[dict[str, str]], None],
     field_count: int,
@@ -228,7 +226,7 @@ def process_hat(data: dict[str, Any], hat_match: re.Match[str]) -> None:
 
 
 def process_matrix(
-    peekable_stdout: peekable[str], data: dict[str, Any], line: str
+    peekable_stdout: "peekable[str]", data: dict[str, Any], line: str
 ) -> None:
     field = field_mapping[line]
     if field in data:

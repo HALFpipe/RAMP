@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import annotations
-
 from abc import abstractmethod
 from contextlib import AbstractContextManager
 from dataclasses import KW_ONLY, dataclass, field
@@ -45,7 +43,7 @@ def compression_method_from_file(file_path: Path) -> CompressionMethod:
     for compression_method in compression_methods.values():
         if str(file_path).endswith(compression_method.suffix):
             return compression_method
-    raise ValueError(f"Unknown compression method for file: {file_path}")
+    return default_compression_method
 
 
 AxisMetadata: TypeAlias = pd.DataFrame | pd.Series | None
@@ -69,7 +67,7 @@ class FileArray(Generic[ScalarType], AbstractContextManager["FileArray[ScalarTyp
     compression_method: CompressionMethod
 
     axis_metadata: MutableSequence[AxisMetadata] = field(init=False)
-    extra_metadata: dict[str, Any] | None = None
+    extra_metadata: dict[str, Any] = field(default_factory=dict)
 
     file_paths: set[Path] = field(default_factory=set)
 
@@ -105,7 +103,7 @@ class FileArray(Generic[ScalarType], AbstractContextManager["FileArray[ScalarTyp
         dtype: Type[ScalarType],
         compression_method: CompressionMethod,
         **kwargs: Any,
-    ) -> FileArrayWriter[ScalarType]:
+    ) -> "FileArrayWriter[ScalarType]":
         if isinstance(compression_method, TextCompressionMethod):
             from .text import TextFileArrayWriter
 
@@ -120,7 +118,7 @@ class FileArray(Generic[ScalarType], AbstractContextManager["FileArray[ScalarTyp
             raise NotImplementedError
 
     @classmethod
-    def from_file(cls, file_path: Path, dtype: Type[ScalarType]) -> FileArrayReader:
+    def from_file(cls, file_path: Path, dtype: Type[ScalarType]) -> "FileArrayReader":
         compression_method = compression_method_from_file(file_path)
         if isinstance(compression_method, TextCompressionMethod):
             from .text import TextFileArrayReader

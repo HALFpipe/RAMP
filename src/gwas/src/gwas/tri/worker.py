@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
-
 from pathlib import Path
 
 from ..log import logger
@@ -22,7 +20,7 @@ class TriWorker(Process):
         self.t = t
 
         if name is None:
-            name = f"tri-worker-chr{tsqr.vcf_file.chromosome}"
+            name = f"TriWorkerChr{tsqr.vcf_file.chromosome}"
 
         super().__init__(t.exception_queue, name=name)
 
@@ -30,7 +28,7 @@ class TriWorker(Process):
         logger.debug(f"Triangularizing chromosome {self.tsqr.vcf_file.chromosome}")
         tri = self.tsqr.map_reduce()
 
-        tri.to_file(self.tri_path)
+        tri.to_file(self.tri_path, num_threads=self.tsqr.num_threads)
         tri.free()
         # Indicate that we can start another task as this one has finished.
         self.t.can_run.set()

@@ -31,7 +31,7 @@ inline std::optional<std::pair<uint32_t *, size_t>> CheckIndexArray(PyArrayObjec
 
     size_t size = PyArray_SIZE(array);
     uint32_t *data =
-        reinterpret_cast<uint32_t *>(PyArray_DATA(array));
+        static_cast<uint32_t *>(PyArray_DATA(array));
     return std::pair(data, size);
 }
 
@@ -46,6 +46,18 @@ inline bool CheckFloatArray(PyArrayObject *array)
     {
         PyErr_SetString(PyExc_ValueError,
                         "`array` must be an array of doubles");
+        return false;
+    }
+    if (!PyArray_ISALIGNED(array))
+    {
+        PyErr_SetString(PyExc_ValueError,
+                        "`array` must be aligned");
+        return false;
+    }
+    if (!PyArray_ISONESEGMENT(array))
+    {
+        PyErr_SetString(PyExc_ValueError,
+                        "`array` must be either C-contiguous or F-contiguous");
         return false;
     }
 

@@ -161,20 +161,19 @@ class SharedArray(Generic[ScalarType]):
         num_threads: int = 1,
     ) -> Self:
         reader = FileArray.from_file(file_path, dtype)
-        shape = reader.shape[::-1]  # Reverse because of Fortran order
+        shape = reader.shape
 
         if reader.extra_metadata is not None:
             kwargs = reader.extra_metadata
         else:
-            kwargs = {}
+            kwargs = dict()
 
         assert global_lock is not None
         with global_lock:
             name = cls.get_name(sw, **kwargs)
             sw.alloc(name, *shape, dtype=dtype)
-
-        array = cls(name, sw, **kwargs)
-        a = array.to_numpy().transpose()
+            array = cls(name, sw, **kwargs)
+            a = array.to_numpy()
 
         s = slice(None)
         with reader:
@@ -185,7 +184,7 @@ class SharedArray(Generic[ScalarType]):
         if file_path.is_dir():
             file_path = file_path / self.to_file_name()
 
-        array = self.to_numpy().transpose()
+        array = self.to_numpy()
         writer = FileArray.create(
             file_path,
             array.shape,
@@ -194,10 +193,11 @@ class SharedArray(Generic[ScalarType]):
             extra_metadata=self.to_metadata(),
             num_threads=num_threads,
         )
+
         with writer:
             writer[:, :] = array
 
-        return file_path
+        return writer.file_path
 
     def free(self) -> None:
         self.sw.free(self.name)
@@ -318,9 +318,9 @@ class SharedArray(Generic[ScalarType]):
 
         return cls(name, sw)
 
-
-class SharedFloat64Array(SharedArray[np.float64]):
-    def transpose(self, shape: tuple[int, ...] | None = None) -> None:
+    def transpose(
+        self: "SharedArray[np.float64]", shape: tuple[int, ...] | None = None
+    ) -> None:
         """Transpose the matrix in place
 
         Parameters
@@ -354,20 +354,24 @@ class SharedFloat64Array(SharedArray[np.float64]):
 
     @overload
     def triangularize(
-        self, pivoting: Literal[True] = True
+        self: "SharedArray[np.float64]", pivoting: Literal[True] = True
     ) -> npt.NDArray[np.uint32]: ...
 
     @overload
-    def triangularize(self, pivoting: Literal[False]) -> None: ...
+    def triangularize(
+        self: "SharedArray[np.float64]", pivoting: Literal[False]
+    ) -> None: ...
 
-    def triangularize(self, pivoting: bool = True) -> npt.NDArray[np.uint32] | None:
+    def triangularize(
+        self: "SharedArray[np.float64]", pivoting: bool = True
+    ) -> npt.NDArray[np.uint32] | None:
         """Triangularize to upper triangular matrix via the LAPACK routine GEQRF or
         GEQP3, which is what scipy.linalg.qr uses internally.
 
         Raises:
             RuntimeError: If the LAPACK routine fails.
         """
-        a = self.to_numpy()
+        a: npt.NDArray[np.float64] = self.to_numpy()
         jpvt: npt.NDArray[np.uint32] | None = None
 
         if pivoting:

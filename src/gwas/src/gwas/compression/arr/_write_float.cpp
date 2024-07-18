@@ -3,6 +3,7 @@
 #include <charconv>  // std::from_chars
 #include <cstddef>
 #include <cstdint>   // uint32_t
+#include <cstdio>    // fopen
 #include <exception> // std::exception
 #include <format>    // std::format
 #include <iostream>  // std::cout
@@ -20,10 +21,16 @@
 
 #include "_check.hpp"
 
+inline void write_delimiter(FILE *file)
+{
+    if (fwrite("\t", 1, 1, file) != 1)
+    {
+        throw std::runtime_error("Failed to write to file");
+    }
+}
+
 static PyObject *WriteFloat(PyObject *self, PyObject *args, PyObject *kwargs)
 {
-    // std::cout << "ReadStr" << std::endl;
-
     PyObject *row_prefix_iterator;
     PyArrayObject *array;
     int file_descriptor = 0;
@@ -57,40 +64,52 @@ static PyObject *WriteFloat(PyObject *self, PyObject *args, PyObject *kwargs)
 
     FILE *file = fdopen(dup(file_descriptor), "a");
     std::array<char, 32> str;
+
+    Py_BEGIN_ALLOW_THREADS;
     try
     {
         for (size_t row_index = 0; row_index < row_count; row_index++)
         {
+            Py_BLOCK_THREADS;
             PyObject *row_prefix = PyIter_Next(row_prefix_iterator);
             if (row_prefix == nullptr)
             {
                 // PyIter_Next has raised an exception
                 return nullptr;
             }
-            if (!PyBytes_Check(row_prefix))
+            if (row_prefix != Py_None)
             {
-                PyErr_SetString(PyExc_TypeError, "`row_prefix_iterator` must yield bytes objects");
-                return nullptr;
-            }
-            Py_ssize_t row_prefix_size = PyBytes_Size(row_prefix);
-            char *row_prefix_bytes = PyBytes_AsString(row_prefix);
-            if (row_prefix_bytes == nullptr)
-            {
-                // PyBytes_AsString has raised an exception
-                return nullptr;
-            }
-            fwrite(row_prefix_bytes, 1, row_prefix_size, file);
-            Py_DECREF(row_prefix);
-
-            for (size_t column_index = 0; column_index < column_count; column_index++)
-            {
-                if (fwrite("\t", 1, 1, file) != 1)
+                if (!PyBytes_Check(row_prefix))
+                {
+                    PyErr_SetString(PyExc_TypeError, "`row_prefix_iterator` must yield bytes objects or None");
+                    return nullptr;
+                }
+                char *row_prefix_bytes = PyBytes_AsString(row_prefix);
+                if (row_prefix_bytes == nullptr)
+                {
+                    // PyBytes_AsString has raised an exception
+                    return nullptr;
+                }
+                ssize_t row_prefix_size = PyBytes_Size(row_prefix);
+                ssize_t r = static_cast<ssize_t>(fwrite(row_prefix_bytes, 1, row_prefix_size, file));
+                Py_DECREF(row_prefix);
+                if (r != row_prefix_size)
                 {
                     PyErr_SetString(PyExc_IOError, "Failed to write to file");
                     return nullptr;
                 }
+                write_delimiter(file);
+            }
+            Py_UNBLOCK_THREADS;
 
-                const double value = *reinterpret_cast<const double *> PyArray_GETPTR2(array, row_index, column_index);
+            for (size_t column_index = 0; column_index < column_count; column_index++)
+            {
+                if (column_index > 0)
+                {
+                    write_delimiter(file);
+                }
+
+                const double value = *(static_cast<const double *> PyArray_GETPTR2(array, row_index, column_index));
 
                 auto [ptr, ec] = std::to_chars(str.data(), str.end(), value, std::chars_format::general);
                 if (ec != std::errc())
@@ -118,6 +137,7 @@ static PyObject *WriteFloat(PyObject *self, PyObject *args, PyObject *kwargs)
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return nullptr;
     }
+    Py_END_ALLOW_THREADS;
 
     if (fclose(file) != 0)
     {
@@ -139,7 +159,7 @@ static PyMethodDef methods[] = {
 
 static struct PyModuleDef moduledef = {
     .m_base = PyModuleDef_HEAD_INIT,
-    .m_name = "_write",
+    .m_name = "_write_float",
     .m_doc = "A module to write structured data to delimited files",
     /* Setting m_size to -1 means that the module does not support
      * sub-interpreters, because it has global state.
@@ -150,7 +170,7 @@ static struct PyModuleDef moduledef = {
     .m_clear = NULL,
     .m_free = NULL};
 
-PyMODINIT_FUNC PyInit__write(void)
+PyMODINIT_FUNC PyInit__write_float(void)
 {
     import_array();
     PyObject *module = PyModule_Create(&moduledef);

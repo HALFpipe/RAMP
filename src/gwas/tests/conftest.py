@@ -6,7 +6,7 @@ from typing import Literal, Mapping
 
 import pytest
 from gwas.compression.convert import to_bgzip
-from gwas.log import setup_logging, teardown_logging
+from gwas.log import add_handler, setup_logging_queue, teardown_logging
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri.calc import calc_tri
 from gwas.utils import chromosome_to_int, chromosomes_set
@@ -23,7 +23,11 @@ sample_sizes: Mapping[SampleSizeLabel, int] = dict(small=100, medium=500, large=
 
 @pytest.fixture(scope="session", autouse=True)
 def logging(request: FixtureRequest) -> None:
-    setup_logging(level="DEBUG", stream=False)
+    logging_plugin = request.config.pluginmanager.get_plugin("logging-plugin")
+    if logging_plugin is None:
+        raise ValueError("Logging plugin not found")
+    add_handler(logging_plugin.log_cli_handler)
+    setup_logging_queue()
     request.addfinalizer(teardown_logging)
 
 
@@ -82,7 +86,7 @@ def directory_factory() -> DirectoryFactory:
 
 @pytest.fixture(scope="session", params=sample_sizes.keys())
 def sample_size_label(request: FixtureRequest) -> SampleSizeLabel:
-    return request.param  # type: ignore
+    return request.param
 
 
 @pytest.fixture(scope="session")

@@ -10,14 +10,13 @@ import numpy as np
 import pandas as pd
 from numpy import typing as npt
 
-from gwas.compression.arr._read_float import read_float
-from gwas.compression.arr._read_str import (
-    read_str,
-)
-
 from ...log import logger
 from ...utils import to_str
 from ..pipe import CompressedTextReader, CompressedTextWriter
+from ._read_float import read_float
+from ._read_str import (
+    read_str,
+)
 from ._write_float import write_float
 from .base import (
     FileArrayReader,
@@ -26,47 +25,28 @@ from .base import (
     TextCompressionMethod,
     ZstdTextCompressionMethod,
     compression_method_from_file,
+    compression_methods,
 )
 
 delimiter: str = "\t"
-extra_metadata_prefix: str = "# "
+header_prefix: str = "# "
+extra_metadata_prefix: str = "## "
 
 
 def make_args_tuple(*args: Any) -> tuple[Any, ...]:
     return args
 
 
-def read_header(
-    file_path: Path,
-) -> tuple[pd.Series | pd.DataFrame, pd.Series, dict[str, Any] | None, int, int]:
-    reader = CompressedTextReader(file_path)
-    extra_metadata: dict[str, Any] | None = None
-    header_line: str | None = None
-    header_length: int = 0
-
-    with reader as file_handle:
-        for line in file_handle:
-            header_length += len(line)
-            if line.startswith(extra_metadata_prefix):
-                line = line.removeprefix(extra_metadata_prefix)
-                extra_metadata = json.loads(line)
-                continue
-            header_line = line
-            break
-    if header_line is None:
-        raise ValueError("No header line found in text file")
-    column_names = pd.Series(header_line.strip().split(delimiter), dtype=str)
-    column_count = len(column_names)
-
-    metadata_column_indices: npt.NDArray[np.uint32] = np.asarray([0], dtype=np.uint32)
-    if extra_metadata is not None and "metadata_columns" in extra_metadata:
-        metadata_column_indices = np.asarray(
-            extra_metadata.pop("metadata_column_indices"), dtype=np.uint32
-        )
-    if metadata_column_indices != np.arange(len(metadata_column_indices)):
+def read_row_metadata(
+    reader: CompressedTextReader,
+    header_length: int,
+    file_column_count: int,
+    metadata_column_indices: Any,
+) -> list[tuple[Any, ...]]:
+    if not isinstance(metadata_column_indices, list):
+        raise ValueError("Metadata column indices must be a list")
+    if metadata_column_indices != list(range(len(metadata_column_indices))):
         raise ValueError("Metadata columns must be contiguous and start at 0")
-    metadata_column_names = column_names.iloc[metadata_column_indices]
-    column_names = column_names.drop(metadata_column_indices, inplace=False)
 
     metadata_tuples: list[tuple[Any, ...]] = list()
     with reader as file_handle:
@@ -75,15 +55,83 @@ def read_header(
             make_args_tuple,
             file_handle.fileno(),
             header_length,
-            column_count,
-            metadata_column_indices,
+            file_column_count,
+            np.asarray(metadata_column_indices, dtype=np.uint32),
         )
 
-    row_metadata = pd.DataFrame(metadata_tuples, columns=metadata_column_names)
-    if len(row_metadata.columns) == 1:
-        row_metadata = row_metadata.iloc[:, 0]
+    return metadata_tuples
 
-    return row_metadata, column_names, extra_metadata, header_length, column_count
+
+def read_header(
+    file_path: Path,
+) -> tuple[
+    pd.Series | pd.DataFrame | None, pd.Series | None, dict[str, Any], int, int, int
+]:
+    reader = CompressedTextReader(file_path)
+    line: str | None = None
+    extra_metadata: dict[str, Any] = dict()
+    header_line: str | None = None
+    header_length: int = 0
+    with reader as file_handle:
+        for line in file_handle:
+            if line.startswith(extra_metadata_prefix):
+                header_length += len(line)
+                line = line.removeprefix(extra_metadata_prefix)
+                extra_metadata = json.loads(line)
+                continue
+            if line.startswith(header_prefix):
+                header_length += len(line)
+                header_line = line.removeprefix(header_prefix)
+                continue
+            break
+    if line is None:
+        raise ValueError("No line found in text file")
+
+    row_metadata: pd.Series | pd.DataFrame | None = None
+    row_count: int | None = None
+    column_count: int | None = None
+
+    file_column_count = len(line.strip().split(delimiter))
+
+    if header_line is not None:
+        column_metadata = pd.Series(header_line.strip().split(delimiter), dtype=str)
+    else:
+        column_metadata = None
+
+    metadata_column_indices: list[int] | None = None
+    if "metadata_column_indices" in extra_metadata:
+        metadata_column_indices = extra_metadata.pop("metadata_column_indices")
+        metadata_tuples = read_row_metadata(
+            reader,
+            header_length,
+            file_column_count,
+            metadata_column_indices,
+        )
+        column_metadata = column_metadata.drop(metadata_column_indices, inplace=False)
+        column_count = len(column_metadata)
+
+        row_metadata_columns = column_metadata.iloc[metadata_column_indices]
+        row_metadata = pd.DataFrame(metadata_tuples, columns=row_metadata_columns)
+        row_count, _ = row_metadata.shape
+        if len(row_metadata.columns) == 1:
+            row_metadata = row_metadata.iloc[:, 0]
+
+    if column_count is None:
+        column_count = file_column_count
+
+    if row_count is None:
+        with reader as file_handle:
+            file_handle.read(header_length)
+            row_count = sum(1 for _ in file_handle)
+
+    return (
+        row_metadata,
+        column_metadata,
+        extra_metadata,
+        header_length,
+        row_count,
+        column_count,
+    )
 
 
 @dataclass
@@ -96,13 +144,35 @@ class TextFileArrayReader(FileArrayReader[ScalarType]):
     @override
     @classmethod
     def from_file(cls, file_path: Path, dtype: Type[ScalarType]) -> FileArrayReader:
-        row_metadata, column_metadata, extra_metadata, header_length, column_count = (
-            read_header(file_path)
-        )
-        shape = (row_metadata.shape[0], column_metadata.size)
-        compression_method = compression_method_from_file(file_path)
+        candidates = [
+            "",
+            *(
+                c.suffix
+                for c in compression_methods.values()
+                if isinstance(c, TextCompressionMethod)
+            ),
+        ]
+
+        _file_path: Path | None = None
+        for candidate in candidates:
+            _file_path = file_path.parent / f"{file_path.name}{candidate}"
+            if _file_path.is_file():
+                break
+        if _file_path is None:
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        (
+            row_metadata,
+            column_metadata,
+            extra_metadata,
+            header_length,
+            row_count,
+            column_count,
+        ) = read_header(_file_path)
+        shape = (row_count, column_count)
+        compression_method = compression_method_from_file(_file_path)
         reader = TextFileArrayReader(
-            file_path=file_path,
+            file_path=_file_path,
             shape=shape,
             dtype=dtype,
             compression_method=compression_method,
@@ -132,16 +202,15 @@ class TextFileArrayReader(FileArrayReader[ScalarType]):
         column_indices = column_indices.copy()
         column_indices += self.metadata_column_count
 
-        if isinstance(self.dtype, np.float64):
+        if np.issubdtype(self.dtype, np.float64):
             with reader as file_handle:
                 read_float(
-                    array,
+                    array,  # type: ignore
                     file_handle.fileno(),
                     self.header_length,
                     self.column_count,
                     column_indices,
                     row_indices,
-                    ring_buffer_size=reader.pipesize,
                 )
         else:
             raise NotImplementedError
@@ -232,35 +301,39 @@ class TextFileArrayWriter(FileArrayWriter[ScalarType]):
             raise RuntimeError("File is not open for writing")
 
         row_metadata, column_metadata = self.axis_metadata
-        if column_metadata is None:
+
+        header: list[str] = list()
+        if column_metadata is not None:
+            if isinstance(row_metadata, pd.DataFrame):
+                header.extend(row_metadata.columns.astype(str))
+            elif isinstance(row_metadata, pd.Series):
+                name = row_metadata.name
+                if name is None:
+                    name = ""
+                header.append(name)
+            if header:
+                self.extra_metadata["metadata_column_indices"] = list(range(len(header)))
+            header.extend(column_metadata.iloc[column_start:column_stop].astype(str))
+        else:
             logger.debug(
                 "Not writing header for file "
                 f'"{str(self.compressed_text_writer.file_path)}" '
                 "because column metadata is not available"
             )
-            return
-
-        if self.extra_metadata is not None:
+        if self.extra_metadata:
             self.file_handle.write(
                 f"{extra_metadata_prefix}{json.dumps(self.extra_metadata)}\n"
             )
+        if header:
+            self.file_handle.write(f"{header_prefix}{delimiter.join(header)}\n")
 
-        header = list()
-        if isinstance(row_metadata, pd.DataFrame):
-            header.extend(row_metadata.columns.astype(str))
-        elif isinstance(row_metadata, pd.Series):
-            name = row_metadata.name
-            if name is None:
-                name = ""
-            header.append(name)
-        header.extend(column_metadata.iloc[column_start:column_stop].astype(str))
-        self.file_handle.write(delimiter.join(header) + "\n")
-
-    def generate_row_prefixes(self, row_start: int, row_stop: int) -> Iterator[bytes]:
+    def generate_row_prefixes(
+        self, row_start: int, row_stop: int
+    ) -> Iterator[bytes | None]:
         row_metadata, _ = self.axis_metadata
         if row_metadata is None:
             for _ in range(row_start, row_stop):
-                yield b""
+                yield None
         else:
             for row_index in range(row_start, row_stop):
                 metadata = row_metadata.iloc[row_index]
@@ -269,8 +342,6 @@ class TextFileArrayWriter(FileArrayWriter[ScalarType]):
                     yield delimiter.join(map(to_str, metadata)).encode("utf-8")
                 else:
                     yield to_str(metadata).encode("utf-8")
-
-                self.row_index += 1
 
     def write_values(
         self,
@@ -313,3 +384,4 @@ class TextFileArrayWriter(FileArrayWriter[ScalarType]):
 
         # Write data
         self.write_values(value, row_start, row_stop)
+        self.row_index += row_size

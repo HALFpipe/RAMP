@@ -14,7 +14,7 @@ from ..compression.pipe import CompressedTextWriter
 from ..eig.base import Eigendecomposition
 from ..eig.calc import calc_eigendecompositions
 from ..log import logger
-from ..mem.arr import SharedFloat64Array
+from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..null_model.calc import calc_null_model_collections
 from ..pheno import VariableCollection
@@ -64,9 +64,7 @@ class JobCollection:
         ]
         self.stat_file_array.set_axis_metadata(1, pd.Series(phenotype_names))
         # Set row metadata
-        self.stat_file_array.set_axis_metadata(
-            0, self.vcf_file.vcf_variants.iloc[self.vcf_file.variant_indices]
-        )
+        self.stat_file_array.set_axis_metadata(0, self.vcf_file.variants)
         # Try to load an existing summary collection.
         chunks_path = self.file_path.with_suffix(".yaml.gz")
         if chunks_path.is_file():
@@ -121,8 +119,8 @@ class JobCollection:
             eigendecompositions = self.get_eigendecompositions(
                 self.chromosome, variable_collections
             )
-            inverse_variance_arrays: list[SharedFloat64Array] = list()
-            scaled_residuals_arrays: list[SharedFloat64Array] = list()
+            inverse_variance_arrays: list[SharedArray] = list()
+            scaled_residuals_arrays: list[SharedArray] = list()
 
             null_model_collections = calc_null_model_collections(
                 eigendecompositions,

@@ -1,4 +1,5 @@
 #include <charconv> // std::from_chars
+#include <iostream> // std::cout
 
 #include "_check.hpp"
 #include "_reader.hpp"
@@ -19,61 +20,64 @@ public:
         row_indices_(row_indices), row_index_count_(row_index_count) {}
   virtual ~FloatReader() = default;
 
+  static constexpr std::array<char, 2> delimiters = {'\n', '\t'};
+
   PyArrayObject *array_;
 
   uint32_t *row_indices_;
   size_t row_index_count_;
-
-  size_t token_index_{0};
-  size_t column_indices_index_{0};
   size_t row_indices_index_{0};
 
-  static constexpr std::array<char, 2> delimiters = {'\n', '\t'};
-
-  bool on_token(std::string_view token);
-};
-
-template <class H>
-bool FloatReader<H>::on_token(std::string_view token)
-{
-  const unsigned int current_row_index = token_index_ / this->column_count_;
-  const unsigned int current_column_index = token_index_ % this->column_count_;
-  /* Always increment the token counter. */
-  token_index_++;
-
-  if (row_indices_[row_indices_index_] == current_row_index)
+  bool on_token(std::string_view token)
   {
-    if (this->column_indices_[column_indices_index_] == current_column_index)
+    const unsigned int current_row_index = token_index_ / this->column_count_;
+    const unsigned int current_column_index = token_index_ % this->column_count_;
+    /* Always increment the token counter. */
+    token_index_++;
+
+    if (row_indices_[row_indices_index_] == current_row_index)
     {
-      token = reinterpret_cast<H *>(this)->prepare_token(token);
-
-      double value;
-      if (std::from_chars(token.begin(), token.end(), value).ec !=
-          std::errc{})
+      if (this->column_indices_[column_indices_index_] == current_column_index)
       {
-        PyErr_SetString(PyExc_ValueError, "Could not parse float");
-        throw error_already_set();
-      }
-      *reinterpret_cast<double *> PyArray_GETPTR2(array_, row_indices_index_, column_indices_index_) = value;
+        token = reinterpret_cast<H *>(this)->prepare_token(token);
 
-      column_indices_index_++;
-
-      if (column_indices_index_ == this->column_index_count_)
-      {
-        /* We have finished reading a record and can move on to the next. */
-        column_indices_index_ = 0;
-        row_indices_index_++;
-
-        if (row_indices_index_ == row_index_count_)
+        double value;
+        if (std::from_chars(token.begin(), token.end(), value).ec !=
+            std::errc{})
         {
-          /* We have finished reading all records. */
-          return false;
+          auto error_string = std::format("Could not parse float \"{}\"", token);
+          throw std::runtime_error(error_string);
+        }
+
+        void *pointer = PyArray_GETPTR2(array_, row_indices_index_, column_indices_index_);
+        *static_cast<double *>(pointer) = value;
+
+        // void *array_pointer = PyArray_DATA(array_);
+        // size_t offset = reinterpret_cast<size_t>(pointer) - reinterpret_cast<size_t>(array_pointer);
+        // std::cout << std::format("Setting value {} at indices {}, {} at pointer {} ({} from array start {})", value, row_indices_index_, column_indices_index_, pointer, offset, array_pointer) << std::endl;
+
+        column_indices_index_++;
+        if (column_indices_index_ == this->column_index_count_)
+        {
+          /* We have finished reading a record and can move on to the next. */
+          column_indices_index_ = 0;
+          row_indices_index_++;
+
+          if (row_indices_index_ == row_index_count_)
+          {
+            /* We have finished reading all records. */
+            return false;
+          }
         }
       }
     }
+    return true;
   }
-  return true;
-}
+
+private:
+  size_t token_index_{0};
+  size_t column_indices_index_{0};
+};
 
 struct TSVFloatReader : FloatReader<TSVFloatReader>
 {
@@ -103,7 +107,7 @@ static PyObject *ReadFloat(PyObject *self, PyObject *args, PyObject *kwargs)
   unsigned int column_count = 0;
   PyArrayObject *column_indices_array;
   PyArrayObject *row_indices_array;
-  unsigned int ring_buffer_size = level1_dcache_size;
+  unsigned int ring_buffer_size = default_ring_buffer_size;
 
   static const char *keywords[] = {
       "array",
@@ -139,6 +143,16 @@ static PyObject *ReadFloat(PyObject *self, PyObject *args, PyObject *kwargs)
   }
   auto [row_indices, row_index_count] = *r;
 
+  if (PyArray_SHAPE(array)[1] != static_cast<npy_intp>(column_index_count) ||
+      PyArray_SHAPE(array)[0] != static_cast<npy_intp>(row_index_count))
+  {
+    PyErr_SetString(PyExc_ValueError,
+                    "The shape of `array` does not match the shape of the "
+                    "row and column indices");
+    return nullptr;
+  }
+
+  Py_BEGIN_ALLOW_THREADS;
   try
   {
     TSVFloatReader reader{
@@ -150,15 +164,13 @@ static PyObject *ReadFloat(PyObject *self, PyObject *args, PyObject *kwargs)
         static_cast<size_t>(ring_buffer_size)};
     reader.loop();
   }
-  catch (const error_already_set &e)
-  {
-    return nullptr;
-  }
   catch (const std::exception &e)
   {
+    Py_BLOCK_THREADS;
     PyErr_SetString(PyExc_RuntimeError, e.what());
     return nullptr;
   }
+  Py_END_ALLOW_THREADS;
 
   Py_RETURN_NONE;
 }
@@ -222,7 +234,7 @@ static PyObject *CreateVCFFloatReader(PyObject *self, PyObject *args, PyObject *
   unsigned int column_count = 0;
   PyArrayObject *column_indices_array;
   unsigned int field_index = 0;
-  unsigned int ring_buffer_size = level1_dcache_size;
+  unsigned int ring_buffer_size = default_ring_buffer_size;
 
   static const char *keywords[] = {
       "file_descriptor",
@@ -257,10 +269,6 @@ static PyObject *CreateVCFFloatReader(PyObject *self, PyObject *args, PyObject *
         nullptr, file_descriptor, static_cast<size_t>(skip_bytes),
         static_cast<size_t>(column_count), column_indices, column_index_count,
         field_index, nullptr, 0, static_cast<size_t>(ring_buffer_size));
-  }
-  catch (const error_already_set &e)
-  {
-    return nullptr;
   }
   catch (const std::exception &e)
   {
@@ -327,9 +335,8 @@ static PyObject *RunVCFFloatReader(PyObject * /* self */, PyObject *arguments,
   auto [row_indices, row_index_count] = *r;
 
   size_t column_index_count = vcf_float_reader->column_index_count_;
-  if (PyArray_SHAPE(array)[0] !=
-          static_cast<npy_intp>(column_index_count) ||
-      PyArray_SHAPE(array)[1] != static_cast<npy_intp>(row_index_count))
+  if (PyArray_SHAPE(array)[1] != static_cast<npy_intp>(column_index_count) ||
+      PyArray_SHAPE(array)[0] != static_cast<npy_intp>(row_index_count))
   {
     PyErr_SetString(PyExc_ValueError,
                     "The shape of `array` does not match the shape of the "
@@ -341,9 +348,21 @@ static PyObject *RunVCFFloatReader(PyObject * /* self */, PyObject *arguments,
   vcf_float_reader->row_indices_ = row_indices;
   vcf_float_reader->row_index_count_ = row_index_count;
   vcf_float_reader->row_indices_index_ = 0;
-  vcf_float_reader->loop();
 
-  Py_RETURN_NONE;
+  Py_BEGIN_ALLOW_THREADS
+  try
+  {
+    vcf_float_reader->loop();
+  }
+  catch (const std::exception &e)
+  {
+    Py_BLOCK_THREADS
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    return nullptr;
+  }
+  Py_END_ALLOW_THREADS
+
+      Py_RETURN_NONE;
 }
 
 static PyMethodDef methods[] = {
@@ -357,7 +376,7 @@ static PyMethodDef methods[] = {
      .ml_doc = "Read fields from specified rows and columns into a 2D array"},
     {.ml_name = "read_float",
      .ml_meth = _PyCFunction_CAST(ReadFloat),
-     .ml_flags = METH_VARARGS,
+     .ml_flags = METH_VARARGS | METH_KEYWORDS,
      .ml_doc = "Read all specified rows and columns into a 2D array"},
     {NULL, NULL, 0, NULL} /* sentinel */
 };
@@ -375,7 +394,7 @@ static struct PyModuleDef moduledef = {
     .m_clear = NULL,
     .m_free = NULL};
 
-PyMODINIT_FUNC PyInit__read(void)
+PyMODINIT_FUNC PyInit__read_float(void)
 {
   import_array();
   PyObject *module = PyModule_Create(&moduledef);

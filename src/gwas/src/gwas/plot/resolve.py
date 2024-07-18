@@ -3,10 +3,13 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
-from ..compression.arr.bin import Blosc2FileArray
+from gwas.compression.arr.base import FileArrayReader
+
+from ..compression.arr.base import FileArray
 from ..log import logger
 from ..summary import SummaryCollection
 from ..utils import IterationOrder, chromosomes_list, make_pool_or_null_context
@@ -38,7 +41,7 @@ def get_chromosome_metadata(
         else:
             raise ValueError(message)
 
-    array_proxy: Blosc2FileArray = Blosc2FileArray.from_file(score_path, "r")
+    array_proxy: FileArrayReader = FileArray.from_file(score_path, np.float64)
     row_metadata, column_metadata = array_proxy.axis_metadata
 
     if row_metadata is None or column_metadata is None:

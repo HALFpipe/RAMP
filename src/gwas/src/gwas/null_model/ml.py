@@ -15,7 +15,7 @@ from .pml import (
 from .pml import terms_count as terms_count
 
 
-@dataclass
+@dataclass(frozen=True, eq=True)
 class MaximumLikelihood(ProfileMaximumLikelihood):
     def get_initial_terms(self, o: OptimizeInput) -> list[float]:
         terms = super().get_initial_terms(o)

@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event, Lock
 from typing import Any
@@ -9,7 +7,7 @@ import numpy as np
 from numpy import typing as npt
 
 from ..log import multiprocessing_context
-from ..mem.arr import SharedFloat64Array
+from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..utils import SharedState
 from ..vcf.base import VCFFile
@@ -20,7 +18,7 @@ def is_lower_triangular(a: npt.NDArray[Any]) -> bool:
 
 
 @dataclass
-class Triangular(SharedFloat64Array):
+class Triangular(SharedArray):
     chromosome: int | str | None
     samples: list[str]
     variant_count: int
@@ -75,7 +73,7 @@ class Triangular(SharedFloat64Array):
         cls,
         vcf_file: VCFFile,
         sw: SharedWorkspace,
-    ) -> Triangular | None:
+    ) -> "Triangular | None":
         from .tsqr import TallSkinnyQR
 
         tsqr = TallSkinnyQR(

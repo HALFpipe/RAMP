@@ -13,7 +13,7 @@ from tqdm.auto import tqdm
 
 from .._matrix_functions import dgesvdq
 from ..log import logger
-from ..mem.arr import SharedFloat64Array
+from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..tri.base import Triangular
 from ..utils import (
@@ -24,7 +24,7 @@ from ..utils import (
 
 
 @dataclass
-class Eigendecomposition(SharedFloat64Array):
+class Eigendecomposition(SharedArray):
     chromosome: int | str | None
     samples: list[str]
     variant_count: int
@@ -81,7 +81,7 @@ class Eigendecomposition(SharedFloat64Array):
         a = self.to_numpy()
         return a[:, :-1]
 
-    def set_from_tri_array(self, tri_array: SharedFloat64Array) -> None:
+    def set_from_tri_array(self, tri_array: SharedArray) -> None:
         tri_array.transpose()
         a = tri_array.to_numpy()
         _, sample_count = a.shape
@@ -143,7 +143,7 @@ class Eigendecomposition(SharedFloat64Array):
     @classmethod
     def from_tri_array(
         cls,
-        tri_array: SharedFloat64Array,
+        tri_array: SharedArray,
         samples: list[str],
         variant_count: int,
         chromosome: int | str,
@@ -190,7 +190,7 @@ class Eigendecomposition(SharedFloat64Array):
         sw.squash({tri.name for tri in arrays})
 
         # Concatenate triangular matrices
-        tri_array = SharedFloat64Array.merge(*arrays)
+        tri_array = SharedArray.merge(*arrays)
         return cls.from_tri_array(
             tri_array, samples, variant_count, chromosome=chromosome
         )
@@ -251,5 +251,5 @@ def load_tri_arrays(
             )
         )
     tri_arrays.sort(key=attrgetter("start"))
-    logger.debug(f"Loaded {len(tri_arrays)}) triangular matrices: {tri_arrays}")
+    logger.debug(f"Loaded {len(tri_arrays)} triangular matrices: {tri_arrays}")
     return tri_arrays

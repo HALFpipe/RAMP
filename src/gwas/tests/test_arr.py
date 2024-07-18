@@ -2,7 +2,7 @@
 from pathlib import Path
 
 import numpy as np
-from gwas.mem.arr import SharedFloat64Array
+from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 
 
@@ -11,7 +11,7 @@ def test_sa(tmp_path: Path) -> None:
 
     shape = (5, 7)
     array = sw.alloc("a", *shape)
-    assert isinstance(array, SharedFloat64Array)
+    assert isinstance(array, SharedArray)
 
     # include trailing
     a = array.to_numpy(include_trailing_free_memory=True)
@@ -25,8 +25,8 @@ def test_sa(tmp_path: Path) -> None:
 
     # io
     path = tmp_path / "a"
-    array.to_file(path)
-    array = SharedFloat64Array.from_file(path, sw, np.float64)
+    path = array.to_file(path)
+    array = SharedArray.from_file(path, sw, np.float64)
     c = array.to_numpy()
     assert np.allclose(a, c)
 

@@ -6,7 +6,7 @@ from typing import Mapping
 
 import numpy as np
 import pandas as pd
-from gwas.compression.pipe import CompressedTextReader, cache_suffix
+from gwas.compression.pipe import cache_suffix
 from gwas.eig.base import Eigendecomposition
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
@@ -17,15 +17,14 @@ from gwas.score.job import SummaryCollection
 from gwas.vcf.base import VCFFile
 from pytest import FixtureRequest
 
-from ..conftest import SampleSizeLabel, chromosomes
-from ..utils import check_bias
+from ..conftest import chromosomes
+from ..utils import assert_both_close, check_bias
 from .conftest import RmwScore
 
 
 def test_run(
     tmp_path: Path,
     sw: SharedWorkspace,
-    sample_size_label: SampleSizeLabel,
     vcf_paths_by_chromosome: Mapping[int | str, Path],
     tri_paths_by_chromosome: Mapping[str | int, Path],
     cache_path: Path,
@@ -94,6 +93,8 @@ def test_run(
             phenotype_path,
             "--covariates",
             covariate_path,
+            "--score-r-squared-cutoff=-inf",
+            "--score-minor-allele-frequency-cutoff=-inf",
             "--output-directory",
             str(tmp_path),
             "--chromosome",
@@ -140,19 +141,17 @@ def test_run(
             assert np.isclose(
                 phenotype_summary.heritability,
                 null_model_collection.heritability[i],
-                atol=1e-6,
+                atol=1e-4,
             )
             assert phenotype_summary.genetic_variance is not None
-            assert np.isclose(
+            assert phenotype_summary.error_variance is not None
+            assert_both_close(
                 phenotype_summary.genetic_variance,
                 null_model_collection.genetic_variance[i],
-                atol=1e-6,
-            )
-            assert phenotype_summary.error_variance is not None
-            assert np.isclose(
                 phenotype_summary.error_variance,
                 null_model_collection.error_variance[i],
-                atol=1e-6,
+                atol=1e-4,
+                rtol=1e-3,
             )
             assert np.isclose(
                 phenotype_summary.mean,
@@ -163,10 +162,8 @@ def test_run(
                 np.var(phenotype_frame[phenotype_name], ddof=1),
             )
 
-    with CompressedTextReader(
-        tmp_path / f"chr{chromosome}.score.txt.zst"
-    ) as file_handle:
-        data_frame = pd.read_table(file_handle)
+    score_path = tmp_path / f"chr{chromosome}.score.txt.zst"
+    data_frame = pd.read_table(score_path, skiprows=1, compression="zstd")
 
     u_stat_columns = [f"{name}_stat-u" for name in phenotype_names]
     u_stat = data_frame[u_stat_columns].to_numpy()

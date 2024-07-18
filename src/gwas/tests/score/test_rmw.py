@@ -2,7 +2,6 @@
 from pathlib import Path
 from time import time
 
-import blosc2
 import numpy as np
 from gwas.compression.arr.base import (
     FileArray,
@@ -25,8 +24,6 @@ def test_compression(
 
     variant_count, phenotype_count, _ = scores.shape
     scores = scores.reshape(variant_count, phenotype_count * 2)
-
-    blosc2.print_versions()
 
     for name, compression_method in compression_methods.items():
         file_path = tmp_path / f"score.{name}{compression_method.suffix}"

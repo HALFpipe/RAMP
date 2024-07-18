@@ -10,7 +10,7 @@ import seaborn as sns
 from gwas.eig.base import Eigendecomposition
 from gwas.eig.collection import EigendecompositionCollection
 from gwas.log import logger
-from gwas.mem.arr import SharedArray, SharedFloat64Array
+from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection
@@ -29,11 +29,11 @@ from .simulation import simulation_count
 @pytest.fixture(scope="module")
 def rotated_genotypes_arrays(
     vcf_file: VCFFile,
-    genotypes_array: SharedFloat64Array,
+    genotypes_array: SharedArray,
     eigendecompositions: list[Eigendecomposition],
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
-) -> list[SharedFloat64Array]:
+) -> list[SharedArray]:
     allocation_names = set(sw.allocations.keys())
 
     genotypes = genotypes_array.to_numpy()
@@ -43,7 +43,7 @@ def rotated_genotypes_arrays(
         vcf_file.samples, (eig.samples for eig in eigendecompositions)
     )
 
-    rotated_genotypes_arrays: list[SharedFloat64Array] = list()
+    rotated_genotypes_arrays: list[SharedArray] = list()
     for eig, sample_boolean_vector in zip(
         eigendecompositions, sample_boolean_vectors, strict=True
     ):
@@ -70,9 +70,9 @@ def rotated_genotypes_arrays(
 @pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 def test_rotate_demeaned_genotypes(
     vcf_file: VCFFile,
-    genotypes_array: SharedFloat64Array,
+    genotypes_array: SharedArray,
     eigendecompositions: list[Eigendecomposition],
-    rotated_genotypes_arrays: list[SharedFloat64Array],
+    rotated_genotypes_arrays: list[SharedArray],
 ) -> None:
     ec = EigendecompositionCollection.from_eigendecompositions(
         vcf_file,
@@ -109,7 +109,7 @@ def test_rotate_demeaned_genotypes(
 @pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 def test_genotypes_array(
     vcf_file: VCFFile,
-    genotypes_array: SharedFloat64Array,
+    genotypes_array: SharedArray,
     variable_collections: list[VariableCollection],
     rmw_score: RmwScore,
 ) -> None:
@@ -217,7 +217,7 @@ def test_score(
     phenotype_index: int,
     null_model_collections: list[NullModelCollection],
     eigendecompositions: list[Eigendecomposition],
-    rotated_genotypes_arrays: list[SharedFloat64Array],
+    rotated_genotypes_arrays: list[SharedArray],
     rmw_score: RmwScore,
     rmw_debug: RmwDebug,
 ) -> None:

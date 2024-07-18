@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 import pytest
 from gwas.eig.base import Eigendecomposition
-from gwas.mem.arr import SharedArray, SharedFloat64Array
+from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection
@@ -250,7 +250,7 @@ def genotypes_array(
     vcf_file: VCFFile,
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
-) -> SharedFloat64Array:
+) -> SharedArray:
     allocation_names = set(sw.allocations.keys())
 
     sample_count = len(vcf_file.samples)

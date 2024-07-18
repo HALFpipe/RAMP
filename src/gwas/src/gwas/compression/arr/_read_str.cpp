@@ -1,5 +1,11 @@
+#include <iostream> // std::cout
+
 #include "_check.hpp"
 #include "_reader.hpp"
+
+class error_already_set : public std::exception
+{
+};
 
 struct StrReader : Reader<StrReader>
 {
@@ -73,7 +79,7 @@ static PyObject *ReadStr(PyObject *self, PyObject *args, PyObject *kwargs)
     unsigned long skip_bytes = 0;
     unsigned int column_count = 0;
     PyArrayObject *column_indices_array;
-    unsigned int ring_buffer_size = level1_dcache_size;
+    unsigned int ring_buffer_size = default_ring_buffer_size;
 
     static const char *keywords[] = {
         "row_list",
@@ -92,6 +98,7 @@ static PyObject *ReadStr(PyObject *self, PyObject *args, PyObject *kwargs)
                                      &(PyArray_Type), &column_indices_array, // O!
                                      &ring_buffer_size))                     // I optional
     {
+        // PyArg_ParseTupleAndKeywords has raised an exception
         return nullptr;
     }
 
@@ -132,7 +139,8 @@ static PyMethodDef methods[] = {
      .ml_meth = _PyCFunction_CAST(ReadStr),
      .ml_flags = METH_VARARGS | METH_KEYWORDS,
      .ml_doc = "Read all specified columns from a tab-delimited file into a "
-               "list of records"}};
+               "list of records"},
+    {NULL, NULL, 0, NULL} /* sentinel */};
 
 static struct PyModuleDef moduledef = {
     .m_base = PyModuleDef_HEAD_INIT,
@@ -147,7 +155,7 @@ static struct PyModuleDef moduledef = {
     .m_clear = NULL,
     .m_free = NULL};
 
-PyMODINIT_FUNC PyInit__read(void)
+PyMODINIT_FUNC PyInit__read_str(void)
 {
     import_array();
     PyObject *module = PyModule_Create(&moduledef);

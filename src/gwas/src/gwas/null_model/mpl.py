@@ -7,7 +7,7 @@ from .pml import OptimizeInput, ProfileMaximumLikelihood
 from .pml import terms_count as terms_count
 
 
-@dataclass
+@dataclass(frozen=True, eq=True)
 class MaximumPenalizedLikelihood(ProfileMaximumLikelihood):
     """
     - Chung, Y., Rabe-Hesketh, S., Dorie, V., Gelman, A., & Liu, J. (2013).

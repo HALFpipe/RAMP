@@ -7,7 +7,7 @@ import numpy as np
 from tqdm.auto import tqdm
 
 from ..log import logger
-from ..mem.arr import SharedFloat64Array
+from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..tri.base import Triangular
 from ..tri.tsqr import TallSkinnyQR
@@ -18,7 +18,7 @@ from .base import Eigendecomposition, load_tri_arrays
 def func(
     eig: Eigendecomposition,
     base_tri_array: Triangular,
-    tri_array: SharedFloat64Array,
+    tri_array: SharedArray,
 ) -> None:
     a = base_tri_array.to_numpy()
     b = tri_array.to_numpy()

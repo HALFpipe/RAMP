@@ -12,7 +12,6 @@ from .base import Triangular
 
 
 def main() -> None:
-    mp.set_start_method("spawn")
     run(sys.argv[1:])
 
 

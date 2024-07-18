@@ -1,7 +1,4 @@
 # -*- coding: utf-8 -*-
-
-from __future__ import annotations
-
 from abc import abstractmethod
 from enum import Enum, auto
 from functools import partial
@@ -147,6 +144,12 @@ class VCFFile(CompressedTextReader):
         return self.variant_indices.size
 
     @property
+    def variant_mask(self) -> npt.NDArray[np.bool_]:
+        variant_mask = np.zeros(self.vcf_variant_count, dtype=np.bool_)
+        variant_mask[self.variant_indices] = True
+        return variant_mask
+
+    @property
     def variants(self) -> pd.DataFrame:
         return self.vcf_variants.iloc[self.variant_indices, :]
 
@@ -200,7 +203,7 @@ class VCFFile(CompressedTextReader):
         return cache_key
 
     @classmethod
-    def load_from_cache(cls, cache_path: Path, vcf_path: Path) -> VCFFile:
+    def load_from_cache(cls, cache_path: Path, vcf_path: Path) -> "VCFFile":
         v = load_from_cache(cache_path, cls.cache_key(vcf_path))
         if not isinstance(v, VCFFile):
             raise ValueError(f"Expected VCFFile, got {type(v)}: {v}")
@@ -212,7 +215,7 @@ class VCFFile(CompressedTextReader):
         file_path: Path | str,
         samples: set[str] | None = None,
         engine: Engine = Engine.cpp,
-    ) -> VCFFile:
+    ) -> "VCFFile":
         if engine == Engine.python:
             from .python import PyVCFFile
 

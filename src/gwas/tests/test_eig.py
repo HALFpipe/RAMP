@@ -17,7 +17,7 @@ from gwas.defaults import (
 from gwas.eig.base import Eigendecomposition
 from gwas.eig.calc import calc_eigendecompositions
 from gwas.log import logger
-from gwas.mem.arr import SharedArray, SharedFloat64Array
+from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.raremetalworker.ped import write_dummy_ped_and_dat_files
 from gwas.tools import bcftools, raremetalworker, tabix
@@ -33,7 +33,7 @@ def load_genotypes(
     samples: list[str],
     chromosomes: Sequence[int | str],
     sw: SharedWorkspace,
-) -> SharedFloat64Array:
+) -> SharedArray:
     allocation_names = set(sw.allocations.keys())
 
     vcf_file = vcf_files[0]
@@ -127,7 +127,7 @@ def test_eig(
         for tri in tri_arrays:
             tri.subset_samples(samples)
     sw.squash()
-    tri_array = SharedFloat64Array.merge(*tri_arrays)
+    tri_array = SharedArray.merge(*tri_arrays)
     request.addfinalizer(tri_array.free)
 
     _, tri_singular_values, _ = scipy.linalg.svd(
