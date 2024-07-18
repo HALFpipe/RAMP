@@ -590,9 +590,9 @@ cdef np.ndarray format_field(bcf_hdr_t* hdr, bcf1_t* b, char* field, object vtyp
         return None
 
     cdef np.npy_intp shape[2]
-    cdef char **dst
-    cdef int i
-    cdef list v
+    # cdef char **dst
+    # cdef int i
+    # cdef list v
     shape[0] = bcf_hdr_nsamples(hdr)  # number of samples
     shape[1] = fmt.n  # values per sample
 
