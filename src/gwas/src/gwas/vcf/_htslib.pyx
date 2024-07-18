@@ -1,5 +1,5 @@
 # cython: language_level=3
-# define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+# distutils: define_macros=NPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION
 from libc.stdint cimport int64_t, uint64_t, int32_t, uint32_t, uint8_t
 import numpy as np
 cimport numpy as np
