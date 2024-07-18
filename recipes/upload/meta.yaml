@@ -17,9 +17,9 @@ requirements:
     - nodejs
     - make
   host:
-    - nodejs
+    - "nodejs<=21"
   run:
-    - nodejs
+    - "nodejs<=21"
 
 test:
   requires:

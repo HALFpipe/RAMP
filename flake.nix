@@ -18,6 +18,7 @@
           export PYTHONBREAKPOINT=ipdb.set_trace
           export PYTHONDONTWRITEBYTECODE=1
           export PYTHONUNBUFFERED=1
+          export PYTHONPATH="$(git rev-parse --show-toplevel)/src/gwas/src"
           eval "$(micromamba shell hook --shell=posix)"
           micromamba activate gwas-protocol
         '';

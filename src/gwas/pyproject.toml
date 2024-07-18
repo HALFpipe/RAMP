@@ -13,12 +13,10 @@ dependencies = [
   "jax",
   "jaxtyping",
   "chex",
-  "networkx",
   "psutil",
   "threadpoolctl",
   "tqdm",
   "pyyaml",
-  "more-itertools",
   "typing_extensions",
 ]
 
@@ -43,7 +41,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-benchmark"]
+test = ["pytest", "pytest-benchmark", "more-itertools"]
 
 [tool.ruff]
 line-length = 89
@@ -69,7 +67,7 @@ ignore = [
 markers = ["slow: marks tests that run much longer than most"]
 log_cli = true
 log_cli_level = "DEBUG"
-log_cli_format = "%(asctime)s [%(levelname)8s] %(funcName)s: %(message)s (%(filename)s:%(lineno)s)"
+log_cli_format = "%(asctime)s [%(levelname)8s] [%(processName)14s] %(funcName)s: %(message)s (%(filename)s:%(lineno)s)"
 
 [tool.setuptools_scm]
 version_scheme = "no-guess-dev"

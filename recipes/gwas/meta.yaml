@@ -35,13 +35,10 @@ requirements:
     - jax
     - jaxtyping
     - chex
-    - networkx
     - psutil
     - threadpoolctl
     - tqdm
     - pyyaml
-    - more-itertools
-    - typing_extensions
     - mkl
     # compression tools
     - zstd
