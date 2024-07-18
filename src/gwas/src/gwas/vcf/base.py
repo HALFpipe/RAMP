@@ -214,11 +214,11 @@ class VCFFile(CompressedTextReader):
 
             vcf_file = CppVCFFile(file_path)
         elif engine == Engine.htslib:
-            from.htslib import HTSLIBVCFFile
+            from .htslib import HTSLIBVCFFile
+
             vcf_file = HTSLIBVCFFile(file_path)
         else:
             raise ValueError
-        
 
         if samples is not None:
             vcf_file.set_samples(samples)
