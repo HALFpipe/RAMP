@@ -215,7 +215,7 @@ cdef extern from "htslib/vcf.h":
     int bcf_subset_format(const bcf_hdr_t *hdr, bcf1_t *rec)
 
     int bcf_update_alleles(
-        const bcf_hdr_t *hdr
+        const bcf_hdr_t *hdr,
         bcf1_t *line,
         const char **alleles,
         int nals
@@ -399,13 +399,6 @@ cdef extern from "htslib/vcf.h":
     char **bcf_hdr_seqnames(bcf_hdr_t *hdr, int *n)
 
 # from https://github.com/brentp/cyvcf2/blob/main/cyvcf2/cyvcf2.pyx#L2361
-
-
-def read_vcf_file(str path):
-    path_bytes = path.encode("utf-8")
-    cdef char *path_char = path_bytes
-    cdef htsFile *hts = hts_open(path_char, "r")
-
 
 cdef read_variant(bcf_hdr_t* hdr, bcf1_t* record):
     # from https://github.com/samtools/htslib/issues/848
