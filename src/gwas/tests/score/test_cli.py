@@ -7,7 +7,7 @@ from typing import Mapping
 import numpy as np
 import pandas as pd
 from gwas.compression.pipe import CompressedTextReader, cache_suffix
-from gwas.eig import Eigendecomposition
+from gwas.eig.base import Eigendecomposition
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection, combine

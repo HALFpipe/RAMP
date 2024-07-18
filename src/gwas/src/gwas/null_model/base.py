@@ -6,7 +6,7 @@ from typing import ClassVar, Self
 import numpy as np
 from numpy import typing as npt
 
-from ..eig import Eigendecomposition
+from ..eig.base import Eigendecomposition
 from ..mem.arr import SharedArray, SharedFloat64Array
 from ..mem.wkspace import SharedWorkspace
 from ..pheno import VariableCollection

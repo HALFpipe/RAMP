@@ -21,6 +21,7 @@ from typing import (
     ContextManager,
     Iterable,
     Iterator,
+    NamedTuple,
     Sequence,
     Sized,
     Type,
@@ -32,6 +33,7 @@ from typing import (
 import numpy as np
 import pandas as pd
 from numpy import typing as npt
+from threadpoolctl import threadpool_info, threadpool_limits
 
 from .log import logger, multiprocessing_context, worker_configurer
 
@@ -104,7 +106,15 @@ def underscore(x: str) -> str:
     return re.sub(r"([a-z\d])([A-Z])", r"\1_\2", x).lower()
 
 
-def get_initargs() -> tuple[set[int] | None, Queue[LogRecord] | None, int | str, RLock]:
+class InitArgs(NamedTuple):
+    sched_affinity: set[int] | None
+    num_threads: int | None
+    logging_queue: Queue[LogRecord] | None
+    log_level: int | str
+    lock: RLock
+
+
+def get_initargs(num_threads: int | None = None) -> InitArgs:
     from .log import logging_thread
 
     logging_queue: Queue[LogRecord] | None = None
@@ -115,13 +125,20 @@ def get_initargs() -> tuple[set[int] | None, Queue[LogRecord] | None, int | str,
     if hasattr(os, "sched_getaffinity"):
         sched_affinity = os.sched_getaffinity(0)
 
-    initargs = (sched_affinity, logging_queue, logger.getEffectiveLevel(), global_lock)
+    initargs = InitArgs(
+        sched_affinity,
+        num_threads,
+        logging_queue,
+        logger.getEffectiveLevel(),
+        global_lock,
+    )
     logger.debug(f"Initializer arguments for child process are: {initargs}")
     return initargs
 
 
 def initializer(
     sched_affinity: set[int] | None,
+    num_threads: int | None,
     logging_queue: Queue[LogRecord] | None,
     log_level: int | str,
     lock: RLock,
@@ -130,9 +147,18 @@ def initializer(
         if hasattr(os, "sched_setaffinity"):
             os.sched_setaffinity(0, sched_affinity)
 
+    if num_threads is not None:
+        threadpool_limits(limits=num_threads)
+        os.environ["XLA_FLAGS"] = (
+            f"--xla_cpu_multi_thread_eigen={str(num_threads > 1).lower()} "
+            f"intra_op_parallelism_threads={num_threads}"
+        )
+
     if logging_queue is not None:
         worker_configurer(logging_queue, log_level)
-    logger.debug(f'Configured process "{mp.current_process().name}"')
+    logger.debug(
+        f'Configured process "{mp.current_process().name}" with {threadpool_info()}'
+    )
 
     global global_lock
     global_lock = lock
@@ -143,8 +169,9 @@ class Pool(mp_pool.Pool):
         self,
         processes: int | None = None,
         maxtasksperchild: int | None = None,
+        num_threads: int = 1,
     ) -> None:
-        initargs = get_initargs()
+        initargs = get_initargs(num_threads=num_threads)
         super().__init__(
             processes, initializer, initargs, maxtasksperchild, multiprocessing_context
         )
@@ -160,9 +187,9 @@ V = TypeVar("V")
 
 @dataclass
 class SharedState:
-    # Indicates that we should exit.
+    # Indicates that we should exit
     should_exit: Event = field(default_factory=multiprocessing_context.Event)
-    # Passes exceptions.
+    # Passes exceptions
     exception_queue: Queue[Exception] = field(
         default_factory=multiprocessing_context.Queue
     )
@@ -321,16 +348,16 @@ def make_pool_or_null_context(
         return nullcontext(), map(callable, iterable)
 
     if isinstance(iterable, Sized):
-        num_threads = min(len(iterable), num_threads)
+        processes = min(len(iterable), num_threads)
         # Apply logic from pool.map (multiprocessing/pool.py#L481) here as well
         if chunksize is None:
-            chunksize, extra = divmod(len(iterable), num_threads * 4)
+            chunksize, extra = divmod(len(iterable), processes * 4)
             if extra:
                 chunksize += 1
     if chunksize is None:
         chunksize = 1
 
-    pool = Pool(processes=num_threads)
+    pool = Pool(processes=processes, num_threads=num_threads // processes)
     if iteration_order is IterationOrder.ORDERED:
         map_function = pool.imap
     elif iteration_order is IterationOrder.UNORDERED:
@@ -355,13 +382,14 @@ def make_variant_mask(
     r_squared: pd.Series,
     minor_allele_frequency_cutoff: float,
     r_squared_cutoff: float,
+    aggregate_func: str = "max",
 ) -> npt.NDArray[np.bool_]:
     allele_frequencies = allele_frequencies.copy()
     allele_frequencies = allele_frequencies.where(
         allele_frequencies.to_numpy() <= 0.5, 1 - allele_frequencies
     )
     if isinstance(allele_frequencies, pd.DataFrame):
-        allele_frequencies = allele_frequencies.max(axis="columns")
+        allele_frequencies = allele_frequencies.aggregate(aggregate_func, axis="columns")
     variant_mask = greater_or_close(
         allele_frequencies,
         minor_allele_frequency_cutoff,

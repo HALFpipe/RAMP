@@ -58,11 +58,7 @@ class Variant(NamedTuple):
         is_imputed = "IMPUTED" in info_tokens
         alternate_allele_frequency = float(info.get("AF", np.nan))
         minor_allele_frequency = float(info.get("MAF", np.nan))
-
-        if is_imputed:
-            r_squared = float(info.get("R2", np.nan))
-        else:
-            r_squared = float(info.get("ER2", np.nan))
+        r_squared = float(info.get("R2", np.nan))
 
         return cls(
             chromosome_to_int(chromosome),

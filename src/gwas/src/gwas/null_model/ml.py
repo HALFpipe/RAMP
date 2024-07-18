@@ -14,10 +14,10 @@ from jaxtyping import Array, Float, Integer
 from numpy import typing as npt
 from tqdm.auto import tqdm
 
-from ..eig import Eigendecomposition
+from ..eig.base import Eigendecomposition
 from ..log import logger
 from ..pheno import VariableCollection
-from ..utils import Pool
+from ..utils import IterationOrder, make_pool_or_null_context
 from .base import NullModelCollection, NullModelResult
 
 terms_count = TypeVar("terms_count")
@@ -31,7 +31,6 @@ class OptimizeInput(NamedTuple):
 
 class OptimizeJob(NamedTuple):
     phenotype_index: int
-    num_nested_threads: int
     optimize_input: OptimizeInput
 
 
@@ -291,13 +290,10 @@ class ProfileMaximumLikelihood:
 
         ml = cls(vc.sample_count, vc.covariate_count)
 
-        # Fit null model for each phenotype.
-        num_processes = min(num_threads, vc.phenotype_count)
-        num_nested_threads = num_threads // num_processes
+        # Fit null model for each phenotype
         optimize_jobs = list(
             OptimizeJob(
                 phenotype_index,
-                num_nested_threads,
                 OptimizeInput(
                     eigenvalues,
                     rotated_covariates,
@@ -307,9 +303,15 @@ class ProfileMaximumLikelihood:
             for phenotype_index in range(vc.phenotype_count)
         )
 
-        with Pool(processes=num_processes) as pool:
+        pool, iterator = make_pool_or_null_context(
+            optimize_jobs,
+            ml.apply,
+            num_threads=num_threads,
+            iteration_order=IterationOrder.UNORDERED,
+        )
+        with pool:
             for i, r in tqdm(
-                pool.imap_unordered(ml.apply, optimize_jobs),
+                iterator,
                 desc="fitting null models",
                 unit="phenotypes",
                 total=vc.phenotype_count,

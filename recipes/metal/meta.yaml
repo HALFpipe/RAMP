@@ -1,0 +1,24 @@
+package:
+  name: metal
+  version: 2020.05.05
+
+source:
+  git_url: https://github.com/statgen/metal
+  git_depth: 1
+
+requirements:
+  build:
+    - "{{ compiler('cxx') }}"
+  host:
+    - cmake
+    - make
+    - zlib
+  run:
+    - zlib
+
+test:
+  commands:
+    - test $(metal /dev/null | wc -w) -gt 0
+
+about:
+  home: https://github.com/statgen/metal

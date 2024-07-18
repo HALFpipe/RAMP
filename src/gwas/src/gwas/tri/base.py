@@ -35,6 +35,11 @@ class Triangular(SharedFloat64Array):
     def to_file_name(self) -> str:
         return self.get_file_name(self.chromosome)
 
+    def get_sample_indices(self, samples: list[str]) -> np.ndarray:
+        return np.array(
+            [self.samples.index(sample) for sample in samples], dtype=np.uint32
+        )
+
     def subset_samples(self, samples: list[str]) -> None:
         """Reduce the lower triangular matrix to a subset of samples.
         Golub and Van Loan (1996) section 12.5.2 implements this by first removing the
@@ -48,12 +53,7 @@ class Triangular(SharedFloat64Array):
         if samples == self.samples:
             # Nothing to do
             return
-
-        new_sample_indices = np.array(
-            [self.samples.index(sample) for sample in samples], dtype=np.uint32
-        )
-        # Remove samples
-        self.compress(new_sample_indices)
+        self.compress(self.get_sample_indices(samples))
         self.samples = samples
 
     @classmethod

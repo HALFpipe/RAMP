@@ -1,21 +1,23 @@
 #!/bin/bash
 
 # Ensure that hard-coded executables exist.
-mkdir -p $(pwd)/bin
+mkdir -p "$(pwd)/bin"
 prefix="${BUILD_PREFIX}/bin/${BUILD}-"
 for tool in CC GXX AR; do
     executable=$(realpath ${!tool})
     tool_name=${executable#"${prefix}"}
-    ln -s ${executable} $(pwd)/bin/${tool_name}
+    ln -s "${executable}" "$(pwd)/bin/${tool_name}"
 done
-export PATH="$(pwd)/bin:$PATH"
+PATH="$(pwd)/bin:$PATH"
+export PATH
 
 # Disable security features that are crashing the build.
-export CPPFLAGS=$(
+CPPFLAGS=$(
     echo "$CPPFLAGS" | sed \
         -e 's/-D_FORTIFY_SOURCE=[^ ]\+//g'
 )
-export CPPFLAGS="${CPPFLAGS} -U_FORTIFY_SOURCE"
+CPPFLAGS="${CPPFLAGS} -U_FORTIFY_SOURCE"
+export CPPFLAGS
 cget init --verbose \
     --cflags "-U_FORTIFY_SOURCE" \
     --cxxflags "-U_FORTIFY_SOURCE"
@@ -38,7 +40,7 @@ EOF
 
 # Actually build the project.
 mkdir build
-pushd build
+pushd build || exit
 cmake \
     -DCMAKE_BUILD_TYPE="Release" \
     -DCMAKE_TOOLCHAIN_FILE="../cget/cget/cget.cmake" \
@@ -47,6 +49,6 @@ cmake \
 
 make
 
-install DosageConvertor ${PREFIX}/bin
+install DosageConvertor "${PREFIX}/bin"
 
-popd
+popd || exit

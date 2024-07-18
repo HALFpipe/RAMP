@@ -24,51 +24,44 @@ FROM base as conda
 
 ENV PATH="/opt/conda/bin:$PATH"
 RUN curl --silent --show-error --location \
-    "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh" \
+    "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh" \
     --output "conda.sh" && \
-    bash conda.sh -b -p /opt/conda && \
-    rm conda.sh && \
-    conda config --system --append channels "bioconda" && \
-    conda config --system --prepend channels "conda-forge/label/cython_dev" && \
+    bash "conda.sh" -b -p /opt/conda && \
+    rm "conda.sh" && \
+    conda config --system  --set "solver" "libmamba" && \
+    conda config --system --append "channels" "bioconda" && \
     sync && \
-    mamba clean --yes --all --force-pkgs-dirs
+    conda clean --yes --all --force-pkgs-dirs
 
 # Build packages
 # ==============
 FROM conda as builder
-RUN mamba install --yes "boa" "conda-verify"
+RUN conda install --yes "conda-build"
 COPY recipes/conda_build_config.yaml /root/conda_build_config.yaml
 
 RUN --mount=source=recipes/dosage-convertor,target=/dosage-convertor \
-    conda mambabuild --no-anaconda-upload "dosage-convertor" && \
+    conda build --no-anaconda-upload --numpy "1.26" "dosage-convertor" && \
     conda build purge
-
 RUN --mount=source=recipes/qctool,target=/qctool \
-    conda mambabuild --no-anaconda-upload "qctool" && \
+    conda build --no-anaconda-upload --numpy "1.26" --use-local "qctool" && \
     conda build purge
-
 RUN --mount=source=recipes/raremetal,target=/raremetal \
-    conda mambabuild --no-anaconda-upload "raremetal" && \
+    conda build --no-anaconda-upload --numpy "1.26" --use-local "raremetal" && \
     conda build purge
-
 RUN --mount=source=recipes/r-gmmat,target=/r-gmmat \
-    conda mambabuild --no-anaconda-upload "r-gmmat" && \
+    conda build --no-anaconda-upload --numpy "1.26" --use-local "r-gmmat" && \
     conda build purge
-
 RUN --mount=source=recipes/r-saige,target=/r-saige \
-    conda mambabuild --no-anaconda-upload "r-saige" && \
+    conda build --no-anaconda-upload --numpy "1.26" --use-local "r-saige" && \
     conda build purge
-
 RUN --mount=source=recipes/upload,target=/upload \
-    conda mambabuild --no-anaconda-upload "upload" && \
+    conda build --no-anaconda-upload --numpy "1.26" --use-local "upload" && \
     conda build purge
-
-# mount .git folder too for setuptools_scm
+# Mount .git folder too for setuptools_scm
 RUN --mount=source=recipes/gwas,target=/gwas-protocol/recipes/gwas \
     --mount=source=src/gwas,target=/gwas-protocol/src/gwas \
     --mount=source=.git,target=/gwas-protocol/.git \
-    cd gwas-protocol/recipes && \
-    conda mambabuild --no-anaconda-upload --use-local "gwas" && \
+    conda build --no-anaconda-upload --numpy "1.26" --use-local "gwas-protocol/recipes/gwas" && \
     conda build purge
 
 RUN conda index /opt/conda/conda-bld

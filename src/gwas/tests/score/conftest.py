@@ -8,7 +8,7 @@ from typing import IO, Any, Mapping
 
 import numpy as np
 import pytest
-from gwas.eig import Eigendecomposition
+from gwas.eig.base import Eigendecomposition
 from gwas.mem.arr import SharedArray, SharedFloat64Array
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection

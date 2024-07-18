@@ -7,7 +7,8 @@ import numpy as np
 from tqdm import tqdm
 
 from ..compression.arr.base import FileArray
-from ..eig import Eigendecomposition, EigendecompositionCollection
+from ..eig.base import Eigendecomposition
+from ..eig.collection import EigendecompositionCollection
 from ..log import logger
 from ..mem.arr import SharedArray, SharedFloat64Array
 from ..utils import soft_close

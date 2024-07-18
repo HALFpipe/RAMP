@@ -148,9 +148,18 @@ class TriCalc:
         for chromosome in chromosomes:
             tri_path = tri_paths_by_chromosome[chromosome]
             vcf_file = self.vcf_by_chromosome[chromosome]
+
+            # For performance reasons, we only calculate kinship matrices once for
+            # multi-ancestry datasets
+            # This may lead to inflated estimates of covariance if common variants from
+            # one population are low frequency in another poopulation, making those
+            # samples have higher covariance with each other than they should
+            # Therefore, we only use variants that are above the minor allele frequency
+            # cutoff in all populations
             vcf_file.set_variants_from_cutoffs(
                 self.minor_allele_frequency_cutoff,
                 self.r_squared_cutoff,
+                aggregate_func="min",
             )
 
             tsqr = TallSkinnyQR(
@@ -246,7 +255,7 @@ def check_running(
         desc="triangularizing genotypes",
     ) as progress_bar:
         while True:
-            # Check if an error has occurred.
+            # Check if an error has occurred
             try:
                 raise t.exception_queue.get_nowait()
             except Empty:
@@ -273,16 +282,16 @@ def check_running(
 
             # Check if we can start another task
             if not t.can_run.is_set():
-                # The most recently started task has not yet initialized.
+                # The most recently started task has not yet initialized
                 continue
             if len(tasks) == 0:
-                # No more tasks to run.
+                # No more tasks to run
                 continue
             if not barrier:
-                # We are still waiting for processes to finish.
+                # We are still waiting for processes to finish
                 continue
 
-            # Calculate the amount of memory required to run the next task in parallel.
+            # Calculate the amount of memory required to run the next task in parallel
             unallocated_size = sw.unallocated_size
             sample_count = tasks[-1].proc.tsqr.vcf_file.sample_count
             extra_required_size = (
@@ -297,9 +306,9 @@ def check_running(
 
             if unallocated_size < required_size and len(running) > 0:
                 # We have already started a task, but we don't have enough memory
-                # to run the next task in parallel.
+                # to run the next task in parallel
                 # Set the barrier to wait for the all running tasks to complete before
-                # starting next batch.
+                # starting next batch
                 logger.debug(
                     "Waiting for running tasks to complete before starting next batch."
                 )
@@ -311,7 +320,7 @@ def check_running(
             running.append(proc)
 
             # Reset the event so that we don't start another task before
-            # this one has initialized.
+            # this one has initialized
             t.can_run.clear()
 
 
