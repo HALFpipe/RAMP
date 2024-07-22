@@ -90,6 +90,7 @@ class GwasCommand:
             axis=1,
             return_inverse=True,
         )
+        missing_value_pattern_indices = missing_value_pattern_indices.ravel()
         (_, missing_value_pattern_count) = missing_value_patterns.shape
 
         variable_collections: list[VariableCollection] = list()

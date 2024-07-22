@@ -2,6 +2,7 @@
 import gzip
 from dataclasses import dataclass
 from functools import cache
+from multiprocessing import cpu_count
 from pathlib import Path
 from subprocess import check_call
 from typing import Any
@@ -12,6 +13,7 @@ from gwas.eig.base import Eigendecomposition
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
+from gwas.null_model.calc import calc_null_model_collections
 from gwas.pheno import VariableCollection
 from gwas.raremetalworker.ped import format_row
 from gwas.raremetalworker.score import (
@@ -139,14 +141,11 @@ def null_model_collections(
     eigendecompositions: list[Eigendecomposition],
     request: pytest.FixtureRequest,
 ) -> list[NullModelCollection]:
-    null_model_collections = [
-        NullModelCollection.from_eig(
-            eigendecomposition, variable_collection, method="fastlmm"
-        )
-        for variable_collection, eigendecomposition in zip(
-            variable_collections, eigendecompositions, strict=True
-        )
-    ]
+    null_model_collections = calc_null_model_collections(
+        eigendecompositions,
+        variable_collections,
+        num_threads=cpu_count(),
+    )
 
     for null_model_collection in null_model_collections:
         request.addfinalizer(null_model_collection.free)

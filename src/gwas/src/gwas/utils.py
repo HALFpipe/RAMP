@@ -371,6 +371,7 @@ def make_pool_or_null_context(
     iterable: Iterable[T],
     callable: Callable[[T], S],
     num_threads: int = 1,
+    size: int | None = None,
     chunksize: int | None = 1,
     iteration_order: IterationOrder = IterationOrder.UNORDERED,
 ) -> tuple[ContextManager[Any], Iterator[S]]:
@@ -380,10 +381,9 @@ def make_pool_or_null_context(
     processes = max(1, num_threads)
     if isinstance(iterable, Sized):
         size = len(iterable)
-
         if size == 0:
             return nullcontext(), iter([])
-
+    if size is not None:
         processes = min(processes, size)
         # Apply logic from pool.map (multiprocessing/pool.py#L481) here as well
         if chunksize is None:

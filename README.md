@@ -79,13 +79,13 @@ conda create --name "gwas-protocol" \
   "bzip2" "p7zip" \
   "bcftools" "plink" "plink2" "tabix" \
   "gcta" \
+  "parallel" \
   "jupyterlab" "ipywidgets" \
   "python=3.12" "more-itertools" \
   "numpy" "scipy" "pandas" "threadpoolctl" \
   "seaborn" \
-  "jax" "jaxtyping" "chex" \
+  "jax" "jaxlib=*=cpu*" "jaxtyping" "chex" \
   "mkl-include" "mkl" \
-  "python-blosc2" \
   "mypy" "types-pyyaml"  \
   "pytest-benchmark" "pytest-cov" \
   "setuptools-rust" "cython>=3" "zlib" \

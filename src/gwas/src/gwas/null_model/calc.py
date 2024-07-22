@@ -3,7 +3,20 @@ from multiprocessing import cpu_count
 from ..eig.base import Eigendecomposition
 from ..pheno import VariableCollection
 from .base import NullModelCollection
-from .fit import funcs
+from .fastlmm import FaSTLMM, PenalizedFaSTLMM
+from .ml import MaximumLikelihood
+from .mpl import MaximumPenalizedLikelihood
+from .pml import ProfileMaximumLikelihood
+from .reml import RestrictedMaximumLikelihood
+
+funcs = {
+    "fastlmm": FaSTLMM.fit,
+    "pfastlmm": PenalizedFaSTLMM.fit,
+    "pml": ProfileMaximumLikelihood.fit,
+    "mpl": MaximumPenalizedLikelihood.fit,
+    "reml": RestrictedMaximumLikelihood.fit,
+    "ml": MaximumLikelihood.fit,
+}
 
 
 def calc_null_model_collections(

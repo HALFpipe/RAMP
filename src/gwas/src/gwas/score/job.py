@@ -82,7 +82,6 @@ class JobCollection:
         self.summary_collection = SummaryCollection.from_variable_collection_chunks(
             self.variable_collection_chunks
         )
-        self.dump()
 
     def dump(self) -> None:
         value = asdict(self.summary_collection)

@@ -326,7 +326,7 @@ class ProfileMaximumLikelihood:
             optimize_jobs,
             cls.apply,
             num_threads=num_threads,
-            chunksize=32,
+            size=total,
             iteration_order=IterationOrder.UNORDERED,
         )
         with pool:

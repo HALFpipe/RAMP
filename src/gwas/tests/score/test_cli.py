@@ -115,11 +115,9 @@ def test_run(
         new_allocation_names.add(a.covariates.name)
 
         request.addfinalizer(a.free)
-    del command
 
     command = GwasCommand(arguments, tmp_path, sw)
     command.run()
-    del command
 
     sc = SummaryCollection.from_file(tmp_path / f"chr{chromosome}.metadata.yaml.gz")
     (summaries,) = sc.chunks.values()

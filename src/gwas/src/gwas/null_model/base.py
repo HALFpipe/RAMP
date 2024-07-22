@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 from dataclasses import dataclass
-from multiprocessing import cpu_count
 from typing import ClassVar, Self
 
 import numpy as np
@@ -137,19 +136,4 @@ class NullModelCollection:
             variance,
         )
 
-        return nm
-
-    @classmethod
-    def from_eig(
-        cls,
-        eig: Eigendecomposition,
-        vc: VariableCollection,
-        method: str | None = "fastlmm",
-        num_threads: int = cpu_count(),
-    ) -> Self:
-        nm = cls.empty(eig, vc, method)
-        if method is not None:
-            from .fit import fit
-
-            fit(eig, vc, nm, method, num_threads)
         return nm
