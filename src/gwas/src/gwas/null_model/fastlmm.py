@@ -76,29 +76,30 @@ class FaSTLMM(ProfileMaximumLikelihood):
         logger.debug(f"FaSTLMM will optimize in {xa.size} steps")
 
         fmin: float = np.inf
-        best_x: float | None = None
+        best_optimize_result: OptimizeResult | None = None
         with np.errstate(all="ignore"):
             for bounds in zip(xa, xa + self.step, strict=True):
-                a, c = bounds
                 try:
-                    x, fval, _, _ = scipy.optimize.brent(
-                        func, args=(o,), brack=(a, c), tol=1e-15, full_output=True
+                    optimize_result = scipy.optimize.minimize_scalar(
+                        func,
+                        args=(o,),
+                        bounds=bounds,
+                        tol=1e-15,
+                        options=dict(disp=disp),
                     )
-                    if fval < fmin:
-                        fmin = fval
-                        best_x = x
-                except (FloatingPointError, ValueError) as exception:
-                    logger.debug(f"FaSTLMM failed at {bounds}", exc_info=exception)
+                    if optimize_result.fun < fmin:
+                        fmin = optimize_result.fun
+                        best_optimize_result = optimize_result
+                except FloatingPointError:
                     pass
 
-        if best_x is None:
-            logger.warning("Could not find FaSTLMM minimum")
+        if best_optimize_result is None:
             return OptimizeResult(
                 x=np.full((2,), np.nan),
                 fun=np.nan,
             )
 
-        log_variance_ratio = best_x
+        log_variance_ratio = best_optimize_result.x
         variance_ratio = np.power(10, log_variance_ratio)
 
         # Scale by genetic variance

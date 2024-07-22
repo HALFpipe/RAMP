@@ -9,7 +9,7 @@ from gwas.compression.convert import to_bgzip
 from gwas.log import add_handler, setup_logging_queue, teardown_logging
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri.calc import calc_tri
-from gwas.utils import chromosome_to_int, chromosomes_set
+from gwas.utils import apply_num_threads, chromosome_to_int, chromosomes_set
 from gwas.vcf.base import VCFFile, calc_vcf, load_vcf
 from psutil import virtual_memory
 from pytest import FixtureRequest
@@ -19,6 +19,11 @@ dataset: str = "opensnp"
 chromosomes = sorted(chromosomes_set(), key=chromosome_to_int)
 SampleSizeLabel = Literal["small", "medium", "large"]
 sample_sizes: Mapping[SampleSizeLabel, int] = dict(small=100, medium=500, large=3421)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def num_threads() -> None:
+    apply_num_threads(cpu_count())
 
 
 @pytest.fixture(scope="session", autouse=True)

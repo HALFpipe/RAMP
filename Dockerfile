@@ -53,14 +53,8 @@ RUN --mount=source=recipes/raremetal,target=/raremetal \
     conda build --no-anaconda-upload --numpy "1.26" --use-local "raremetal-debug"
 RUN --mount=source=recipes/r-gmmat,target=/r-gmmat \
     conda build --no-anaconda-upload --numpy "1.26" --use-local "r-gmmat"
-RUN --mount=source=recipes/r-saige,target=/r-saige \
-    conda build --no-anaconda-upload --numpy "1.26" --use-local "r-saige"
-RUN --mount=source=recipes/upload,target=/upload \
-    conda build --no-anaconda-upload --numpy "1.26" --use-local "upload"
-RUN --mount=source=recipes/c-blosc2,target=/c-blosc2 \
-    conda build --no-anaconda-upload --numpy "1.26" --use-local "c-blosc2"
-RUN --mount=source=recipes/python-blosc2,target=/python-blosc2 \
-    conda build --no-anaconda-upload --numpy "1.26" --use-local "python-blosc2"
+# RUN --mount=source=recipes/upload,target=/upload \
+#     conda build --no-anaconda-upload --numpy "1.26" --use-local "upload"
 # Mount .git folder too for setuptools_scm
 RUN --mount=source=recipes/gwas,target=/gwas-protocol/recipes/gwas \
     --mount=source=src/gwas,target=/gwas-protocol/src/gwas \
@@ -75,22 +69,20 @@ RUN conda index /opt/conda/conda-bld
 FROM conda as install
 
 COPY --from=builder /opt/conda/conda-bld /opt/conda/conda-bld
-RUN mamba install --yes --use-local \
-    "python=3.12" \
-    "jaxlib=*=cpu*" \
-    "gemma" \
-    "r-gmmat" \
-    "r-saige" \
-    "r-skat" \
-    "p7zip>=15.09" \
+RUN conda install --yes --use-local \
     "parallel" \
     "dosage-convertor" \
     "qctool" \
-    "gwas" \
-    "raremetal-debug" && \
+    "raremetal-debug" \
+    "python=3.12" \
+    "jaxlib=*=cpu*" \
+    "gwas" && \
+    conda create --name "bgenix" "bgenix" && \
+    conda create --name "regenie" "regenie" && \
+    conda create --name "r-saige" "r-saige" && \
     sync && \
     rm -rf /opt/conda/conda-bld && \
-    mamba clean --yes --all --force-pkgs-dirs
+    conda clean --yes --all --force-pkgs-dirs
 
 # Final
 # =====

@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 import pytest
 from gwas.eig.base import Eigendecomposition
+from gwas.eig.calc import calc_eigendecompositions
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
@@ -109,6 +110,7 @@ def variable_collections(
 
 @pytest.fixture(scope="session")
 def eigendecompositions(
+    chromosome: int | str,
     other_chromosomes: list[str | int],
     tri_paths_by_chromosome: dict[str | int, Path],
     variable_collections: list[VariableCollection],
@@ -118,14 +120,13 @@ def eigendecompositions(
     allocation_names = set(sw.allocations.keys())
     new_allocation_names: set[str] = set()
 
-    eigendecompositions = [
-        Eigendecomposition.from_files(
-            *(tri_paths_by_chromosome[c] for c in other_chromosomes),
-            samples=variable_collection.samples,
-            sw=sw,
-        )
-        for variable_collection in variable_collections
-    ]
+    eigendecompositions = calc_eigendecompositions(
+        *(tri_paths_by_chromosome[c] for c in other_chromosomes),
+        sw=sw,
+        samples_lists=[v.samples for v in variable_collections],
+        chromosome=chromosome,
+        num_threads=cpu_count(),
+    )
 
     for eigendecomposition in eigendecompositions:
         new_allocation_names.add(eigendecomposition.name)

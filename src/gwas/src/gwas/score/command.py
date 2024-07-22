@@ -275,7 +275,7 @@ class GwasCommand:
         # into memory
         chunks = self.split_into_chunks(variable_collections)
 
-        job_collection = JobCollection(
+        self.job_collection = JobCollection(
             vcf_file,
             self.chromosomes,
             self.tri_paths_by_chromosome,
@@ -285,8 +285,8 @@ class GwasCommand:
             self.arguments.num_threads,
             chunks,
         )
-        job_collection.dump()
-        job_collection.run()
+        self.job_collection.dump()
+        self.job_collection.run()
 
     def run(self) -> None:
         variable_collections = self.setup_variable_collections()

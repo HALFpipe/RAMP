@@ -146,16 +146,18 @@ num_threads_variables: Sequence[str] = [
 ]
 
 
-def apply_num_threads(num_threads: int) -> None:
-    threadpool_limits(limits=num_threads)
-    for variable in num_threads_variables:
-        os.environ[variable] = str(num_threads)
+def apply_num_threads(num_threads: int | None) -> None:
+    xla_flags = f'{os.getenv("XLA_FLAGS", "")} --xla_cpu_enable_fast_math=false'
+    if num_threads is not None:
+        threadpool_limits(limits=num_threads)
+        for variable in num_threads_variables:
+            os.environ[variable] = str(num_threads)
+        xla_flags = (
+            f"--xla_cpu_multi_thread_eigen={str(num_threads > 1).lower()} "
+            f"intra_op_parallelism_threads={num_threads} {xla_flags}"
+        )
     os.environ["MKL_DYNAMIC"] = "FALSE"
-    os.environ["XLA_FLAGS"] = (
-        f"--xla_cpu_multi_thread_eigen={str(num_threads > 1).lower()} "
-        f"intra_op_parallelism_threads={num_threads} "
-        "--xla_cpu_enable_fast_math=false"
-    )
+    os.environ["XLA_FLAGS"] = xla_flags
 
     from chex import set_n_cpu_devices
 
@@ -179,8 +181,7 @@ def initializer(
         if hasattr(os, "sched_setaffinity"):
             os.sched_setaffinity(0, sched_affinity)
 
-    if num_threads is not None:
-        apply_num_threads(num_threads)
+    apply_num_threads(num_threads)
 
     if logging_queue is not None:
         worker_configurer(logging_queue, log_level)

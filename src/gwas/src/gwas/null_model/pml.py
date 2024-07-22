@@ -278,6 +278,8 @@ class ProfileMaximumLikelihood:
 
         try:
             optimize_result = ml.optimize(o)
+            if optimize_result.x.dtype != np.float64:
+                raise RuntimeError("Dtype needs to be float64")
             terms = jnp.asarray(optimize_result.x)
             se = ml.get_standard_errors(terms, o)
             minus_two_log_likelihood = float(optimize_result.fun)
@@ -309,7 +311,7 @@ class ProfileMaximumLikelihood:
         num_threads: int = cpu_count(),
     ) -> None:
         # Fit null model for each phenotype
-        optimize_jobs = (
+        optimize_jobs = [
             OptimizeJob((collection_index, phenotype_index), eig, vc)
             for collection_index, (eig, vc) in enumerate(
                 zip(
@@ -319,14 +321,12 @@ class ProfileMaximumLikelihood:
                 )
             )
             for phenotype_index in range(vc.phenotype_count)
-        )
-        total = sum(vc.phenotype_count for vc in variable_collections)
+        ]
 
         pool, iterator = make_pool_or_null_context(
             optimize_jobs,
             cls.apply,
             num_threads=num_threads,
-            size=total,
             iteration_order=IterationOrder.UNORDERED,
         )
         with pool:
@@ -334,7 +334,7 @@ class ProfileMaximumLikelihood:
                 iterator,
                 desc="fitting null models",
                 unit="phenotypes",
-                total=total,
+                total=len(optimize_jobs),
             ):
                 collection_index, phenotype_index = indices
                 nm = null_model_collections[collection_index]

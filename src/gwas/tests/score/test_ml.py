@@ -134,6 +134,7 @@ def test_optimize(
     log_likelihood = -0.5 * check_types(ml.minus_two_log_likelihood)(
         terms, optimize_input
     )
+    assert log_likelihood.dtype == np.float64
 
     logger.info(
         f"log likelihood is {log_likelihood} (rmw is {rmw_debug.log_likelihood_hat})"
@@ -155,7 +156,7 @@ def test_optimize(
                 rmw_debug.sigma_g2_hat,
                 error_variance,
                 rmw_debug.sigma_e2_hat,
-                atol=1e-2,
-                rtol=1e-2,
+                atol=1e-3,
+                rtol=1e-3,
             )
-            assert np.isclose(heritability, rmw_heritability, atol=1e-2)
+            assert np.isclose(heritability, rmw_heritability, atol=1e-3)
