@@ -105,7 +105,7 @@ def rmw_debug(
 
     process_handle = Popen(
         command,
-        stderr=DEVNULL,
+        stderr=PIPE,
         stdin=DEVNULL,
         stdout=PIPE,
         text=True,
