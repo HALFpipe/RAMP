@@ -97,3 +97,16 @@ Finally, install the `gwas` package using the following command:
 ```bash
 pip install --no-deps --editable "src/gwas"
 ```
+
+## Benchmark
+
+```bash
+data_path=/sc-projects/sc-proj-cc15-mb-enigma/genetics/development/opensnp
+for sample_size in 100 500 3421; do
+  mkdir -p "${sample_size}"
+  pushd "${sample_size}" || exit 1
+  benchmark --vcf $(for chromosome in $(seq 1 22); do echo ${data_path}/${sample_size}/chr${chromosome}.dose.vcf.zst; done) --output-directory . --method ramp --causal-variant-count 100 --simulation-count 1000 --seed 1000 --missing-value-pattern-count 10
+  popd || exit 1
+done
+
+```

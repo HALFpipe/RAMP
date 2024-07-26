@@ -1,4 +1,4 @@
-FROM ubuntu:rolling as base
+FROM ubuntu:rolling AS base
 
 ENV LC_ALL="C.UTF-8" \
     LANG="C.UTF-8" \
@@ -20,7 +20,7 @@ RUN apt-get update && \
 
 # Install conda
 # =============
-FROM base as conda
+FROM base AS conda
 
 ENV PATH="/opt/conda/bin:$PATH"
 RUN curl --silent --show-error --location \
@@ -35,7 +35,7 @@ RUN curl --silent --show-error --location \
 
 # Build packages
 # ==============
-FROM conda as builder
+FROM conda AS builder
 RUN conda install --yes "c-compiler" "conda-build"
 COPY recipes/conda_build_config.yaml /root/conda_build_config.yaml
 
@@ -66,7 +66,7 @@ RUN conda index /opt/conda/conda-bld
 
 # Install packages
 # ================
-FROM conda as install
+FROM conda AS install
 
 COPY --from=builder /opt/conda/conda-bld /opt/conda/conda-bld
 RUN conda install --yes --use-local \
@@ -86,7 +86,7 @@ RUN conda install --yes --use-local \
 
 # Final
 # =====
-FROM base
+FROM base AS final
 COPY --from=install --chown=ubuntu:ubuntu /opt/conda /opt/conda
 
 # Ensure that we can link to libraries installed via conda
@@ -97,3 +97,16 @@ RUN echo /opt/conda/lib > /etc/ld.so.conf.d/conda.conf && \
 
 ENV LD_PRELOAD="/opt/libfakeintel.so"
 COPY --from=builder --chown=ubuntu:ubuntu /opt/libfakeintel.so /opt/libfakeintel.so
+
+FROM final AS test
+
+RUN conda install --yes \
+    "mypy" "pytest-benchmark" \
+    "gcc>=13.1" "gxx>=13.1" "binutils" \
+    "mkl-include" "zlib" \
+    "sysroot_linux-64>=2.17" && \
+    sync && \
+    rm -rf /opt/conda/conda-bld && \
+    conda clean --yes --all --force-pkgs-dirs
+
+FROM final
