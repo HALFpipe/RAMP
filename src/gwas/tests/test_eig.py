@@ -16,7 +16,6 @@ from gwas.defaults import (
 )
 from gwas.eig.base import Eigendecomposition
 from gwas.eig.calc import calc_eigendecompositions
-from gwas.log import logger
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.raremetalworker.ped import write_dummy_ped_and_dat_files
@@ -39,29 +38,28 @@ def load_genotypes(
     vcf_file = vcf_files[0]
     sample_count = vcf_file.sample_count
 
-    name = SharedArray.get_name(sw, "genotypes")
-    array = sw.alloc(name, sample_count, 1)
-    a = array.to_numpy(include_trailing_free_memory=True)
-
     variant_count = 0
     for vcf_file in vcf_files:
         if vcf_file.chromosome not in chromosomes:
-            logger.debug("Skipping chromosome %s", vcf_file.chromosome)
             continue
         vcf_file.set_variants_from_cutoffs(
             minor_allele_frequency_cutoff=default_kinship_minor_allele_frequency_cutoff,
             r_squared_cutoff=default_kinship_r_squared_cutoff,
         )
-        with vcf_file:
-            start = variant_count
-            end = variant_count + vcf_file.variant_count
-            vcf_file.read(
-                a[:, start:end].transpose(),
-            )
-            variant_count += vcf_file.variant_count
+        variant_count += vcf_file.variant_count
 
-    array.resize(sample_count, variant_count)
-    array.transpose()
+    name = SharedArray.get_name(sw, "genotypes")
+    array = sw.alloc(name, variant_count, sample_count)
+    a = array.to_numpy()
+
+    start = 0
+    for vcf_file in vcf_files:
+        if vcf_file.chromosome not in chromosomes:
+            continue
+        end = start + vcf_file.variant_count
+        with vcf_file:
+            vcf_file.read(a[start:end, :])
+        start += vcf_file.variant_count
 
     a = array.to_numpy()
     scale(a)

@@ -83,7 +83,7 @@ class TallSkinnyQR:
         variant_count = self.vcf_file.variant_count
 
         name = Triangular.get_name(self.sw, chromosome=self.vcf_file.chromosome)
-        shared_array = self.sw.alloc(name, sample_count, variant_count)
+        shared_array = self.sw.alloc(name, variant_count, sample_count)
 
         if self.variant_indices is not None:
             if self.variant_indices.size == 0:
@@ -97,16 +97,12 @@ class TallSkinnyQR:
             f"Mapping {array.shape[1]} variants from "
             f'"{self.vcf_file.file_path.name}" into "{shared_array.name}"'
         )
-        self.vcf_file.read(array.transpose())
+        self.vcf_file.read(array)
         if not np.isfinite(array).all():
             raise ValueError(
                 f"Cannot handle missing dosages in {self.vcf_file.file_path}"
             )
 
-        # Transpose, reshape and scale the data
-        shared_array.resize(sample_count, variant_count)
-        shared_array.transpose()
-        array = shared_array.to_numpy()
         scale(array)
 
         multithreading_lock: ContextManager[Any] = nullcontext()

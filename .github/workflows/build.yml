@@ -11,7 +11,7 @@ on:
 
 jobs:
   docker_build:
-    runs-on: self-hosted
+    runs-on: [self-hosted, ubuntu, x64]
     outputs:
       tag: ${{ steps.build_tag.outputs.tag }}
     steps:

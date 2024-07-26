@@ -54,12 +54,6 @@ inline bool CheckFloatArray(PyArrayObject *array)
                         "`array` must be aligned");
         return false;
     }
-    if (!PyArray_ISONESEGMENT(array))
-    {
-        PyErr_SetString(PyExc_ValueError,
-                        "`array` must be either C-contiguous or F-contiguous");
-        return false;
-    }
 
     return true;
 }

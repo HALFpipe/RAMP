@@ -153,9 +153,6 @@ class VCFFile(CompressedTextReader):
     def variants(self) -> pd.DataFrame:
         return self.vcf_variants.iloc[self.variant_indices, :]
 
-    def reset_variants(self) -> None:
-        self.set_variants_from_cutoffs()
-
     def set_variants_from_cutoffs(
         self,
         minor_allele_frequency_cutoff: float = -np.inf,
@@ -175,7 +172,8 @@ class VCFFile(CompressedTextReader):
             f"After filtering with "
             f'"minor_allele_frequency >= {minor_allele_frequency_cutoff}" and '
             f'"r_squared >= {r_squared_cutoff}" '
-            f"{self.variant_indices.size} of {self.vcf_variant_count} variants remain."
+            f"{self.variant_indices.size} of {self.vcf_variant_count} variants remain",
+            stack_info=True,
         )
         self.minor_allele_frequency_cutoff = minor_allele_frequency_cutoff
         self.r_squared_cutoff = r_squared_cutoff
