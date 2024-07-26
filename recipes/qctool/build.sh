@@ -2,7 +2,7 @@
 
 set -x
 
-export LDFLAGS="${LDFLAGS} -lrt"
+export LDFLAGS="${LDFLAGS} -lrt -lsqlite3 -lzstd"
 
 mkdir -p "${PREFIX}/bin"
 

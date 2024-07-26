@@ -7,15 +7,20 @@ source:
   git_rev: v2.2.0
   patches:
     - 0001-fix-build-gcc-13.patch
+    - 0002-use-system-libraries.patch
 
 requirements:
   build:
-    - {{ compiler("c") }}
-    - {{ compiler("cxx") }}
+    - "{{ compiler('c') }}"
+    - "{{ compiler('cxx') }}"
     - openmp
   host:
+    - catch2
+    - libdeflate
     - make
+    - sqlite
     - zlib
+    - zstd
   run:
     - zlib
     - blas

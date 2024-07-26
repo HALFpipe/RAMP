@@ -1,0 +1,118 @@
+diff --git a/3rd_party/wscript b/3rd_party/wscript
+index 1ca9862ff..34618afde 100644
+--- a/3rd_party/wscript
++++ b/3rd_party/wscript
+@@ -1,2 +1,2 @@
+ def build( bld ):
+-	bld.recurse( [ 'boost_1_55_0', 'sqlite3', 'zstd-1.1.0', 'eigen', 'catch', 'libdeflate', 'zlib' ] )
++	bld.recurse( [ 'boost_1_55_0', 'eigen' ] )
+diff --git a/genfile/include/genfile/db/SQLStatement.hpp b/genfile/include/genfile/db/SQLStatement.hpp
+index 57b588cbe..9aee66584 100644
+--- a/genfile/include/genfile/db/SQLStatement.hpp
++++ b/genfile/include/genfile/db/SQLStatement.hpp
+@@ -12,7 +12,7 @@
+ #include <vector>
+ #include <exception>
+ #include <stdint.h>
+-#include "sqlite3/sqlite3.h"
++#include "sqlite3.h"
+ #include "genfile/db/SQLite3Connection.hpp"
+ #include "genfile/VariantEntry.hpp"
+ #include "genfile/string_utils/slice.hpp"
+diff --git a/genfile/include/genfile/db/SQLite3Connection.hpp b/genfile/include/genfile/db/SQLite3Connection.hpp
+index 95cb67455..4310c7a90 100644
+--- a/genfile/include/genfile/db/SQLite3Connection.hpp
++++ b/genfile/include/genfile/db/SQLite3Connection.hpp
+@@ -10,7 +10,7 @@
+ #include <cassert>
+ #include <string>
+ #include <exception>
+-#include "sqlite3/sqlite3.h"
++#include "sqlite3.h"
+ #include "genfile/db/Connection.hpp"
+ #include "genfile/db/Transaction.hpp"
+ #include "genfile/db/Error.hpp"
+diff --git a/genfile/include/genfile/db/SQLite3Statement.hpp b/genfile/include/genfile/db/SQLite3Statement.hpp
+index 3f706a3e8..f04a66800 100644
+--- a/genfile/include/genfile/db/SQLite3Statement.hpp
++++ b/genfile/include/genfile/db/SQLite3Statement.hpp
+@@ -11,7 +11,7 @@
+ #include <string>
+ #include <exception>
+ 
+-#include "sqlite3/sqlite3.h"
++#include "sqlite3.h"
+ #include "genfile/db/SQLite3Connection.hpp"
+ #include "genfile/db/SQLStatement.hpp"
+ 
+diff --git a/genfile/src/db/SQLStatement.cpp b/genfile/src/db/SQLStatement.cpp
+index 6b027e8b5..f398be872 100644
+--- a/genfile/src/db/SQLStatement.cpp
++++ b/genfile/src/db/SQLStatement.cpp
+@@ -7,7 +7,7 @@
+ #include <cassert>
+ #include <string>
+ #include <stdint.h>
+-#include "sqlite3/sqlite3.h"
++#include "sqlite3.h"
+ #include "genfile/db/SQLStatement.hpp"
+ #include "genfile/VariantEntry.hpp"
+ #include "genfile/string_utils.hpp"
+diff --git a/genfile/src/db/SQLite3Statement.cpp b/genfile/src/db/SQLite3Statement.cpp
+index 9dfa56c2d..e8e8e9592 100644
+--- a/genfile/src/db/SQLite3Statement.cpp
++++ b/genfile/src/db/SQLite3Statement.cpp
+@@ -9,7 +9,7 @@
+ #include <string>
+ #include <exception>
+ 
+-#include "sqlite3/sqlite3.h"
++#include "sqlite3.h"
+ #include "genfile/string_utils/string_utils.hpp"
+ #include "genfile/db/SQLite3Connection.hpp"
+ #include "genfile/db/SQLStatement.hpp"
+diff --git a/genfile/test/db/test_get_unique_id.cpp b/genfile/test/db/test_get_unique_id.cpp
+index 31f38a25c..ce4525ec4 100644
+--- a/genfile/test/db/test_get_unique_id.cpp
++++ b/genfile/test/db/test_get_unique_id.cpp
+@@ -7,7 +7,7 @@
+ #include <iostream>
+ #include <sstream>
+ #include "test_case.hpp"
+-#include "sqlite3/sqlite3.h"
++#include "sqlite3.h"
+ #include "genfile/Error.hpp"
+ #include "db/Connection.hpp"
+ #include "db/SQLite3Connection.hpp"
+diff --git a/genfile/test/db/test_load_key_value_pairs.cpp b/genfile/test/db/test_load_key_value_pairs.cpp
+index a6605c9da..d6eec4141 100644
+--- a/genfile/test/db/test_load_key_value_pairs.cpp
++++ b/genfile/test/db/test_load_key_value_pairs.cpp
+@@ -7,7 +7,7 @@
+ #include <iostream>
+ #include <sstream>
+ #include "test_case.hpp"
+-#include "sqlite3/sqlite3.h"
++#include "sqlite3.h"
+ #include "db/Connection.hpp"
+ #include "db/SQLite3Connection.hpp"
+ #include "db/SQLite3Statement.hpp"
+diff --git a/wscript b/wscript
+index 834e9bf48..c185d586f 100644
+--- a/wscript
++++ b/wscript
+@@ -103,10 +103,11 @@ def configure_variant( cfg, variant ):
+ 	cfg.define( 'HAVE_MGL', 0 )
+ 	cfg.define( 'HAVE_CAIRO', 0 )
+ 	# sqlite3, eigen, zstd are part of this repo
+-	cfg.define( 'HAVE_SQLITE3', 1 )
++	cfg.check(lib='sqlite3', uselibt="SQLITE3", define_name="HAVE_SQLITE3")
+ 	cfg.define( 'HAVE_EIGEN', 1 )
+-	cfg.define( 'HAVE_ZSTD', 1 )
+-	# Boost libs are now contained in the repo
++	if check_cxx( cfg, lib='zstd', uselib_store='ZSTD' ):
++		cfg.define( 'HAVE_ZSTD', 1 )
++	# Boost libs are now contained in the repo	
+ 	cfg.define( "HAVE_BOOST_IOSTREAMS", 1 )
+ 	cfg.define( "HAVE_BOOST_FILESYSTEM", 1 )
+ 	cfg.define( "HAVE_BOOST_SYSTEM", 1 )
