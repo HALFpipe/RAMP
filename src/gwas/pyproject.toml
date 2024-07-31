@@ -22,6 +22,7 @@ dependencies = [
 
 [project.scripts]
 benchmark = "gwas.benchmark.cli:main"
+convert = "gwas.convert.cli:main"
 plot = "gwas.plot.cli:main"
 score = "gwas.score.cli:main"
 stratify = "gwas.stratify.cli:main"
@@ -41,6 +42,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project.optional-dependencies]
+convert = ["blosc2"]
 test = ["pytest", "pytest-benchmark", "more-itertools"]
 
 [tool.ruff]
