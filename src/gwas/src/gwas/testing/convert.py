@@ -1,4 +1,3 @@
-from multiprocessing import cpu_count
 from pathlib import Path
 from shlex import join
 from subprocess import check_call
@@ -65,7 +64,7 @@ def convert_vcf_to_pfile(job: ConvertVCFToPfileJob) -> None:
 
 
 def convert_vcf_to_pfiles(
-    vcf_paths: list[Path], output_directory: Path, num_threads: int = cpu_count()
+    vcf_paths: list[Path], output_directory: Path, num_threads: int
 ) -> list[Path]:
     output_directory.mkdir(parents=True, exist_ok=True)
 
@@ -170,9 +169,7 @@ def get_pfile_variant_ids(pfile_paths: list[Path]) -> list[str]:
 
 
 def merge_vcf_gz_files(
-    vcf_gz_paths: list[Path],
-    bgzip_prefix: Path,
-    num_threads: int = cpu_count(),
+    vcf_gz_paths: list[Path], bgzip_prefix: Path, num_threads: int
 ) -> Path:
     vcf_gz_path = bgzip_prefix / "dose.vcf.gz"
     if not vcf_gz_path.is_file():

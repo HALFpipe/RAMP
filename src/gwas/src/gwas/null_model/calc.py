@@ -1,5 +1,3 @@
-from multiprocessing import cpu_count
-
 from ..eig.base import Eigendecomposition
 from ..pheno import VariableCollection
 from .base import NullModelCollection
@@ -23,7 +21,7 @@ def calc_null_model_collections(
     eigendecompositions: list[Eigendecomposition],
     variable_collections: list[VariableCollection],
     method: str | None = "fastlmm",
-    num_threads: int = cpu_count(),
+    num_threads: int = 1,
 ) -> list[NullModelCollection]:
     null_model_collections = [
         NullModelCollection.empty(eig, vc, method)

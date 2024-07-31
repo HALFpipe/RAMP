@@ -84,7 +84,7 @@ class JobCollection:
     def dump(self) -> None:
         value = asdict(self.summary_collection)
         with CompressedTextWriter(
-            self.file_path.with_suffix(".metadata.yaml.gz")
+            self.file_path.with_suffix(".metadata.yaml.gz"), self.num_threads
         ) as file_handle:
             yaml.dump(value, file_handle, sort_keys=False, width=np.inf)
 

@@ -237,7 +237,9 @@ def vcf_gz_file(
     directory_factory: DirectoryFactory,
 ) -> VCFFile:
     tmp_path = directory_factory.get("bgzip", sample_size_label=sample_size_label)
-    vcf_gz_path = to_bgzip(vcf_file.file_path, tmp_path)
-    vcf_file = load_vcf(cache_path_by_size[sample_size_label], vcf_gz_path)
+    vcf_gz_path = to_bgzip(vcf_file.file_path, tmp_path, num_threads=cpu_count())
+    vcf_file = load_vcf(
+        cache_path_by_size[sample_size_label], vcf_gz_path, num_threads=cpu_count()
+    )
     vcf_file.file_path = vcf_gz_path
     return vcf_file

@@ -10,7 +10,7 @@ from ..compression.arr.base import FileArray, default_compression_method
 from ..compression.pipe import CompressedBytesReader
 from ..log import logger
 
-suffix_to_convert = ".score.b2array"
+suffix_to_convert = ".b2array"
 
 
 def axis_metadata_path(path: Path) -> Path:

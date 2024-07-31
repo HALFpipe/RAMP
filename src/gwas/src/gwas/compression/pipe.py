@@ -1,6 +1,5 @@
 import pickle
 from contextlib import AbstractContextManager
-from multiprocessing import cpu_count
 from pathlib import Path
 from subprocess import PIPE, Popen
 from threading import Thread
@@ -131,7 +130,7 @@ class CompressedTextReader(CompressedReader[str]):
 
 
 def make_compress_command(
-    suffix: str, num_threads: int = cpu_count(), compression_level: int | None = None
+    suffix: str, num_threads: int, compression_level: int | None = None
 ) -> list[str]:
     zstd_compression_level_flag = "-19"
     if compression_level is not None:
@@ -158,8 +157,8 @@ class CompressedWriter(AbstractContextManager[IO[T]]):
     def __init__(
         self,
         file_path: Path | str,
+        num_threads: int,
         is_text: bool = True,
-        num_threads: int = cpu_count(),
         compression_level: int | None = None,
     ) -> None:
         self.file_path: Path = Path(file_path)
@@ -240,7 +239,7 @@ class CompressedBytesWriter(CompressedWriter[bytes]):
     def __init__(
         self,
         file_path: Path | str,
-        num_threads: int = cpu_count(),
+        num_threads: int,
         compression_level: int | None = None,
     ) -> None:
         super().__init__(
@@ -258,7 +257,7 @@ class CompressedTextWriter(CompressedWriter[str]):
     def __init__(
         self,
         file_path: Path | str,
-        num_threads: int = cpu_count(),
+        num_threads: int,
         compression_level: int | None = None,
     ) -> None:
         super().__init__(
@@ -291,7 +290,9 @@ def load_from_cache(cache_path: Path, key: str) -> Any:
             return None
 
 
-def save_to_cache(cache_path: Path, key: str, value: Any) -> None:
+def save_to_cache(cache_path: Path, key: str, value: Any, num_threads: int) -> None:
     cache_path.mkdir(parents=True, exist_ok=True)
-    with CompressedBytesWriter(cache_path / f"{key}{cache_suffix}") as file_handle:
+    with CompressedBytesWriter(
+        cache_path / f"{key}{cache_suffix}", num_threads
+    ) as file_handle:
         pickle.dump(value, file_handle)

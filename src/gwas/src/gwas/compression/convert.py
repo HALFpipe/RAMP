@@ -1,4 +1,3 @@
-from multiprocessing import cpu_count
 from pathlib import Path
 from shlex import join
 from subprocess import check_call
@@ -7,7 +6,7 @@ from ..tools import tabix
 from .pipe import decompress_commands, make_compress_command
 
 
-def to_bgzip(path: Path, prefix: Path, num_threads: int = cpu_count()) -> Path:
+def to_bgzip(path: Path, prefix: Path, num_threads: int) -> Path:
     prefix.mkdir(parents=True, exist_ok=True)
     gz_path = prefix / f"{path.stem}.gz"
 

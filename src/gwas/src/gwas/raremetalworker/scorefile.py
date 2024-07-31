@@ -247,8 +247,9 @@ class Scorefile:
         variants: pd.DataFrame,
         u_stat: npt.NDArray[np.float64],
         v_stat: npt.NDArray[np.float64],
+        num_threads: int,
     ) -> None:
-        with CompressedTextWriter(file_path) as file_handle:
+        with CompressedTextWriter(file_path, num_threads) as file_handle:
             cls.write_header(file_handle, header)
             cls.write_names(file_handle, np.empty((0,)))
             cls.write_scores(file_handle, variants, u_stat, v_stat)
@@ -259,8 +260,9 @@ class Scorefile:
         file_path: Path | str,
         header: ScorefileHeader,
         array: npt.NDArray[np.float64],
+        num_threads: int,
     ) -> None:
-        with CompressedTextWriter(file_path) as file_handle:
+        with CompressedTextWriter(file_path, num_threads) as file_handle:
             cls.write_header(file_handle, header)
             cls.write_names(file_handle, np.empty((0,)))
             for record in tqdm(array, leave=False):

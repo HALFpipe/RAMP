@@ -184,8 +184,8 @@ class VCFFile(CompressedTextReader):
         )
         self.samples = [sample for sample in self.vcf_samples if sample in samples]
 
-    def save_to_cache(self, cache_path: Path) -> None:
-        save_to_cache(cache_path, self.cache_key(self.file_path), self)
+    def save_to_cache(self, cache_path: Path, num_threads: int) -> None:
+        save_to_cache(cache_path, self.cache_key(self.file_path), self, num_threads)
 
     @abstractmethod
     def read(
@@ -249,6 +249,7 @@ class VCFFile(CompressedTextReader):
 def load_vcf(
     cache_path: Path,
     vcf_path: Path,
+    num_threads: int,
     engine: Engine = Engine.cpp,
 ) -> VCFFile:
     vcf_file: VCFFile | None = None
@@ -258,7 +259,7 @@ def load_vcf(
         pass
     if vcf_file is None:
         vcf_file = VCFFile.from_path(vcf_path, engine=engine)
-        vcf_file.save_to_cache(cache_path)
+        vcf_file.save_to_cache(cache_path, num_threads)
     else:
         logger.debug(f'Cached VCF file metadata for "{VCFFile.cache_key(vcf_path)}"')
     return vcf_file
@@ -272,7 +273,7 @@ def calc_vcf(
 ) -> list[VCFFile]:
     pool, iterator = make_pool_or_null_context(
         vcf_paths,
-        partial(load_vcf, cache_path, engine=engine),
+        partial(load_vcf, cache_path, num_threads=1, engine=engine),
         num_threads=num_threads,
         iteration_order=IterationOrder.UNORDERED,
     )

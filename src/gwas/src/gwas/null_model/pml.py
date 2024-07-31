@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from functools import cache, cached_property, partial
-from multiprocessing import cpu_count
 from typing import Any, Callable, NamedTuple, Self, TypeVar
 
 import numpy as np
@@ -307,7 +306,7 @@ class ProfileMaximumLikelihood:
         eigendecompositions: list[Eigendecomposition],
         variable_collections: list[VariableCollection],
         null_model_collections: list[NullModelCollection],
-        num_threads: int = cpu_count(),
+        num_threads: int,
     ) -> None:
         # Fit null model for each phenotype
         optimize_jobs = [

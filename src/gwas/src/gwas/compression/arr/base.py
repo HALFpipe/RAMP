@@ -2,7 +2,6 @@ from abc import abstractmethod
 from contextlib import AbstractContextManager
 from dataclasses import KW_ONLY, dataclass, field
 from math import prod
-from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Any, Generic, Mapping, MutableSequence, Type, TypeAlias, TypeVar
 
@@ -128,7 +127,7 @@ class FileArray(Generic[ScalarType], AbstractContextManager["FileArray[ScalarTyp
 
 @dataclass
 class FileArrayWriter(FileArray[ScalarType]):
-    num_threads: int = cpu_count()
+    num_threads: int
 
     def set_axis_metadata(self, axis: int, metadata: pd.DataFrame | pd.Series) -> None:
         self.axis_metadata[axis] = metadata

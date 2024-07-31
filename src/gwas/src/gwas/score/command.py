@@ -146,7 +146,7 @@ class GwasCommand:
                 vcf_file,
                 variable_collections,
             ):
-                vcf_file.save_to_cache(self.output_directory)
+                vcf_file.save_to_cache(self.output_directory, self.arguments.num_threads)
 
     def setup_variable_collections(self) -> list[VariableCollection]:
         logger.debug("Arguments are %s", pformat(vars(self.arguments)))
@@ -261,7 +261,7 @@ class GwasCommand:
             vcf_file,
             variable_collections,
         ):
-            vcf_file.save_to_cache(self.output_directory)
+            vcf_file.save_to_cache(self.output_directory, self.arguments.num_threads)
         vcf_file.set_variants_from_cutoffs(
             minor_allele_frequency_cutoff=(
                 self.arguments.score_minor_allele_frequency_cutoff

@@ -1,3 +1,4 @@
+from multiprocessing import cpu_count
 from pathlib import Path
 
 import pytest
@@ -29,7 +30,7 @@ def pfile_paths(
     vcf_paths = [
         vcf_file.file_path for vcf_file in vcf_files if vcf_file.chromosome != "X"
     ]
-    pfiles = convert_vcf_to_pfiles(vcf_paths, tmp_path)
+    pfiles = convert_vcf_to_pfiles(vcf_paths, tmp_path, num_threads=cpu_count())
 
     return pfiles
 
