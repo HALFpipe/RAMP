@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from dataclasses import dataclass, field
-from multiprocessing.synchronize import Event, Lock
+from multiprocessing.synchronize import Event, Semaphore
 from typing import Any
 
 import numpy as np
@@ -85,7 +85,13 @@ class Triangular(SharedArray):
 
 @dataclass
 class TaskSyncCollection(SharedState):
+    processes: int = field(kw_only=True)
     # Indicates that can run another task.
     can_run: Event = field(default_factory=multiprocessing_context.Event)
     # Ensures that only one multithreaded workload can run at a time.
-    multithreading_lock: Lock = field(default_factory=multiprocessing_context.Lock)
+    multithreading_semaphore: Semaphore = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.multithreading_semaphore = multiprocessing_context.BoundedSemaphore(
+            value=self.processes
+        )

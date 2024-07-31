@@ -31,6 +31,7 @@ def calc_score(
     stat_file_array: FileArrayWriter[np.float64],
     phenotype_offset: int = 0,
     variant_offset: int = 0,
+    num_threads: int = 1,
 ) -> None:
     # Merge the eigenvector arrays so that we can use a single reader process.
     job_count = len(eigendecompositions)
@@ -81,6 +82,7 @@ def calc_score(
         inverse_variance_arrays,
         scaled_residuals_arrays,
         stat_array,
+        num_threads,
     )
     writer_proc = ScoreWriter(
         t, stat_array, stat_file_array, phenotype_offset, variant_offset

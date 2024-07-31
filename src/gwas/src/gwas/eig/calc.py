@@ -11,7 +11,7 @@ from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..tri.base import Triangular
 from ..tri.tsqr import TallSkinnyQR
-from ..utils import Pool
+from ..utils import Pool, get_processes_and_num_threads
 from .base import Eigendecomposition, load_tri_arrays
 
 
@@ -27,22 +27,6 @@ def func(
     a.take(sample_indices, axis=0, out=b)
 
     eig.set_from_tri_array(tri_array)
-
-
-def get_processes_and_num_threads(
-    num_threads: int, count: int, capacity: int
-) -> tuple[int, int]:
-    processes = 2 ** int(np.log2(capacity))
-    processes = min((processes, count, capacity, num_threads))
-    num_threads_per_process = num_threads // processes
-
-    logger.debug(
-        f"Running eigendecompositions in {processes} processes with "
-        f"{num_threads_per_process} threads each given capacity {capacity}, "
-        f"thread count {num_threads}, and task count {count}"
-    )
-
-    return processes, num_threads_per_process
 
 
 @dataclass

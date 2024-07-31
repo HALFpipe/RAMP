@@ -48,9 +48,9 @@ class TaskSyncCollection(SharedState):
 
 
 class Worker(Process):
-    def __init__(self, t: TaskSyncCollection) -> None:
+    def __init__(self, t: TaskSyncCollection, num_threads: int | None) -> None:
         self.t = t
-        super().__init__(t.exception_queue)
+        super().__init__(t.exception_queue, num_threads)
 
 
 class GenotypeReader(Worker):
@@ -68,7 +68,7 @@ class GenotypeReader(Worker):
         self.vcf_file = vcf_file
         self.genotypes_array = genotypes_array
 
-        super().__init__(t)
+        super().__init__(t, num_threads=None)
 
     def func(self) -> None:
         variant_indices = self.vcf_file.variant_indices.copy()
@@ -114,6 +114,7 @@ class Calc(Worker):
         inverse_variance_arrays: list[SharedArray],
         scaled_residuals_arrays: list[SharedArray],
         stat_array: SharedArray,
+        num_threads: int,
     ) -> None:
         self.genotypes_array = genotypes_array
         self.rotated_genotypes_array = rotated_genotypes_array
@@ -122,7 +123,7 @@ class Calc(Worker):
         self.scaled_residuals_arrays = scaled_residuals_arrays
         self.stat_array = stat_array
 
-        super().__init__(t)
+        super().__init__(t, num_threads)
 
     def func(self) -> None:
         eigenvector_matrices = [
@@ -258,7 +259,7 @@ class ScoreWriter(Worker):
         self.phenotype_offset = phenotype_offset
         self.variant_offset = variant_offset
 
-        super().__init__(t)
+        super().__init__(t, num_threads=None)
 
     def func(self) -> None:
         job_count = len(self.t.can_write)

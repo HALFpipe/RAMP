@@ -266,11 +266,15 @@ class Process(multiprocessing_context.Process):  # type: ignore
     def __init__(
         self,
         exception_queue: "mp.Queue[Exception] | None",
+        num_threads: int | None,
         name: str | None = None,
     ) -> None:
-        self.initargs = get_initargs()
+        self.initargs: InitArgs = get_initargs(num_threads)
         self.exception_queue = exception_queue
         super().__init__(name=name)
+
+    def set_num_threads(self, num_threads: int) -> None:
+        self.initargs = get_initargs(num_threads=num_threads)
 
     def func(self) -> None:
         raise NotImplementedError
@@ -451,3 +455,19 @@ def is_pfile(path: Path) -> bool:
         (path.parent / f"{path.name}{suffix}").is_file()
         for suffix in {".pgen", ".pvar", ".psam"}
     )
+
+
+def get_processes_and_num_threads(
+    num_threads: int, count: int, capacity: int
+) -> tuple[int, int]:
+    processes = 2 ** int(np.log2(capacity))
+    processes = min((processes, count, capacity, num_threads))
+    num_threads_per_process = num_threads // processes
+
+    logger.debug(
+        f"Running in {processes} processes with "
+        f"{num_threads_per_process} threads each given capacity {capacity}, "
+        f"thread count {num_threads}, and task count {count}"
+    )
+
+    return processes, num_threads_per_process

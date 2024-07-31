@@ -153,6 +153,7 @@ class JobCollection:
                 scaled_residuals_arrays,
                 self.stat_file_array,
                 phenotype_offset,
+                self.num_threads,
             )
             for array in [*inverse_variance_arrays, *scaled_residuals_arrays]:
                 array.free()

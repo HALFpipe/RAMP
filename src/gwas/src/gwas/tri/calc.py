@@ -15,6 +15,8 @@ from typing import (
 import numpy as np
 from tqdm.auto import tqdm
 
+from gwas.utils import get_processes_and_num_threads
+
 from ..log import logger
 from ..mem.wkspace import SharedWorkspace
 from ..utils import IterationOrder, make_pool_or_null_context, soft_close
@@ -141,38 +143,47 @@ class TriCalc:
         chromosomes: Collection[str | int],
         tri_paths_by_chromosome: MutableMapping[int | str, Path],
     ) -> tuple[TaskSyncCollection, list[Task]]:
-        t = TaskSyncCollection()
-        t.can_run.set()  # We can run the first task immediately.
-        # Prepare the list of tasks to run.
-        tasks: list[Task] = list()
-
+        required_sizes: list[int] = list()
         for chromosome in chromosomes:
-            tri_path = tri_paths_by_chromosome[chromosome]
             vcf_file = self.vcf_by_chromosome[chromosome]
-
-            # For performance reasons, we only calculate kinship matrices once for
-            # multi-ancestry datasets
-            # This may lead to inflated estimates of covariance if common variants from
-            # one population are low frequency in another poopulation, making those
-            # samples have higher covariance with each other than they should
-            # Therefore, we only use variants that are above the minor allele frequency
-            # cutoff in all populations
             vcf_file.set_variants_from_cutoffs(
                 self.minor_allele_frequency_cutoff,
                 self.r_squared_cutoff,
+                # For performance reasons, we only calculate kinship matrices once for
+                # multi-ancestry datasets
+                # This may lead to inflated estimates of covariance if common variants
+                # from one population are low frequency in another poopulation, making
+                # those samples have higher covariance with each other than they should
+                # Therefore, we only use variants that are above the minor allele
+                # frequency cutoff in all populations
                 aggregate_func="min",
             )
+            required_size = (
+                np.float64().itemsize * vcf_file.sample_count * vcf_file.variant_count
+            )
+            required_sizes.append(required_size)
 
+        count = len(chromosomes)
+        average_size = round(np.mean(required_sizes))
+        capacity = self.sw.unallocated_size // average_size
+        processes, num_threads_per_process = get_processes_and_num_threads(
+            self.num_threads, count, capacity
+        )
+
+        t = TaskSyncCollection(processes=processes)
+        t.can_run.set()  # We can run the first task immediately.
+        # Prepare the list of tasks to run.
+        tasks: list[Task] = list()
+        for chromosome in chromosomes:
+            tri_path = tri_paths_by_chromosome[chromosome]
+            vcf_file = self.vcf_by_chromosome[chromosome]
             tsqr = TallSkinnyQR(
                 vcf_file=vcf_file,
                 sw=self.sw,
                 t=t,
-                num_threads=self.num_threads,
             )
-
-            proc: TriWorker = TriWorker(tsqr, tri_path, t)
-            required_size = (
-                np.float64().itemsize * vcf_file.sample_count * vcf_file.variant_count
+            proc: TriWorker = TriWorker(
+                tsqr, tri_path, t, num_threads=num_threads_per_process
             )
             tasks.append(Task(required_size, proc))
 

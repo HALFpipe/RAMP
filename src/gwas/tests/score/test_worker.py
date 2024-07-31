@@ -1,4 +1,5 @@
-# -*- coding: utf-8 -*-
+from multiprocessing import cpu_count
+
 import pytest
 from gwas.eig.base import Eigendecomposition
 from gwas.eig.collection import EigendecompositionCollection
@@ -64,6 +65,7 @@ def test_calc_worker(
         inverse_variance_arrays,
         scaled_residuals_arrays,
         stat_array,
+        num_threads=cpu_count(),
     )
     calc_worker.func()
 
