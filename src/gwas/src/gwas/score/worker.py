@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from dataclasses import dataclass, field
 from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event

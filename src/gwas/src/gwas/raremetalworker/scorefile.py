@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from collections import OrderedDict
 from dataclasses import dataclass, fields
 from pathlib import Path

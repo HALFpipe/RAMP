@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Callable, TypeVar

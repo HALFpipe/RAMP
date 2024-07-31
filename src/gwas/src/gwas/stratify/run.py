@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from argparse import Namespace
 from collections import defaultdict
 from itertools import product

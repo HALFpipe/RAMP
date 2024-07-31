@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import re
 from argparse import Namespace
 from dataclasses import dataclass, field

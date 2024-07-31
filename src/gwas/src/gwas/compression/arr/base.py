@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from abc import abstractmethod
 from contextlib import AbstractContextManager
 from dataclasses import KW_ONLY, dataclass, field

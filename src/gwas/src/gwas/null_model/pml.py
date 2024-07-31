@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from dataclasses import dataclass, field
 from functools import cache, cached_property, partial
 from multiprocessing import cpu_count

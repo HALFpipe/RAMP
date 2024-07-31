@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, ContextManager

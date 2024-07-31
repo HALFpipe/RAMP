@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event, Semaphore
 from typing import Any

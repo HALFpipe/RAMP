@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import pickle
 from pathlib import Path
 

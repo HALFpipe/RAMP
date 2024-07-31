@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from pathlib import Path
 from subprocess import check_call
 from typing import NamedTuple, Sequence

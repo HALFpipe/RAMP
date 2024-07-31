@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from itertools import product
 from typing import Sequence
 

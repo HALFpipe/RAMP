@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from dataclasses import asdict, dataclass, field
 from itertools import chain
 from pathlib import Path

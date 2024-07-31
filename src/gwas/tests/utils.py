@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-
-
 import numpy as np
 from gwas.log import logger
 from jaxtyping import jaxtyped

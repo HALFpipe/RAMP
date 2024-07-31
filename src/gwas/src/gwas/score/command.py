@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from argparse import Namespace
 from dataclasses import dataclass, field
 from pathlib import Path

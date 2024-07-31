@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from typing import NamedTuple, Self
 
 import numpy as np

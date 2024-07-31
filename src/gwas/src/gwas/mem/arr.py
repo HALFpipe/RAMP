@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from dataclasses import dataclass, fields
 from itertools import pairwise
 from pathlib import Path

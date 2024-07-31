@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from multiprocessing import cpu_count
 from pathlib import Path
 from random import sample

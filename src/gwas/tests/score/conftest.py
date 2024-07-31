@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import gzip
 from dataclasses import dataclass
 from functools import cache

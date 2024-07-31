@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import re
 from dataclasses import dataclass, fields
 from subprocess import DEVNULL, PIPE, Popen

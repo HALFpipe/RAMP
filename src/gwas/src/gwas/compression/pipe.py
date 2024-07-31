@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import pickle
 from contextlib import AbstractContextManager
 from multiprocessing import cpu_count
