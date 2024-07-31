@@ -6,9 +6,7 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
-from gwas.compression.arr.base import FileArrayReader
-
-from ..compression.arr.base import FileArray
+from ..compression.arr.base import FileArray, FileArrayReader
 from ..log import logger
 from ..summary import SummaryCollection
 from ..utils import IterationOrder, chromosomes_list, make_pool_or_null_context
@@ -17,7 +15,7 @@ from ..utils import IterationOrder, chromosomes_list, make_pool_or_null_context
 @dataclass(frozen=True)
 class ScoreFile:
     chromosome: int | str
-    path: str | Path
+    reader: FileArrayReader[np.float64]
     variant_count: int
 
 
@@ -32,7 +30,7 @@ class Phenotype:
 def get_chromosome_metadata(
     input_directory: Path, chromosome: int | str
 ) -> tuple[ScoreFile, pd.DataFrame, list[str]] | None:
-    score_path = input_directory / f"chr{chromosome}.score.b2array"
+    score_path = input_directory / f"chr{chromosome}.score.txt.zst"
     if not score_path.exists():
         message = f"Missing score file for chromosome {chromosome} at {score_path}"
         if chromosome == "X":
@@ -40,7 +38,7 @@ def get_chromosome_metadata(
         else:
             raise ValueError(message)
 
-    array_proxy: FileArrayReader = FileArray.from_file(score_path, np.float64)
+    array_proxy = FileArray.from_file(score_path, np.float64)
     row_metadata, column_metadata = array_proxy.axis_metadata
 
     if row_metadata is None or column_metadata is None:
@@ -55,7 +53,7 @@ def get_chromosome_metadata(
     chromosome_column_names: list[str] = [str(p) for p in column_metadata]
     score_file = ScoreFile(
         chromosome=chromosome,
-        path=score_path,
+        reader=array_proxy,
         variant_count=len(chromosome_variant_metadata.index),
     )
 
@@ -118,8 +116,8 @@ def resolve_score_files(
     input_directory: Path, phenotype_names: list[str], num_threads: int = 1
 ) -> tuple[list[Phenotype], list[ScoreFile], pd.DataFrame]:
     """
-    Verifies that each directory contains either all required .b2array score files
-    or all axis_metadata.pkl.zst metadata files, for chromosomes 1-22 to X.
+    Verifies that each directory contains either all required .score.txt.zst files
+    for chromosomes 1 to 22 and optionally X.
 
     Parameters:
         input_dir (str): Input directory path.

@@ -6,7 +6,7 @@ import pandas as pd
 from numpy import typing as npt
 from tqdm.auto import tqdm
 
-from ..compression.arr._get import get_orthogonal_selection
+from ..compression.arr.base import FileArrayReader
 from ..log import logger
 from ..mem.arr import ScalarType, SharedArray
 from ..mem.wkspace import SharedWorkspace
@@ -23,8 +23,8 @@ from .resolve import Phenotype, ScoreFile
 class LoadPValueJob:
     row_offset: int
     row_count: int
-    column_indices: npt.NDArray[np.int64]
-    urlpath: bytes
+    column_indices: npt.NDArray[np.uint32]
+    reader: FileArrayReader[np.float64]
     data_array: SharedArray
     mask_array: SharedArray[np.bool_]
     num_threads: int = 1
@@ -107,17 +107,13 @@ def calculate_chi_squared_p_value(
 def load_score_file(job: LoadPValueJob) -> None:
     logger.debug(
         f"Loading {job.row_count} rows and {len(job.column_indices)} columns "
-        f"from {job.urlpath.decode()} with b2nd_get_orthogonal_selection"
+        f"from {job.reader.file_path} with b2nd_get_orthogonal_selection"
     )
 
     data = job.data
-    row_indices = np.arange(job.row_count, dtype=np.int64)
-    get_orthogonal_selection(
-        urlpath=job.urlpath,
-        row_indices=row_indices,
-        column_indices=job.column_indices,
-        array=data,
-        num_threads=job.num_threads,
+    row_indices = np.arange(job.row_count, dtype=np.uint32)
+    job.reader.read_indices(
+        row_indices=row_indices, column_indices=job.column_indices, array=data
     )
 
     u_stat = data[:, ::2]
@@ -236,7 +232,7 @@ class DataLoader:
                 ),
                 [],
             ),
-            dtype=np.int64,
+            dtype=np.uint32,
         )
 
         jobs: list[LoadPValueJob] = [
@@ -244,7 +240,7 @@ class DataLoader:
                 row_offset=row_offset,
                 row_count=score_file.variant_count,
                 column_indices=column_indices,
-                urlpath=str(score_file.path).encode(),
+                reader=score_file.reader,
                 data_array=self.data_array,
                 mask_array=self.mask_array,
                 num_threads=self.num_threads,

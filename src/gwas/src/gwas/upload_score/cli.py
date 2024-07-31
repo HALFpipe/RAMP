@@ -12,10 +12,12 @@ from ..utils import unwrap_which
 
 path_patterns: list[str] = [
     "chr*.metadata.yaml.gz",
-    "chr*.score.b2array",
-    "chr*.score.axis-metadata.pkl.zst",
-    "covariance.b2array",
-    "covariance.axis-metadata.pkl.zst",
+    "chr*.score.txt.zst",
+    "covariance.txt.zst",
+    "chr*.score.b2array",  # legacy
+    "chr*.score.axis-metadata.pkl.zst",  # legacy
+    "covariance.b2array",  # legacy
+    "covariance.axis-metadata.pkl.zst",  # legacy
     "populations.pdf",
     "*stat-*_statmap.nii.gz",
     "*stat-*_statmap.json",
