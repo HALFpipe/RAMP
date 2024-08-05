@@ -71,6 +71,8 @@ setup(
                 ],
                 include_dirs=[np.get_include()],
                 libraries=["hts"],
+                extra_compile_args=extra_compile_args,
+                extra_link_args=extra_link_args,
             ),
         ]
     )
