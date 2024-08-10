@@ -33,9 +33,7 @@ setup(
                     ("NDEBUG", None),
                 ],
                 include_dirs=[np.get_include()],
-                libraries=[
-                    "mkl_rt",
-                ],
+                libraries=["mkl_rt"],
             ),
             Extension(
                 "gwas.mem._os",
@@ -60,9 +58,18 @@ setup(
                     ("NDEBUG", None),
                 ],
                 include_dirs=[np.get_include()],
-                libraries=[
-                    "blosc2",
+                libraries=["blosc2"],
+            ),
+            Extension(
+                "gwas.vcf._htslib",
+                [
+                    "src/gwas/vcf/_htslib.pyx",
                 ],
+                define_macros=[
+                    ("NDEBUG", None),
+                ],
+                include_dirs=[],
+                libraries=["hts"],
             ),
         ]
     )

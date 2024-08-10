@@ -160,6 +160,7 @@ src/gwas/src/gwas/mem/_os.c
 src/gwas/src/gwas/_matrix_functions.c
 src/gwas/src/gwas/compression/arr/_get.c
 src/gwas/src/gwas/compression/arr/_blosc2_get_orthogonal_selection.c
+src/gwas/src/gwas/vcf/_htslib.c
 
 # Direnv
 .direnv
