@@ -2,10 +2,11 @@ import logging
 import sys
 from argparse import ArgumentParser, Namespace
 from multiprocessing import cpu_count
-from pathlib import Path
 from subprocess import call
 from tempfile import TemporaryDirectory
 from typing import Iterable, Literal
+
+from upath import UPath
 
 from ..log import logger, setup_logging
 from ..utils import unwrap_which
@@ -29,7 +30,7 @@ path_patterns: list[str] = [
 
 
 def call_upload_client(
-    arguments: Namespace, tmp_path: Path, paths: Iterable[str]
+    arguments: Namespace, tmp_path: UPath, paths: Iterable[str]
 ) -> None:
     upload_executable = unwrap_which("upload")
     command: list[str] = [
@@ -49,12 +50,12 @@ def call_upload_client(
     call(command, cwd=tmp_path)
 
 
-def get_relative_path(path: Path, k: int) -> Path:
-    return Path(*path.parts[-k - 1 :])
+def get_relative_path(path: UPath, k: int) -> UPath:
+    return UPath(*path.parts[-k - 1 :])
 
 
-def has_duplicates(paths: Iterable[Path], k: int) -> bool:
-    seen: set[Path] = set()
+def has_duplicates(paths: Iterable[UPath], k: int) -> bool:
+    seen: set[UPath] = set()
     for path in paths:
         path = get_relative_path(path, k)
         if path in seen:
@@ -64,9 +65,9 @@ def has_duplicates(paths: Iterable[Path], k: int) -> bool:
 
 
 def upload(arguments: Namespace) -> None:
-    upload_paths: set[Path] = set()
+    upload_paths: set[UPath] = set()
     for input_directory_str in arguments.input_directory:
-        input_directory = Path(input_directory_str).absolute()
+        input_directory = UPath(input_directory_str).absolute()
         for path_pattern in path_patterns:
             upload_paths.update(input_directory.glob(f"**/{path_pattern}"))
 
@@ -75,7 +76,7 @@ def upload(arguments: Namespace) -> None:
         k += 1
 
     with TemporaryDirectory() as tmp_path_str:
-        tmp_path = Path(tmp_path_str)
+        tmp_path = UPath(tmp_path_str)
         paths: set[str] = set()
         for upload_path in upload_paths:
             if upload_path.name.startswith("sub-"):

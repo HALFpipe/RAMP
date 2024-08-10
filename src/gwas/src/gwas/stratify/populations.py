@@ -2,9 +2,9 @@ from itertools import product
 from typing import Sequence
 
 import numpy as np
+import scipy
 from matplotlib.artist import Artist
 from numpy import typing as npt
-from scipy.stats import multivariate_normal
 
 from .base import SampleID
 
@@ -212,7 +212,7 @@ def calc_z(
         c = reference_components[population][:, [c1, c2]]
         mean = np.mean(c, axis=0)
         covariance = np.cov(c.transpose())
-        marginal_multivariate_normal = multivariate_normal(
+        marginal_multivariate_normal = scipy.stats.multivariate_normal(
             mean=mean,
             cov=covariance,
         )

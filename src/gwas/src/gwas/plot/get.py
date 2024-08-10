@@ -52,7 +52,7 @@ class LoadPValueJob:
 def calculate_chi_squared_p_value(
     u_stat: npt.NDArray[np.float64], v_stat: npt.NDArray[np.float64]
 ) -> None:
-    from scipy.stats.distributions import chi2
+    import scipy
 
     """
     Calculates the p-value from U-statistic and V-statistic using the chi-square test
@@ -76,7 +76,7 @@ def calculate_chi_squared_p_value(
     v_stat[invalid_stat] = 0
 
     # Calculate p-value and log-p-value
-    u_stat[:] = chi2.sf(v_stat, df=1)
+    u_stat[:] = scipy.stats.distributions.chi2.sf(v_stat, df=1)
     u_stat[invalid_stat] = np.nan
 
     invalid_p_value = np.logical_or(np.isnan(u_stat), np.isinf(u_stat))

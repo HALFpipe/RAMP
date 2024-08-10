@@ -1,6 +1,5 @@
 import pickle
 from multiprocessing import cpu_count
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -10,10 +9,11 @@ from gwas.compression.pipe import (
     CompressedTextReader,
     CompressedTextWriter,
 )
+from upath import UPath
 
 
 @pytest.mark.parametrize("compression", ["zst", "xz", "gz", "bz2", "lz4"])
-def test_compressed_text(tmp_path: Path, compression: str) -> None:
+def test_compressed_text(tmp_path: UPath, compression: str) -> None:
     x: str = "test" * 1000
 
     test_path = tmp_path / f"test.txt.{compression}"
@@ -24,7 +24,7 @@ def test_compressed_text(tmp_path: Path, compression: str) -> None:
 
 
 @pytest.mark.parametrize("compression", ["zst", "xz", "gz", "bz2", "lz4"])
-def test_compressed_bytes(tmp_path: Path, compression: str) -> None:
+def test_compressed_bytes(tmp_path: UPath, compression: str) -> None:
     x = np.random.rand(1000, 1000)
 
     test_path = tmp_path / f"test.txt.{compression}"

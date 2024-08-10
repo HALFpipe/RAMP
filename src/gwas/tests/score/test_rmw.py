@@ -1,4 +1,4 @@
-from pathlib import Path
+from multiprocessing import cpu_count
 from time import time
 
 import numpy as np
@@ -9,12 +9,13 @@ from gwas.compression.arr.base import (
 )
 from gwas.compression.pipe import CompressedTextReader
 from gwas.log import logger
+from upath import UPath
 
 from .conftest import RmwScore
 
 
 def test_compression(
-    tmp_path: Path,
+    tmp_path: UPath,
     rmw_score: RmwScore,
 ) -> None:
     scores = np.ascontiguousarray(
@@ -29,7 +30,11 @@ def test_compression(
 
         start = time()
         writer = FileArray.create(
-            file_path, scores.shape, np.float64, compression_method
+            file_path,
+            scores.shape,
+            np.float64,
+            compression_method,
+            num_threads=cpu_count(),
         )
         with writer:
             writer[:, :] = scores

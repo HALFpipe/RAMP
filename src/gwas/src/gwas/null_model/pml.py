@@ -289,16 +289,16 @@ class ProfileMaximumLikelihood:
                 np.asarray(se.scaled_residuals),
                 np.asarray(se.variance),
             )
-            return optimize_job.indices, null_model_result
         except Exception as e:
             logger.error(
                 "Failed to fit null model for phenotype at index "
                 f"{optimize_job.indices}",
                 exc_info=e,
             )
-            return optimize_job.indices, NullModelResult(
+            null_model_result = NullModelResult(
                 np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
             )
+        return optimize_job.indices, null_model_result
 
     @classmethod
     def fit(

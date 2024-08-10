@@ -1,12 +1,13 @@
-from pathlib import Path
 from shlex import join
 from subprocess import check_call
+
+from upath import UPath
 
 from ..tools import tabix
 from .pipe import decompress_commands, make_compress_command
 
 
-def to_bgzip(path: Path, prefix: Path, num_threads: int) -> Path:
+def to_bgzip(path: UPath, prefix: UPath, num_threads: int) -> UPath:
     prefix.mkdir(parents=True, exist_ok=True)
     gz_path = prefix / f"{path.stem}.gz"
 

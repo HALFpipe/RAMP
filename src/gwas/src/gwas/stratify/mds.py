@@ -1,10 +1,10 @@
 from argparse import Namespace
-from pathlib import Path
 from typing import Callable, NamedTuple
 
 import numpy as np
-import scipy.stats
+import scipy
 from numpy import typing as npt
+from upath import UPath
 
 from .base import SampleID
 from .populations import plot_populations, populations, super_populations
@@ -71,7 +71,7 @@ def classify_samples_by_mds(
 
 def parse_mds(arguments: Namespace, rename_sample: Callable[[str], str]) -> MDS:
     header: list[str] | None = None
-    with Path(arguments.mds).open("rt") as file_handle:
+    with UPath(arguments.mds).open("r") as file_handle:
         for line in file_handle:
             header = line.strip().split(",")
             break

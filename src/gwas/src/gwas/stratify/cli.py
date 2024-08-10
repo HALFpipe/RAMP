@@ -1,8 +1,9 @@
 import logging
 import sys
 from argparse import Action, ArgumentError, ArgumentParser, Namespace
-from pathlib import Path
 from typing import Any, Sequence
+
+from upath import UPath
 
 from ..log import logger, setup_logging
 from .populations import populations, super_populations
@@ -138,9 +139,9 @@ def parse_arguments(argv: list[str]) -> Namespace:
 def main() -> None:
     arguments = parse_arguments(sys.argv[1:])
 
-    output_directory = Path.cwd()
+    output_directory = UPath.cwd()
     if arguments.output_directory is not None:
-        output_directory = Path(arguments.output_directory)
+        output_directory = UPath(arguments.output_directory)
 
     setup_logging(level=arguments.log_level, path=output_directory)
 

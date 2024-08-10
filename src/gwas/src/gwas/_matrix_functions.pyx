@@ -12,11 +12,14 @@ def check_strides(
     np.ndarray[double, ndim=2, mode="fortran"] matrix,
     size_t n
 ):
-    if (
-        matrix.strides[0] != cast(int, sizeof(double))
-        or matrix.strides[1] != cast(int, sizeof(double) * n)
-    ):
-        raise ValueError("Invalid strides")
+    if matrix.strides[0] != cast(int, sizeof(double)):
+        raise ValueError(
+            f"Invalid strides for axis 0: {matrix.strides[0]} != {sizeof(double)}"
+        )
+    if matrix.strides[1] != cast(int, sizeof(double) * n):
+        raise ValueError(
+            f"Invalid strides for axis 1: {matrix.strides[1]} != {sizeof(double) * n}"
+        )
 
 
 cdef extern from "mkl_trans.h":

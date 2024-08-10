@@ -2,8 +2,9 @@ import logging
 import multiprocessing as mp
 import sys
 from argparse import ArgumentParser, Namespace
-from pathlib import Path
 from typing import Literal
+
+from upath import UPath
 
 
 def parse_arguments(argv: list[str]) -> Namespace:
@@ -112,7 +113,7 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
     from gwas.mem.wkspace import SharedWorkspace
     from gwas.utils import apply_num_threads
 
-    output_directory = Path(arguments.output_directory)
+    output_directory = UPath(arguments.output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
 
     setup_logging(level=arguments.log_level, path=output_directory)

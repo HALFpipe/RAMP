@@ -11,6 +11,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
     argument_parser = ArgumentParser(description="Generate Manhattan & QQ Plots")
 
     argument_parser.add_argument("path")
+    argument_parser.add_argument("--compression-method")
 
     argument_parser.add_argument("--debug", action="store_true", default=False)
     argument_parser.add_argument(

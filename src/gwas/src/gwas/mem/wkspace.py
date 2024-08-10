@@ -30,7 +30,7 @@ class Candidate(NamedTuple):
     size: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Allocation:
     start: int
     size: int
@@ -41,6 +41,27 @@ class Allocation:
     @property
     def end(self) -> int:
         return self.start + self.size
+
+
+def round_up(number_to_round: int, multiple: int) -> int:
+    """
+    Rounds up a number to the nearest multiple.
+    Adapted from https://stackoverflow.com/a/3407254
+
+    Args:
+        number_to_round (int): The number to be rounded up.
+        multiple (int): The multiple to round up to.
+
+    Returns:
+        int: The rounded up number.
+
+    """
+    if multiple == 0:
+        return number_to_round
+    remainder = number_to_round % multiple
+    if remainder == 0:
+        return number_to_round
+    return number_to_round + multiple - remainder
 
 
 @dataclass
@@ -84,7 +105,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         else:
             return SharedArray(name, self)
 
-    def get_allocation_start(self, allocation_size: int) -> int:
+    def get_allocation_start(self, allocation_size: int, item_size: int) -> int:
         with global_lock:
             allocations = self.allocations
             allocations_list = sorted(allocations.values(), key=attrgetter("start"))
@@ -92,6 +113,8 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             candidates: list[Candidate] = []
 
             def add_candidate(free_start: int, free_end: int) -> None:
+                # make sure the start is aligned
+                free_start = round_up(free_start, item_size)
                 free_size = free_end - free_start
                 if free_size >= allocation_size:
                     candidates.append(Candidate(free_size, free_start))
@@ -168,7 +191,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             size = int(np.prod(shape) * itemsize)
 
             # Calculate start
-            start = self.get_allocation_start(size)
+            start = self.get_allocation_start(size, itemsize)
             allocations[name] = Allocation(start, size, shape, numpy_dtype)
 
             end = max(a.end for a in allocations.values())
@@ -223,7 +246,9 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
                 a = allocations[previous_name]
                 b = allocations[name]
 
-                new_start = a.start + a.size
+                item_size = b.dtype.itemsize
+
+                new_start = round_up(a.end, item_size)  # Align to item size
                 if new_start == b.start:
                     continue  # already contiguous
                 elif new_start > b.start:

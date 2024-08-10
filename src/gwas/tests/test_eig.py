@@ -1,7 +1,6 @@
 import gzip
 from contextlib import chdir
 from multiprocessing import cpu_count
-from pathlib import Path
 from random import sample, seed
 from subprocess import check_call
 from typing import Mapping, Sequence
@@ -21,7 +20,9 @@ from gwas.raremetalworker.ped import write_dummy_ped_and_dat_files
 from gwas.tools import bcftools, raremetalworker, tabix
 from gwas.tri.base import Triangular
 from gwas.tri.tsqr import scale
+from gwas.utils import global_lock
 from gwas.vcf.base import VCFFile
+from upath import UPath
 
 from .conftest import chromosomes
 
@@ -47,8 +48,9 @@ def load_genotypes(
         )
         variant_count += vcf_file.variant_count
 
-    name = SharedArray.get_name(sw, "genotypes")
-    array = sw.alloc(name, variant_count, sample_count)
+    with global_lock:
+        name = SharedArray.get_name(sw, "genotypes")
+        array = sw.alloc(name, variant_count, sample_count)
     a = array.to_numpy()
 
     start = 0
@@ -78,7 +80,7 @@ def load_genotypes(
 def test_eig(
     subset_proportion: float,
     vcf_files_by_size_and_chromosome: Mapping[str, Mapping[int | str, VCFFile]],
-    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
+    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, UPath]],
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
 ) -> None:
@@ -170,10 +172,10 @@ def test_eig(
 @pytest.mark.parametrize("chromosome", [22], indirect=True)
 @pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 def test_eig_rmw(
-    tmp_path: Path,
+    tmp_path: UPath,
     chromosome: int | str,
     vcf_file: VCFFile,
-    tri_paths_by_chromosome: Mapping[str | int, Path],
+    tri_paths_by_chromosome: Mapping[str | int, UPath],
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
 ) -> None:
@@ -193,7 +195,7 @@ def test_eig_rmw(
         r_squared_cutoff=default_kinship_r_squared_cutoff,
     )
     variants_path = tmp_path / f"chr{chromosome}.variants.txt"
-    with variants_path.open("wt") as file_handle:
+    with variants_path.open("w") as file_handle:
         variants_lines = (
             ":".join(
                 map(
@@ -287,7 +289,7 @@ def test_eig_rmw(
 
 
 def test_eig_mp(
-    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
+    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, UPath]],
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
 ) -> None:
@@ -309,7 +311,7 @@ def test_eig_mp(
 
 
 def test_eig_multiple(
-    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, Path]],
+    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, UPath]],
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
 ) -> None:

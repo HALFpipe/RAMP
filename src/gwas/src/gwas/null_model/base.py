@@ -8,6 +8,7 @@ from ..eig.base import Eigendecomposition
 from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..pheno import VariableCollection
+from ..utils import global_lock
 
 
 @dataclass
@@ -77,21 +78,24 @@ class NullModelCollection:
         variance = self.variance.to_numpy()
         (sample_count, phenotype_count) = variance.shape
         half_scaled_residuals = self.half_scaled_residuals.to_numpy()
-        # Pre-compute the inverse variance.
-        inverse_variance_array = self.sw.alloc(
-            SharedArray.get_name(self.sw, "inverse-variance"),
-            sample_count,
-            phenotype_count,
-        )
+
+        with global_lock:
+            inverse_variance_array = self.sw.alloc(
+                SharedArray.get_name(self.sw, "inverse-variance"),
+                sample_count,
+                phenotype_count,
+            )
+            scaled_residuals_array = self.sw.alloc(
+                SharedArray.get_name(self.sw, "scaled-residuals"),
+                sample_count,
+                phenotype_count,
+            )
         inverse_variance_matrix = inverse_variance_array.to_numpy()
+        scaled_residuals_matrix = scaled_residuals_array.to_numpy()
+
+        # Pre-compute the inverse variance.
         np.reciprocal(variance, out=inverse_variance_matrix)
         # Pre-compute the inverse variance scaled residuals
-        scaled_residuals_array = self.sw.alloc(
-            SharedArray.get_name(self.sw, "scaled-residuals"),
-            sample_count,
-            phenotype_count,
-        )
-        scaled_residuals_matrix = scaled_residuals_array.to_numpy()
         np.true_divide(
             half_scaled_residuals,
             np.sqrt(variance),
@@ -113,15 +117,17 @@ class NullModelCollection:
             raise ValueError("Arguments `eig` and `vc` must have the same samples.")
 
         sw = eig.sw
-        name = SharedArray.get_name(sw, "regression-weights")
-        regression_weights = sw.alloc(name, vc.phenotype_count, vc.covariate_count)
-        name = SharedArray.get_name(sw, "standard-errors")
-        standard_errors = sw.alloc(name, vc.phenotype_count, vc.covariate_count)
-        name = SharedArray.get_name(sw, "variance")
-        shape = list(vc.phenotypes.shape)
-        variance = sw.alloc(name, *shape)
-        name = SharedArray.get_name(sw, "half-scaled-residuals")
-        scaled_residuals = sw.alloc(name, *shape)
+
+        with global_lock:
+            name = SharedArray.get_name(sw, "regression-weights")
+            regression_weights = sw.alloc(name, vc.phenotype_count, vc.covariate_count)
+            name = SharedArray.get_name(sw, "standard-errors")
+            standard_errors = sw.alloc(name, vc.phenotype_count, vc.covariate_count)
+            name = SharedArray.get_name(sw, "variance")
+            shape = list(vc.phenotypes.shape)
+            variance = sw.alloc(name, *shape)
+            name = SharedArray.get_name(sw, "half-scaled-residuals")
+            scaled_residuals = sw.alloc(name, *shape)
 
         nm = cls(
             method,

@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from itertools import chain
-from pathlib import Path
 from typing import Literal, Self
 
 import yaml
+from upath import UPath
 
 from .compression.pipe import CompressedTextReader
 from .null_model.base import NullModelCollection
@@ -103,7 +103,7 @@ class SummaryCollection:
                 )
 
     @classmethod
-    def from_file(cls, file_path: Path) -> Self:
+    def from_file(cls, file_path: UPath) -> Self:
         with CompressedTextReader(file_path) as file_handle:
             chunks_data = yaml.safe_load(file_handle)
         instance = parse_obj_as(cls, chunks_data)

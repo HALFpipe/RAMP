@@ -1,12 +1,12 @@
 from argparse import Namespace
 from dataclasses import dataclass, field
-from pathlib import Path
 from pprint import pformat
 from typing import Iterable, Mapping, Sequence
 
 import numpy as np
 from threadpoolctl import threadpool_limits
 from tqdm.auto import tqdm
+from upath import UPath
 
 from ..compression.arr.base import compression_methods
 from ..log import logger
@@ -40,16 +40,16 @@ def subset_variable_collection(
 @dataclass
 class GwasCommand:
     arguments: Namespace
-    output_directory: Path
+    output_directory: UPath
 
     sw: SharedWorkspace
 
-    phenotype_paths: list[Path] = field(init=False)
-    covariate_paths: list[Path] = field(init=False)
+    phenotype_paths: list[UPath] = field(init=False)
+    covariate_paths: list[UPath] = field(init=False)
 
     vcf_samples: list[str] = field(init=False)
     vcf_by_chromosome: Mapping[int | str, VCFFile] = field(init=False)
-    tri_paths_by_chromosome: Mapping[int | str, Path] = field(init=False)
+    tri_paths_by_chromosome: Mapping[int | str, UPath] = field(init=False)
 
     @property
     def chromosomes(self) -> Sequence[int | str]:
@@ -145,23 +145,23 @@ class GwasCommand:
             if calc_mean(
                 vcf_file,
                 variable_collections,
+                self.arguments.num_threads,
             ):
                 vcf_file.save_to_cache(self.output_directory, self.arguments.num_threads)
 
     def setup_variable_collections(self) -> list[VariableCollection]:
-        logger.debug("Arguments are %s", pformat(vars(self.arguments)))
-
-        # Convert command line arguments to `Path` objects
-        vcf_paths: list[Path] = [Path(p) for p in self.arguments.vcf]
-        tri_paths: list[Path] = [Path(p) for p in self.arguments.tri]
-        self.phenotype_paths: list[Path] = [Path(p) for p in self.arguments.phenotypes]
-        self.covariate_paths: list[Path] = [Path(p) for p in self.arguments.covariates]
+        # Convert command line arguments to `UPath` objects
+        vcf_paths: list[UPath] = [UPath(p) for p in self.arguments.vcf]
+        tri_paths: list[UPath] = [UPath(p) for p in self.arguments.tri]
+        self.phenotype_paths: list[UPath] = [UPath(p) for p in self.arguments.phenotypes]
+        self.covariate_paths: list[UPath] = [UPath(p) for p in self.arguments.covariates]
 
         # Load VCF file metadata and cache it
         vcf_files = calc_vcf(
             vcf_paths,
             self.output_directory,
             num_threads=self.arguments.num_threads,
+            sw=self.sw,
             engine=self.arguments.vcf_engine,
         )
         self.set_vcf_files(vcf_files)
@@ -182,6 +182,7 @@ class GwasCommand:
             base_variable_collection.covariance_to_txt(
                 self.output_directory / "covariance",
                 compression_methods[self.arguments.compression_method],
+                num_threads=self.arguments.num_threads,
             )
         # Split into missing value chunks
         variable_collections: list[VariableCollection] = self.split_by_missing_values(
@@ -255,13 +256,6 @@ class GwasCommand:
         self, chromosome: int | str, variable_collections: list[VariableCollection]
     ) -> None:
         vcf_file = self.vcf_by_chromosome[chromosome]
-
-        # Update the VCF file allele frequencies based on variable collections
-        if calc_mean(
-            vcf_file,
-            variable_collections,
-        ):
-            vcf_file.save_to_cache(self.output_directory, self.arguments.num_threads)
         vcf_file.set_variants_from_cutoffs(
             minor_allele_frequency_cutoff=(
                 self.arguments.score_minor_allele_frequency_cutoff
@@ -288,6 +282,7 @@ class GwasCommand:
         self.job_collection.run()
 
     def run(self) -> None:
+        logger.debug("Arguments are %s", pformat(vars(self.arguments)))
         variable_collections = self.setup_variable_collections()
 
         for chromosome in tqdm(

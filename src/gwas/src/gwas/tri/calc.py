@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from functools import partial
-from pathlib import Path
 from queue import Empty
 from typing import (
     Collection,
@@ -13,6 +12,7 @@ from typing import (
 
 import numpy as np
 from tqdm.auto import tqdm
+from upath import UPath
 
 from gwas.utils import get_processes_and_num_threads
 
@@ -31,10 +31,10 @@ class Task(NamedTuple):
 
 
 def check_tri_path(
-    tri_path: Path,
+    tri_path: UPath,
     samples_by_chromosome: Mapping[int | str, list[str]],
     sw: SharedWorkspace,
-) -> tuple[int | str, Path] | None:
+) -> tuple[int | str, UPath] | None:
     try:
         tri = Triangular.from_file(tri_path, sw, np.float64)
         if tri.chromosome is None:
@@ -67,7 +67,7 @@ def check_tri_path(
 class TriCalc:
     chromosomes: Collection[str | int]
     vcf_by_chromosome: Mapping[int | str, VCFFile]
-    output_directory: Path
+    output_directory: UPath
     sw: SharedWorkspace
 
     minor_allele_frequency_cutoff: float
@@ -83,8 +83,8 @@ class TriCalc:
         }
 
     def make_tri_paths_by_chromosome(
-        self, tri_paths: Iterable[Path]
-    ) -> MutableMapping[int | str, Path]:
+        self, tri_paths: Iterable[UPath]
+    ) -> MutableMapping[int | str, UPath]:
         check = partial(
             check_tri_path, samples_by_chromosome=self.samples_by_chromosome, sw=self.sw
         )
@@ -94,7 +94,7 @@ class TriCalc:
             num_threads=self.num_threads,
             iteration_order=IterationOrder.UNORDERED,
         )
-        tri_paths_by_chromosome: MutableMapping[int | str, Path] = dict()
+        tri_paths_by_chromosome: MutableMapping[int | str, UPath] = dict()
         with pool:
             for result in iterator:
                 if result is None:
@@ -104,15 +104,15 @@ class TriCalc:
         return tri_paths_by_chromosome
 
     def check_tri_paths(
-        self, tri_paths: Collection[Path]
-    ) -> tuple[Collection[str | int], MutableMapping[int | str, Path]]:
+        self, tri_paths: Collection[UPath]
+    ) -> tuple[Collection[str | int], MutableMapping[int | str, UPath]]:
         # Ensure the output directory exists
         self.output_directory.mkdir(parents=True, exist_ok=True)
 
         chromosomes_to_check = set(self.chromosomes)
         chromosomes_to_check.discard("X")
 
-        tri_paths_by_chromosome: dict[int | str, Path] = dict()
+        tri_paths_by_chromosome: dict[int | str, UPath] = dict()
 
         # Load from `--tri` flag
         if len(tri_paths) > 0:
@@ -140,8 +140,12 @@ class TriCalc:
     def get_tri_tasks(
         self,
         chromosomes: Collection[str | int],
-        tri_paths_by_chromosome: MutableMapping[int | str, Path],
+        tri_paths_by_chromosome: MutableMapping[int | str, UPath],
     ) -> tuple[TaskSyncCollection, list[Task]]:
+        count = len(chromosomes)
+        if count == 0:
+            return TaskSyncCollection(processes=1), list()
+
         required_sizes: list[int] = list()
         for chromosome in chromosomes:
             vcf_file = self.vcf_by_chromosome[chromosome]
@@ -162,7 +166,6 @@ class TriCalc:
             )
             required_sizes.append(required_size)
 
-        count = len(chromosomes)
         average_size = round(np.mean(required_sizes))
         capacity = self.sw.unallocated_size // average_size
         processes, num_threads_per_process = get_processes_and_num_threads(
@@ -188,8 +191,11 @@ class TriCalc:
 
         return t, tasks
 
-    def run(self, tri_paths: Collection[Path]) -> Mapping[int | str, Path]:
+    def run(self, tri_paths: Collection[UPath]) -> Mapping[int | str, UPath]:
         chromosomes_to_run, tri_paths_by_chromosome = self.check_tri_paths(tri_paths)
+        if not chromosomes_to_run:
+            return tri_paths_by_chromosome
+
         t, tasks = self.get_tri_tasks(chromosomes_to_run, tri_paths_by_chromosome)
 
         # Sort tasks by size so that we can run the largest tasks first. This means that
@@ -212,23 +218,23 @@ class TriCalc:
 def calc_tri(
     chromosomes: Sequence[str | int],
     vcf_by_chromosome: Mapping[int | str, VCFFile],
-    output_directory: Path,
+    output_directory: UPath,
     sw: SharedWorkspace,
-    tri_paths: list[Path] | None = None,
+    tri_paths: list[UPath] | None = None,
     minor_allele_frequency_cutoff: float = 0.05,
     r_squared_cutoff: float = -np.inf,
     num_threads: int = 1,
-) -> Mapping[int | str, Path]:
+) -> Mapping[int | str, UPath]:
     """Generate triangular matrices for each chromosome.
 
     Args:
         chromosomes (Sequence[str  |  int]): The chromosomes to triangularize.
         vcf_by_chromosome (Mapping[int  |  str, VCFFile]): The VCF file objects that
             allow reading the genotypes.
-        output_directory (Path): The function will first try to load existing triangular
+        output_directory (UPath): The function will first try to load existing triangular
             matrices from this directory. If they do not exist, they will be generated.
         sw (SharedWorkspace): The shared workspace.
-        tri_paths (list[Path] | None, optional): Optionally specify additional paths to
+        tri_paths (list[UPath] | None, optional): Optionally specify additional paths to
             triangular matrices. Defaults to None.
         minor_allele_frequency_cutoff (float, optional): Defaults to 0.05.
         r_squared_cutoff (float, optional): Defaults to 0.
@@ -237,7 +243,7 @@ def calc_tri(
         ValueError: If a triangular matrix could not be found or generated.
 
     Returns:
-        Mapping[int | str, Path]: The paths to the triangular matrix files.
+        Mapping[int | str, UPath]: The paths to the triangular matrix files.
     """
     if tri_paths is None:
         tri_paths = list()

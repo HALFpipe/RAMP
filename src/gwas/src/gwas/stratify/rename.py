@@ -1,15 +1,15 @@
 import re
 from argparse import Namespace
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TypeVar
 
 import numpy as np
 from numpy import typing as npt
+from upath import UPath
 
 from .base import SampleID
 
-DType = TypeVar("DType", bound=np.generic, covariant=True)
+DType = TypeVar("DType", bound=np.number, covariant=True)
 
 
 @dataclass
@@ -22,7 +22,7 @@ class SampleRenamer:
     def __post_init__(self) -> None:
         header: list[str] | None = None
         for from_column, to_column, path in self.arguments.rename_samples_from_file:
-            path = Path(path)
+            path = UPath(path)
             with path.open("rt") as file_handle:
                 for line in file_handle:
                     header = line.strip().split(",")

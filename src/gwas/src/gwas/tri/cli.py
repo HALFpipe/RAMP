@@ -2,10 +2,10 @@ import logging
 import multiprocessing as mp
 import sys
 from argparse import ArgumentParser, Namespace
-from pathlib import Path
 from typing import Literal
 
 import numpy as np
+from upath import UPath
 
 from .base import Triangular
 
@@ -51,7 +51,7 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
     from gwas.log import logger, setup_logging
     from gwas.mem.wkspace import SharedWorkspace
 
-    output_directory = Path(arguments.output_directory)
+    output_directory = UPath(arguments.output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
 
     setup_logging(level=arguments.log_level, path=output_directory)
@@ -66,9 +66,10 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
             from .tsqr import TallSkinnyQR
 
             (vcf_file,) = calc_vcf(
-                [Path(arguments.vcf)],
+                [UPath(arguments.vcf)],
                 output_directory,
                 num_threads=arguments.num_threads,
+                sw=sw,
             )
             vcf_file.set_samples(set(vcf_file.vcf_samples))
             vcf_file.set_variants_from_cutoffs(

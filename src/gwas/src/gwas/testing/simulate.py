@@ -1,12 +1,12 @@
 import random
 from dataclasses import dataclass
-from pathlib import Path
 from subprocess import check_call
 from tempfile import NamedTemporaryFile
 
 import numpy as np
 import pandas as pd
 from numpy import typing as npt
+from upath import UPath
 
 from ..mem.wkspace import SharedWorkspace
 from ..pheno import VariableCollection
@@ -57,7 +57,7 @@ class SimulationResult:
 
 
 def simulate(
-    bfile_path: Path,
+    bfile_path: UPath,
     variant_ids: list[str],
     causal_variant_count: int,
     heritability: float,
@@ -65,7 +65,7 @@ def simulate(
     seed: int,
     missing_value_rate: float,
     missing_value_pattern_count: int,
-    simulation_path: Path,
+    simulation_path: UPath,
 ) -> SimulationResult:
     phen_path = simulation_path.with_suffix(".phen")
     par_path = simulation_path.with_suffix(".par")
@@ -77,7 +77,7 @@ def simulate(
             file_handle.write("\n".join(causal_variants))
             file_handle.close()
 
-            variant_list_path = Path(file_handle.name)
+            variant_list_path = UPath(file_handle.name)
 
             gcta_command = [
                 *gcta64,
@@ -126,16 +126,9 @@ def simulate(
 
     # Generate missing value patterns
     np.random.seed(seed)
-    patterns: npt.NDArray[np.bool_] = np.vstack(
-        [
-            np.random.choice(
-                a=[False, True],
-                size=sample_count,
-                p=[1 - missing_value_rate, missing_value_rate],
-            )
-            for _ in range(missing_value_pattern_count)
-        ]
-    ).transpose()
+    patterns = generate_missing_value_patterns(
+        missing_value_rate, missing_value_pattern_count, sample_count
+    )
     pattern_indices: npt.NDArray[np.int_] = np.random.permutation(
         np.resize(np.arange(missing_value_pattern_count), simulation_count)
     )
@@ -148,3 +141,20 @@ def simulate(
     return SimulationResult(
         phenotype_names, phen_frame, par_frame, patterns, pattern_indices
     )
+
+
+def generate_missing_value_patterns(
+    missing_value_rate: float, missing_value_pattern_count: int, sample_count: int
+) -> npt.NDArray[np.bool_]:
+    patterns: npt.NDArray[np.bool_] = np.vstack(
+        [
+            np.random.choice(
+                a=[False, True],
+                size=sample_count,
+                p=[1 - missing_value_rate, missing_value_rate],
+            )
+            for _ in range(missing_value_pattern_count)
+        ]
+    ).transpose()
+
+    return patterns

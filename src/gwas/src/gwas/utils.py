@@ -1,7 +1,8 @@
+import faulthandler
 import multiprocessing as mp
 import os
 import re
-import warnings
+import signal
 from contextlib import nullcontext
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum, auto
@@ -9,9 +10,10 @@ from logging import LogRecord
 from multiprocessing import pool as mp_pool
 from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event, RLock
-from pathlib import Path
+from pprint import pformat
 from queue import Empty
 from shutil import which
+from threading import Thread
 from typing import (
     Any,
     Callable,
@@ -25,12 +27,14 @@ from typing import (
     TypeVar,
     get_args,
     get_origin,
+    override,
 )
 
 import numpy as np
 import pandas as pd
 from numpy import typing as npt
 from threadpoolctl import threadpool_info, threadpool_limits
+from upath import UPath
 
 from .log import logger, multiprocessing_context, worker_configurer
 
@@ -129,7 +133,7 @@ def get_initargs(num_threads: int | None = None) -> InitArgs:
         logger.getEffectiveLevel(),
         global_lock,
     )
-    logger.debug(f"Initializer arguments for child process are: {initargs}")
+    logger.debug(f"Initializer arguments for child process are: {pformat(initargs)}")
     return initargs
 
 
@@ -144,6 +148,10 @@ num_threads_variables: Sequence[str] = [
 
 
 def apply_num_threads(num_threads: int | None) -> None:
+    faulthandler.register(signal.SIGUSR1)
+    # Write a traceback to standard out every six hours
+    faulthandler.dump_traceback_later(60 * 60 * 6, repeat=True)
+
     xla_flags = f'{os.getenv("XLA_FLAGS", "")} --xla_cpu_enable_fast_math=false'
     if num_threads is not None:
         threadpool_limits(limits=num_threads)
@@ -151,7 +159,9 @@ def apply_num_threads(num_threads: int | None) -> None:
             os.environ[variable] = str(num_threads)
         xla_flags = (
             f"--xla_cpu_multi_thread_eigen={str(num_threads > 1).lower()} "
-            f"intra_op_parallelism_threads={num_threads} {xla_flags}"
+            f"intra_op_parallelism_threads={num_threads} "
+            f"inter_op_parallelism_threads={num_threads} "
+            f"{xla_flags}"
         )
     os.environ["MKL_DYNAMIC"] = "FALSE"
     os.environ["XLA_FLAGS"] = xla_flags
@@ -180,12 +190,13 @@ def initializer(
 
     apply_num_threads(num_threads)
 
-    if logging_queue is not None:
-        worker_configurer(logging_queue, log_level)
-    else:
-        warnings.warn("No logging queue provided to initializer", stacklevel=1)
+    if logging_queue is None:
+        raise ValueError("Trying to initialize process without logging queue")
+
+    worker_configurer(logging_queue, log_level)
     logger.debug(
-        f'Configured process "{mp.current_process().name}" with {threadpool_info()}'
+        f'Configured process "{mp.current_process().name}" '
+        f"with {pformat(threadpool_info())}"
     )
 
     global global_lock
@@ -193,6 +204,8 @@ def initializer(
 
 
 class Pool(mp_pool.Pool):
+    _pool: list[mp.Process]
+
     def __init__(
         self,
         processes: int | None = None,
@@ -203,6 +216,16 @@ class Pool(mp_pool.Pool):
         super().__init__(
             processes, initializer, initargs, maxtasksperchild, multiprocessing_context
         )
+
+    @override
+    def terminate(self) -> None:
+        thread = Thread(target=super().terminate())
+        thread.start()
+        thread.join(timeout=10)
+        if thread.is_alive():
+            logger.debug("Pool did not terminate in time")
+            for p in self._pool:
+                soft_kill(p)
 
 
 class Action(Enum):
@@ -288,15 +311,22 @@ class Process(multiprocessing_context.Process):  # type: ignore
                 self.exception_queue.put_nowait(e)
 
 
-def soft_close(proc: Process) -> None:
+def soft_kill(proc: mp.Process) -> None:
     try:
-        proc.terminate()
+        proc.join(timeout=1)
+        if proc.is_alive():
+            proc.terminate()
         proc.join(timeout=1)
         if proc.is_alive():
             proc.kill()
         proc.join()
-    except (ValueError, AttributeError, AssertionError):
+    except (ValueError, AttributeError, AssertionError) as e:
+        logger.debug(f"Could not kill process {proc}", exc_info=e)
         pass
+
+
+def soft_close(proc: Process) -> None:
+    soft_kill(proc)
     try:
         proc.close()
     except ValueError:
@@ -440,14 +470,14 @@ def get_lock_name(lock: RLock) -> str:
     return lock._semlock.name
 
 
-def is_bfile(path: Path) -> bool:
+def is_bfile(path: UPath) -> bool:
     return all(
         (path.parent / f"{path.name}{suffix}").is_file()
         for suffix in {".bed", ".bim", ".fam"}
     )
 
 
-def is_pfile(path: Path) -> bool:
+def is_pfile(path: UPath) -> bool:
     return all(
         (path.parent / f"{path.name}{suffix}").is_file()
         for suffix in {".pgen", ".pvar", ".psam"}

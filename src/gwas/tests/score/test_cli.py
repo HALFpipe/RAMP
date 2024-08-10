@@ -1,10 +1,9 @@
-from pathlib import Path
 from shutil import copyfile
 from typing import Mapping
 
 import numpy as np
 import pandas as pd
-from gwas.compression.pipe import cache_suffix
+from gwas.compression.cache import cache_suffix
 from gwas.eig.base import Eigendecomposition
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
@@ -14,6 +13,7 @@ from gwas.score.command import GwasCommand
 from gwas.score.job import SummaryCollection
 from gwas.vcf.base import VCFFile
 from pytest import FixtureRequest
+from upath import UPath
 
 from ..conftest import chromosomes
 from ..utils import assert_both_close, check_bias
@@ -21,11 +21,11 @@ from .conftest import RmwScore
 
 
 def test_run(
-    tmp_path: Path,
+    tmp_path: UPath,
     sw: SharedWorkspace,
-    vcf_paths_by_chromosome: Mapping[int | str, Path],
-    tri_paths_by_chromosome: Mapping[str | int, Path],
-    cache_path: Path,
+    vcf_paths_by_chromosome: Mapping[int | str, UPath],
+    tri_paths_by_chromosome: Mapping[str | int, UPath],
+    cache_path: UPath,
     variable_collections: list[VariableCollection],
     eigendecompositions: list[Eigendecomposition],
     null_model_collections: list[NullModelCollection],

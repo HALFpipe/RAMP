@@ -50,6 +50,20 @@ setup(
                 include_dirs=[],
                 libraries=[],
             ),
+            Extension(
+                "gwas.compression.arr._blosc2_get_orthogonal_selection",
+                [
+                    "src/gwas/compression/arr/_blosc2_get_orthogonal_selection.pyx",
+                ],
+                define_macros=[
+                    ("NPY_NO_DEPRECATED_API", None),
+                    ("NDEBUG", None),
+                ],
+                include_dirs=[np.get_include()],
+                libraries=[
+                    "blosc2",
+                ],
+            ),
         ]
     )
     + [

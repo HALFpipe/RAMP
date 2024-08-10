@@ -23,7 +23,7 @@ EOF
 ./waf install --verbose
 
 pushd "${PREFIX}/bin" || exit
-for i in *_v${PKG_VERSION}; do
+for i in *_v"${PKG_VERSION}"; do
     ln -s "${i}" "$(basename "${i}" "_v${PKG_VERSION}")"
 done
 popd || exit

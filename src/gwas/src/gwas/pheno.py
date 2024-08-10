@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 from functools import reduce
-from pathlib import Path
 from typing import Self
 
 import numpy as np
 import pandas as pd
 from numpy import typing as npt
+from upath import UPath
 
 from .compression.arr.base import (
     CompressionMethod,
@@ -21,7 +21,7 @@ def combine(data_frames: list[pd.DataFrame]) -> pd.DataFrame:
 
 
 def read_and_combine(
-    paths: list[Path],
+    paths: list[UPath],
 ) -> tuple[list[str], list[str], npt.NDArray[np.float64]]:
     import pandas as pd
 
@@ -249,6 +249,7 @@ class VariableCollection:
         covariates: npt.NDArray[np.float64],
         sw: SharedWorkspace,
         missing_value_strategy: str = "complete_samples",
+        **kwargs,
     ) -> Self:
         # Add intercept if not present.
         first_column = covariates[:, 0, np.newaxis]
@@ -285,13 +286,14 @@ class VariableCollection:
             SharedArray.from_numpy(phenotypes, sw, prefix="phenotypes"),
             covariate_names,
             SharedArray.from_numpy(covariates, sw, prefix="covariates"),
+            **kwargs,
         )
 
     @classmethod
     def from_txt(
         cls,
-        phenotype_paths: list[Path],
-        covariate_paths: list[Path],
+        phenotype_paths: list[UPath],
+        covariate_paths: list[UPath],
         sw: SharedWorkspace,
         samples: list[str] | None = None,
         **kwargs: str,
@@ -344,7 +346,7 @@ class VariableCollection:
         )
 
     def covariance_to_txt(
-        self, path: Path, compression_method: CompressionMethod
+        self, path: UPath, compression_method: CompressionMethod, num_threads: int
     ) -> None:
         path = path.with_suffix(compression_method.suffix)
         if path.is_file():
@@ -367,10 +369,12 @@ class VariableCollection:
             covariance.shape,
             covariance.dtype,
             compression_method,
+            num_threads=num_threads,
         )
+        data_frame = pd.DataFrame(dict(variable=names))
         with file_array:
-            file_array.set_axis_metadata(0, pd.Series(names))
-            file_array.set_axis_metadata(1, pd.Series(names))
+            file_array.set_axis_metadata(0, data_frame)
+            file_array.set_axis_metadata(1, names)
             file_array[:, :] = covariance
 
 

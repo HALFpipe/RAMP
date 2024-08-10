@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 from functools import partial
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
+from upath import UPath
 
 from ..compression.arr.base import FileArray, FileArrayReader
 from ..log import logger
@@ -28,7 +28,7 @@ class Phenotype:
 
 
 def get_chromosome_metadata(
-    input_directory: Path, chromosome: int | str
+    input_directory: UPath, chromosome: int | str, num_threads: int
 ) -> tuple[ScoreFile, pd.DataFrame, list[str]] | None:
     score_path = input_directory / f"chr{chromosome}.score.txt.zst"
     if not score_path.exists():
@@ -38,10 +38,10 @@ def get_chromosome_metadata(
         else:
             raise ValueError(message)
 
-    array_proxy = FileArray.from_file(score_path, np.float64)
-    row_metadata, column_metadata = array_proxy.axis_metadata
+    array_proxy = FileArray.from_file(score_path, np.float64, num_threads)
+    row_metadata, column_names = array_proxy.row_metadata, array_proxy.column_names
 
-    if row_metadata is None or column_metadata is None:
+    if row_metadata is None or column_names is None:
         message = f"Missing axis metadata for chromosome {chromosome}"
         if chromosome == "X":
             logger.warning(message)
@@ -50,18 +50,17 @@ def get_chromosome_metadata(
             raise ValueError(message)
 
     chromosome_variant_metadata = pd.DataFrame(row_metadata)
-    chromosome_column_names: list[str] = [str(p) for p in column_metadata]
     score_file = ScoreFile(
         chromosome=chromosome,
         reader=array_proxy,
         variant_count=len(chromosome_variant_metadata.index),
     )
 
-    return score_file, chromosome_variant_metadata, chromosome_column_names
+    return score_file, chromosome_variant_metadata, column_names
 
 
 def get_metadata(
-    input_directory: Path, num_threads: int = 1
+    input_directory: UPath, num_threads: int = 1
 ) -> tuple[list[str], list[ScoreFile], pd.DataFrame]:
     score_files: list[ScoreFile] = []
     column_names: list[str] | None = None
@@ -98,7 +97,7 @@ def get_metadata(
 
 
 def get_variable_collection_names(
-    input_directory: Path,
+    input_directory: UPath,
 ) -> dict[str, str]:
     metadata_path = input_directory / "chr1.metadata.yaml.gz"
     if not metadata_path.exists():
@@ -113,7 +112,7 @@ def get_variable_collection_names(
 
 
 def resolve_score_files(
-    input_directory: Path, phenotype_names: list[str], num_threads: int = 1
+    input_directory: UPath, phenotype_names: list[str], num_threads: int = 1
 ) -> tuple[list[Phenotype], list[ScoreFile], pd.DataFrame]:
     """
     Verifies that each directory contains either all required .score.txt.zst files

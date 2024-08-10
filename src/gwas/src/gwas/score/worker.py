@@ -46,9 +46,9 @@ class TaskSyncCollection(SharedState):
 
 
 class Worker(Process):
-    def __init__(self, t: TaskSyncCollection, num_threads: int | None) -> None:
+    def __init__(self, t: TaskSyncCollection, num_threads: int | None, **kwargs) -> None:
         self.t = t
-        super().__init__(t.exception_queue, num_threads)
+        super().__init__(t.exception_queue, num_threads, **kwargs)
 
 
 class GenotypeReader(Worker):
@@ -57,6 +57,7 @@ class GenotypeReader(Worker):
         t: TaskSyncCollection,
         vcf_file: VCFFile,
         genotypes_array: SharedArray,
+        **kwargs,
     ) -> None:
         if genotypes_array.shape[0] != vcf_file.sample_count:
             raise ValueError(
@@ -66,7 +67,7 @@ class GenotypeReader(Worker):
         self.vcf_file = vcf_file
         self.genotypes_array = genotypes_array
 
-        super().__init__(t, num_threads=None)
+        super().__init__(t, num_threads=None, **kwargs)
 
     def func(self) -> None:
         variant_indices = self.vcf_file.variant_indices.copy()
@@ -113,6 +114,7 @@ class Calc(Worker):
         scaled_residuals_arrays: list[SharedArray],
         stat_array: SharedArray,
         num_threads: int,
+        **kwargs,
     ) -> None:
         self.genotypes_array = genotypes_array
         self.rotated_genotypes_array = rotated_genotypes_array
@@ -121,7 +123,7 @@ class Calc(Worker):
         self.scaled_residuals_arrays = scaled_residuals_arrays
         self.stat_array = stat_array
 
-        super().__init__(t, num_threads)
+        super().__init__(t, num_threads, **kwargs)
 
     def func(self) -> None:
         eigenvector_matrices = [
@@ -175,7 +177,7 @@ class Calc(Worker):
             )
 
             (_, phenotype_count, _) = self.stat_array.shape
-            stat = self.stat_array.to_numpy(shape=(2, phenotype_count, variant_count))
+            stat = self.stat_array.to_numpy(shape=(variant_count, 2 * phenotype_count))
 
             for i in range(job_count):
                 can_calc = self.t.can_calc[i]
@@ -225,8 +227,8 @@ class Calc(Worker):
                 can_calc.clear()
 
                 # Prepare arrays
-                u_stat = stat[0, phenotype_slice, :].transpose()
-                v_stat = stat[1, phenotype_slice, :].transpose()
+                u_stat = stat[:, 0::2][:, phenotype_slice]
+                v_stat = stat[:, 1::2][:, phenotype_slice]
 
                 # Calculate the score statistics
                 logger.debug(f"Calculating U statistic for phenotypes {phenotype_slice}")
@@ -246,18 +248,21 @@ class ScoreWriter(Worker):
     def __init__(
         self,
         t: TaskSyncCollection,
+        vcf_file: VCFFile,
         stat_array: SharedArray,
         stat_file_array: FileArrayWriter[np.float64],
         phenotype_offset: int,
         variant_offset: int,
+        **kwargs,
     ) -> None:
+        self.vcf_file = vcf_file
         self.stat_array = stat_array
         self.stat_file_array = stat_file_array
 
         self.phenotype_offset = phenotype_offset
         self.variant_offset = variant_offset
 
-        super().__init__(t, num_threads=None)
+        super().__init__(t, num_threads=None, **kwargs)
 
     def func(self) -> None:
         job_count = len(self.t.can_write)
@@ -267,6 +272,9 @@ class ScoreWriter(Worker):
         )
         variant_index = self.variant_offset
 
+        # Set row metadata
+        self.stat_file_array.set_axis_metadata(0, self.vcf_file.variants)
+
         with self.stat_file_array:
             while True:
                 logger.debug("Wait for the calculation to start")
@@ -274,7 +282,7 @@ class ScoreWriter(Worker):
                 if value is Action.EXIT:
                     break
                 elif not isinstance(value, int):
-                    raise ValueError("Expected an integer.")
+                    raise ValueError("Expected an integer")
                 variant_count = value
                 if variant_count == 0:
                     # Exit the process
@@ -291,18 +299,13 @@ class ScoreWriter(Worker):
                 # Write the data
                 variant_slice = slice(variant_index, variant_index + variant_count)
                 stat = self.stat_array.to_numpy(
-                    shape=(2, phenotype_count, variant_count)
+                    shape=(variant_count, 2 * phenotype_count)
                 )
                 logger.debug(
                     f"Writing variants {variant_slice} to {type(self.stat_file_array)} "
-                    f"with shape {stat.transpose().shape}"
+                    f"with shape {stat.shape}"
                 )
-                two_dimensional_stat = stat.transpose().reshape(
-                    (variant_count, 2 * phenotype_count)
-                )
-                self.stat_file_array[variant_slice, phenotype_slice] = (
-                    two_dimensional_stat
-                )
+                self.stat_file_array[variant_slice, phenotype_slice] = stat
 
                 # Allow the calculation to continue
                 for i in range(job_count):

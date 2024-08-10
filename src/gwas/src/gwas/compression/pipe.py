@@ -1,10 +1,10 @@
-import pickle
 from contextlib import AbstractContextManager
-from pathlib import Path
 from subprocess import PIPE, Popen
 from threading import Thread
 from types import TracebackType
-from typing import IO, Any, Generic, Mapping, Type, TypeVar
+from typing import IO, Generic, Mapping, Type, TypeVar
+
+from upath import UPath
 
 from ..log import logger
 from ..utils import unwrap_which
@@ -43,8 +43,8 @@ class StderrThread(Generic[T], Thread):
 
 
 class CompressedReader(AbstractContextManager[IO[T]]):
-    def __init__(self, file_path: Path | str, is_text: bool = True) -> None:
-        self.file_path: Path = Path(file_path)
+    def __init__(self, file_path: UPath | str, is_text: bool = True) -> None:
+        self.file_path: UPath = UPath(file_path)
         if not self.file_path.is_file():
             raise FileNotFoundError(self.file_path)
         self.is_text = is_text
@@ -110,7 +110,7 @@ class CompressedReader(AbstractContextManager[IO[T]]):
 
 
 class CompressedBytesReader(CompressedReader[bytes]):
-    def __init__(self, file_path: Path | str) -> None:
+    def __init__(self, file_path: UPath | str) -> None:
         super().__init__(file_path, is_text=False)
 
     def __enter__(self) -> IO[bytes]:
@@ -118,13 +118,15 @@ class CompressedBytesReader(CompressedReader[bytes]):
 
 
 class CompressedTextReader(CompressedReader[str]):
-    def __init__(self, file_path: Path | str) -> None:
+    def __init__(self, file_path: UPath | str) -> None:
         super().__init__(file_path, is_text=True)
 
     def open(self) -> IO[str]:
         if self.file_path.suffix not in decompress_commands:
             # File is not compressed
-            self.output_file_handle = self.file_path.open(mode="rt")
+            self.output_file_handle = self.file_path.open("r")
+            if self.output_file_handle is None:
+                raise IOError
             return self.output_file_handle
         return super().open()
 
@@ -156,12 +158,12 @@ def make_compress_command(
 class CompressedWriter(AbstractContextManager[IO[T]]):
     def __init__(
         self,
-        file_path: Path | str,
+        file_path: UPath | str,
         num_threads: int,
         is_text: bool = True,
         compression_level: int | None = None,
     ) -> None:
-        self.file_path: Path = Path(file_path)
+        self.file_path: UPath = UPath(file_path)
         self.is_text = is_text
         self.num_threads = num_threads
         self.compression_level = compression_level
@@ -238,7 +240,7 @@ class CompressedWriter(AbstractContextManager[IO[T]]):
 class CompressedBytesWriter(CompressedWriter[bytes]):
     def __init__(
         self,
-        file_path: Path | str,
+        file_path: UPath | str,
         num_threads: int,
         compression_level: int | None = None,
     ) -> None:
@@ -256,7 +258,7 @@ class CompressedBytesWriter(CompressedWriter[bytes]):
 class CompressedTextWriter(CompressedWriter[str]):
     def __init__(
         self,
-        file_path: Path | str,
+        file_path: UPath | str,
         num_threads: int,
         compression_level: int | None = None,
     ) -> None:
@@ -269,30 +271,8 @@ class CompressedTextWriter(CompressedWriter[str]):
 
     def open(self) -> IO[str]:
         if self.file_path.suffix in {".vcf", ".txt"}:
-            self.input_file_handle = self.file_path.open(mode="wt")
+            self.input_file_handle = self.file_path.open("w")
+            if self.input_file_handle is None:
+                raise IOError
             return self.input_file_handle
         return super().open()
-
-
-cache_suffix: str = ".pickle.zst"
-
-
-def load_from_cache(cache_path: Path, key: str) -> Any:
-    file_path = cache_path / f"{key}{cache_suffix}"
-    if not file_path.is_file():
-        logger.debug(f'Cache entry "{file_path}" not found')
-        return None
-    with CompressedBytesReader(file_path) as file_handle:
-        try:
-            return pickle.load(file_handle)
-        except (pickle.UnpicklingError, EOFError) as error:
-            logger.warning(f'Failed to load "{file_path}"', exc_info=error)
-            return None
-
-
-def save_to_cache(cache_path: Path, key: str, value: Any, num_threads: int) -> None:
-    cache_path.mkdir(parents=True, exist_ok=True)
-    with CompressedBytesWriter(
-        cache_path / f"{key}{cache_suffix}", num_threads
-    ) as file_handle:
-        pickle.dump(value, file_handle)

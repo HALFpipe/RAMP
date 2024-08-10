@@ -1,20 +1,21 @@
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 from numpy import typing as npt
+from upath import UPath
 
 from ..compression.arr._read_float import (
     create_vcf_float_reader,
     run_vcf_float_reader,
 )
+from ..mem.wkspace import SharedWorkspace
 from ..utils import chromosome_from_int
 from .base import VCFFile
 from .variant import Variant
 
 
 class CppVCFFile(VCFFile):
-    def __init__(self, file_path: Path | str) -> None:
+    def __init__(self, file_path: UPath | str, sw: SharedWorkspace) -> None:
         super().__init__(file_path)
 
         vcf_variants: list[Variant] = list()
@@ -29,7 +30,7 @@ class CppVCFFile(VCFFile):
                 len(self.columns),
                 self.metadata_column_indices,
             )
-        self.vcf_variants = self.make_data_frame(vcf_variants)
+        self.shared_vcf_variants = self.make_shared_data_frame(vcf_variants, sw)
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
 
         chromosome_int_set = set(self.vcf_variants["chromosome_int"])

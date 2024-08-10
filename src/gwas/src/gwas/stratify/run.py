@@ -1,12 +1,12 @@
 from argparse import Namespace
 from collections import defaultdict
 from itertools import product
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from numpy import typing as npt
+from upath import UPath
 
 from ..log import logger
 from ..pheno import read_and_combine
@@ -28,7 +28,7 @@ def write_table(
     data_frame.to_csv(f"{prefix}.tsv", **csv_kwargs)
 
 
-def stratify(arguments: Namespace, output_directory: Path) -> None:
+def stratify(arguments: Namespace, output_directory: UPath) -> None:
     sample_classes: dict[str, dict[str, set[SampleID]]] = defaultdict(
         lambda: defaultdict(set)
     )

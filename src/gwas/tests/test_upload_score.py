@@ -1,10 +1,10 @@
-from pathlib import Path
 from unittest import mock
 
 from gwas.upload_score.cli import run
+from upath import UPath
 
 
-def test_upload_score(tmp_path: Path) -> None:
+def test_upload_score(tmp_path: UPath) -> None:
     input_paths = [tmp_path / "chr1.metadata.yaml.gz", tmp_path / "chr1.score.b2array"]
     for path in input_paths:
         path.touch()
@@ -25,7 +25,7 @@ def test_upload_score(tmp_path: Path) -> None:
         assert paths == {str(p.name) for p in input_paths}
 
 
-def test_upload_score_multiple(tmp_path: Path) -> None:
+def test_upload_score_multiple(tmp_path: UPath) -> None:
     input_paths = [
         tmp_path / "a" / "a" / "a" / "chr1.metadata.yaml.gz",
         tmp_path / "a" / "a" / "a" / "chr1.score.b2array",

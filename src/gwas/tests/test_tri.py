@@ -1,5 +1,4 @@
 from multiprocessing import cpu_count
-from pathlib import Path
 from random import sample
 
 import numpy as np
@@ -9,6 +8,7 @@ from gwas.tri.base import Triangular, is_lower_triangular
 from gwas.tri.tsqr import scale
 from gwas.vcf.base import VCFFile
 from numpy import typing as npt
+from upath import UPath
 
 sample_size_label = "large"
 chromosome = 22
@@ -94,7 +94,7 @@ def test_tri(
 
 @pytest.mark.slow
 def test_tri_file(
-    tmp_path: Path,
+    tmp_path: UPath,
     numpy_tri: npt.NDArray[np.float64],
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,

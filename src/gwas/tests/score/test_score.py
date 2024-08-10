@@ -1,5 +1,4 @@
 from itertools import chain
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -13,10 +12,11 @@ from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection
 from gwas.score.calc import calc_u_stat, calc_v_stat
-from gwas.utils import make_sample_boolean_vectors
+from gwas.utils import global_lock, make_sample_boolean_vectors
 from gwas.vcf.base import VCFFile
 from matplotlib import pyplot as plt
 from numpy import typing as npt
+from upath import UPath
 
 from ..utils import check_bias
 from .conftest import RmwScore
@@ -46,9 +46,9 @@ def rotated_genotypes_arrays(
         eigendecompositions, sample_boolean_vectors, strict=True
     ):
         sample_count = eig.sample_count
-
-        name = SharedArray.get_name(sw, "rotated-genotypes")
-        rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
+        with global_lock:
+            name = SharedArray.get_name(sw, "rotated-genotypes")
+            rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
         request.addfinalizer(rotated_genotypes_array.free)
 
         mean = genotypes.mean(axis=0, where=sample_boolean_vector[:, np.newaxis])
@@ -165,7 +165,7 @@ def plot_stat(
     title: str,
     xlabel: str,
     ylabel: str,
-    path: Path,
+    path: UPath,
 ) -> None:
     # Capitalize first letter of labels
     title = title[0].upper() + title[1:]
@@ -211,7 +211,7 @@ def plot_stat(
 
 
 def test_score(
-    tmp_path: Path,
+    tmp_path: UPath,
     phenotype_index: int,
     null_model_collections: list[NullModelCollection],
     eigendecompositions: list[Eigendecomposition],

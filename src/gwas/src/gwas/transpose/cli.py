@@ -3,21 +3,21 @@ import sys
 from argparse import ArgumentParser, Namespace
 from contextlib import ExitStack
 from multiprocessing import cpu_count
-from pathlib import Path
 
 from tqdm.auto import tqdm
+from upath import UPath
 
 from ..compression.pipe import CompressedBytesReader, CompressedBytesWriter
 from ..log import logger, setup_logging
 
 
-def transpose(arguments: Namespace, output_directory: Path) -> None:
+def transpose(arguments: Namespace, output_directory: UPath) -> None:
     column_directory = output_directory / "transpose-columns"
     column_directory.mkdir(parents=True, exist_ok=True)
 
     columns: list[str] | None = None
-    column_file_paths: list[Path] | None = None
-    score_paths = [Path(score) for score in arguments.score]
+    column_file_paths: list[UPath] | None = None
+    score_paths = [UPath(score) for score in arguments.score]
     with ExitStack() as stack:
         compressed_text_readers = [
             stack.enter_context(CompressedBytesReader(score_path))
@@ -77,9 +77,9 @@ def parse_arguments(argv: list[str]) -> Namespace:
 def main() -> None:
     arguments = parse_arguments(sys.argv[1:])
 
-    output_directory = Path.cwd()
+    output_directory = UPath.cwd()
     if arguments.output_directory is not None:
-        output_directory = Path(arguments.output_directory)
+        output_directory = UPath(arguments.output_directory)
 
     setup_logging(level=arguments.log_level, path=output_directory)
 

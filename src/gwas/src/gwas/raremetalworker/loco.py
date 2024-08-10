@@ -1,6 +1,7 @@
-from pathlib import Path
 from subprocess import check_call
 from typing import NamedTuple
+
+from upath import UPath
 
 from ..defaults import (
     default_kinship_minor_allele_frequency_cutoff,
@@ -12,13 +13,13 @@ from .ped import write_dummy_ped_and_dat_files
 
 class RaremetalworkerKinshipCommand(NamedTuple):
     command: list[str]
-    kinship_path: Path
+    kinship_path: UPath
 
 
 def make_loco_kinship_command(
     chromosome: int | str,
-    bfile_path: Path,
-    prefix: Path,
+    bfile_path: UPath,
+    prefix: UPath,
     minor_allele_frequency_cutoff: float = default_kinship_minor_allele_frequency_cutoff,
 ) -> RaremetalworkerKinshipCommand:
     output_directory = prefix / f"chr{chromosome}"

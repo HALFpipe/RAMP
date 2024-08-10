@@ -1,8 +1,10 @@
-from pathlib import Path
 from typing import IO
 
 import numpy as np
 from numpy import typing as npt
+from upath import UPath
+
+from gwas.mem.wkspace import SharedWorkspace
 
 from ..log import logger
 from ..utils import chromosome_from_int
@@ -11,7 +13,7 @@ from .variant import Variant
 
 
 class PyVCFFile(VCFFile):
-    def __init__(self, file_path: Path | str, samples: list[str] | None = None) -> None:
+    def __init__(self, file_path: UPath | str, sw: SharedWorkspace) -> None:
         super().__init__(file_path)
 
         # Read metadata.
@@ -42,7 +44,7 @@ class PyVCFFile(VCFFile):
                         format_str,
                     )
                 )
-        self.vcf_variants = self.make_data_frame(vcf_variants)
+        self.shared_vcf_variants = self.make_shared_data_frame(vcf_variants, sw)
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
 
         chromosome_int_set = set(self.vcf_variants["chromosome_int"])

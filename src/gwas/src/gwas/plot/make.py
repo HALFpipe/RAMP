@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from pathlib import Path
 
 import matplotlib
 import numpy as np
@@ -9,6 +8,7 @@ from matplotlib.collections import LineCollection
 from matplotlib.colors import BoundaryNorm, LinearSegmentedColormap
 from numpy import typing as npt
 from scipy import stats
+from upath import UPath
 
 from gwas.mem.arr import SharedArray
 
@@ -29,7 +29,7 @@ light_grey = "#888888"
 dark_grey = "#444444"
 
 
-def get_file_path(output_directory: Path, label: str) -> Path:
+def get_file_path(output_directory: UPath, label: str) -> UPath:
     output_directory.mkdir(parents=True, exist_ok=True)
     filename = f"{label}_plot.png"
     file_path = output_directory / filename
@@ -126,7 +126,7 @@ class PlotGenerator:
     p_value_array: SharedArray
     mask_array: SharedArray[np.bool_]
 
-    output_directory: Path
+    output_directory: UPath
 
     def __post_init__(self) -> None:
         assert self.p_value_array.shape[0] // 2 == self.mask_array.shape[0]

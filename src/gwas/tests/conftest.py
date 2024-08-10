@@ -1,19 +1,25 @@
 import os
 from multiprocessing import cpu_count
-from pathlib import Path
-from typing import Literal, Mapping
+from typing import Literal, Mapping, NamedTuple
 
+import numpy as np
+import pandas as pd
 import pytest
 from gwas.compression.convert import to_bgzip
+from gwas.compression.pipe import CompressedTextReader
 from gwas.log import add_handler, setup_logging_queue, teardown_logging
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri.calc import calc_tri
 from gwas.utils import apply_num_threads, chromosome_to_int, chromosomes_set
 from gwas.vcf.base import VCFFile, calc_vcf, load_vcf
+from gwas.vcf.variant import Variant
+from numpy import typing as npt
 from psutil import virtual_memory
 from pytest import FixtureRequest
+from tqdm.auto import tqdm
+from upath import UPath
 
-base_path: Path = Path(os.environ["DATA_PATH"])
+base_path: UPath = UPath(os.environ["DATA_PATH"])
 dataset: str = "opensnp"
 chromosomes = sorted(chromosomes_set(), key=chromosome_to_int)
 SampleSizeLabel = Literal["small", "medium", "large"]
@@ -36,7 +42,7 @@ def logging(request: FixtureRequest) -> None:
 
 
 @pytest.fixture(scope="session", params=[22, "X"])
-def chromosome(request: FixtureRequest) -> str | int:
+def chromosome(request: FixtureRequest) -> int | str:
     chromosome = request.param
     assert isinstance(chromosome, (int, str))
     return chromosome
@@ -48,7 +54,7 @@ def sw(request: FixtureRequest) -> SharedWorkspace:
         size_per_cpu = int(os.environ["SLURM_MEM_PER_CPU"]) << 20
         size = size_per_cpu * int(os.environ["SLURM_CPUS_ON_NODE"])
     else:
-        size = virtual_memory().available
+        size = virtual_memory().total
     size = int(size * (2 / 3))
     size = min(size, 48 * 2**30)
     sw = SharedWorkspace.create(size=size)
@@ -64,8 +70,8 @@ class DirectoryFactory:
         name: str | None = None,
         sample_size: int | None = None,
         sample_size_label: SampleSizeLabel | None = None,
-    ) -> Path:
-        p = Path(base_path / dataset / "pytest")
+    ) -> UPath:
+        p = UPath(base_path / dataset / "pytest")
 
         if sample_size_label is not None:
             if sample_size is not None:
@@ -99,7 +105,7 @@ def sample_size(sample_size_label: SampleSizeLabel) -> int:
 
 
 @pytest.fixture(scope="session")
-def vcf_paths_by_size_and_chromosome() -> dict[SampleSizeLabel, dict[int | str, Path]]:
+def vcf_paths_by_size_and_chromosome() -> dict[SampleSizeLabel, dict[int | str, UPath]]:
     return {
         sample_size_label: {
             c: (base_path / dataset / str(sample_size) / f"chr{c}.dose.vcf.zst")
@@ -110,7 +116,7 @@ def vcf_paths_by_size_and_chromosome() -> dict[SampleSizeLabel, dict[int | str, 
 
 
 @pytest.fixture(scope="session")
-def cache_path_by_size() -> Mapping[SampleSizeLabel, Path]:
+def cache_path_by_size() -> Mapping[SampleSizeLabel, UPath]:
     return {
         sample_size_label: DirectoryFactory.get(
             sample_size=sample_sizes[sample_size_label]
@@ -121,8 +127,10 @@ def cache_path_by_size() -> Mapping[SampleSizeLabel, Path]:
 
 @pytest.fixture(scope="session")
 def vcf_files_by_size_and_chromosome(
-    vcf_paths_by_size_and_chromosome: Mapping[SampleSizeLabel, dict[int | str, Path]],
-    cache_path_by_size: Mapping[SampleSizeLabel, Path],
+    vcf_paths_by_size_and_chromosome: Mapping[SampleSizeLabel, dict[int | str, UPath]],
+    cache_path_by_size: Mapping[SampleSizeLabel, UPath],
+    sw: SharedWorkspace,
+    request: pytest.FixtureRequest,
 ) -> Mapping[str, dict[int | str, VCFFile]]:
     vcf_files_by_size_and_chromosome: dict[str, dict[int | str, VCFFile]] = {
         sample_size_label: dict() for sample_size_label in sample_sizes.keys()
@@ -136,8 +144,10 @@ def vcf_files_by_size_and_chromosome(
             vcf_paths,
             cache_path=cache_path_by_size[sample_size_label],
             num_threads=cpu_count(),
+            sw=sw,
         )
         for vcf_file in vcf_files:
+            request.addfinalizer(vcf_file.free)
             vcf_files_by_size_and_chromosome[sample_size_label][vcf_file.chromosome] = (
                 vcf_file
             )
@@ -148,21 +158,23 @@ def vcf_files_by_size_and_chromosome(
 @pytest.fixture(scope="session")
 def cache_path(
     sample_size_label: SampleSizeLabel,
-    cache_path_by_size: Mapping[SampleSizeLabel, Path],
-) -> Path:
+    cache_path_by_size: Mapping[SampleSizeLabel, UPath],
+) -> UPath:
     return cache_path_by_size[sample_size_label]
 
 
 @pytest.fixture(scope="session")
 def vcf_paths_by_chromosome(
     sample_size_label: SampleSizeLabel,
-    vcf_paths_by_size_and_chromosome: Mapping[SampleSizeLabel, Mapping[int | str, Path]],
-) -> Mapping[int | str, Path]:
+    vcf_paths_by_size_and_chromosome: Mapping[
+        SampleSizeLabel, Mapping[int | str, UPath]
+    ],
+) -> Mapping[int | str, UPath]:
     return vcf_paths_by_size_and_chromosome[sample_size_label]
 
 
 @pytest.fixture(scope="session")
-def vcf_paths(vcf_paths_by_chromosome: Mapping[int | str, Path]) -> list[Path]:
+def vcf_paths(vcf_paths_by_chromosome: Mapping[int | str, UPath]) -> list[UPath]:
     return [vcf_paths_by_chromosome[c] for c in chromosomes]
 
 
@@ -182,7 +194,7 @@ def vcf_files_by_chromosome(vcf_files: list[VCFFile]) -> Mapping[int | str, VCFF
 
 
 @pytest.fixture(scope="session")
-def raw_path() -> Path:
+def raw_path() -> UPath:
     return base_path / dataset / "raw"
 
 
@@ -191,12 +203,12 @@ def tri_paths_by_size_and_chromosome(
     vcf_files_by_size_and_chromosome: Mapping[
         SampleSizeLabel, Mapping[int | str, VCFFile]
     ],
-    cache_path_by_size: Mapping[SampleSizeLabel, Path],
+    cache_path_by_size: Mapping[SampleSizeLabel, UPath],
     sw: SharedWorkspace,
-) -> Mapping[SampleSizeLabel, Mapping[str | int, Path]]:
+) -> Mapping[SampleSizeLabel, Mapping[str | int, UPath]]:
     allocation_names = set(sw.allocations.keys())
     tri_paths_by_size_and_chromosome: Mapping[
-        SampleSizeLabel, Mapping[str | int, Path]
+        SampleSizeLabel, Mapping[str | int, UPath]
     ] = {
         sample_size_label: calc_tri(
             chromosomes=chromosomes,
@@ -214,8 +226,10 @@ def tri_paths_by_size_and_chromosome(
 @pytest.fixture(scope="session")
 def tri_paths_by_chromosome(
     sample_size_label: SampleSizeLabel,
-    tri_paths_by_size_and_chromosome: Mapping[SampleSizeLabel, Mapping[str | int, Path]],
-) -> Mapping[str | int, Path]:
+    tri_paths_by_size_and_chromosome: Mapping[
+        SampleSizeLabel, Mapping[str | int, UPath]
+    ],
+) -> Mapping[str | int, UPath]:
     tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sample_size_label]
     assert len(tri_paths_by_chromosome) > 0
     return tri_paths_by_chromosome
@@ -230,16 +244,54 @@ def vcf_file(
 
 
 @pytest.fixture(scope="session")
+def vcf_path(
+    chromosome: int | str,
+    vcf_paths_by_chromosome: Mapping[int | str, UPath],
+) -> UPath:
+    vcf_path = vcf_paths_by_chromosome[chromosome]
+    return vcf_path
+
+
+@pytest.fixture(scope="session")
 def vcf_gz_file(
     vcf_file: VCFFile,
     sample_size_label: SampleSizeLabel,
-    cache_path_by_size: Mapping[SampleSizeLabel, Path],
+    cache_path_by_size: Mapping[SampleSizeLabel, UPath],
+    sw: SharedWorkspace,
     directory_factory: DirectoryFactory,
 ) -> VCFFile:
     tmp_path = directory_factory.get("bgzip", sample_size_label=sample_size_label)
     vcf_gz_path = to_bgzip(vcf_file.file_path, tmp_path, num_threads=cpu_count())
     vcf_file = load_vcf(
-        cache_path_by_size[sample_size_label], vcf_gz_path, num_threads=cpu_count()
+        cache_path_by_size[sample_size_label],
+        vcf_gz_path,
+        num_threads=cpu_count(),
+        sw=sw,
     )
     vcf_file.file_path = vcf_gz_path
     return vcf_file
+
+
+class ReadResult(NamedTuple):
+    variants: pd.DataFrame
+    dosages: npt.NDArray[np.float64]
+
+
+@pytest.fixture(scope="session")
+def numpy_read_result(vcf_path: UPath) -> ReadResult:
+    with CompressedTextReader(vcf_path) as file_handle:
+        array = np.loadtxt(file_handle, dtype=object)
+
+    vcf_variants: list[Variant] = list()
+    vcf_dosages = np.zeros(
+        (array.shape[0], array.shape[1] - len(VCFFile.mandatory_columns))
+    )
+    for i, row in enumerate(tqdm(array)):
+        variant = Variant.from_metadata_columns(*row[VCFFile.metadata_column_indices])
+        vcf_variants.append(variant)
+        genotype_fields = variant.format_str.split(":")
+        dosage_field_index = genotype_fields.index("DS")
+        for j, dosage in enumerate(row[len(VCFFile.mandatory_columns) :]):
+            vcf_dosages[i, j] = float(dosage.split(":")[dosage_field_index])
+
+    return ReadResult(VCFFile.make_data_frame(vcf_variants), vcf_dosages)

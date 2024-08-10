@@ -9,7 +9,7 @@ from ..eig.base import Eigendecomposition
 from ..eig.collection import EigendecompositionCollection
 from ..log import logger
 from ..mem.arr import SharedArray
-from ..utils import soft_close
+from ..utils import global_lock, soft_close
 from ..vcf.base import VCFFile
 from .worker import (
     Calc,
@@ -28,7 +28,6 @@ def calc_score(
     scaled_residuals_arrays: list[SharedArray],
     stat_file_array: FileArrayWriter[np.float64],
     phenotype_offset: int = 0,
-    variant_offset: int = 0,
     num_threads: int = 1,
 ) -> None:
     # Merge the eigenvector arrays so that we can use a single reader process.
@@ -63,15 +62,16 @@ def calc_score(
         f"need {per_variant_size} bytes per variant."
     )
     # Allocate the arrays in shared memory.
-    name = SharedArray.get_name(sw, "genotypes")
-    genotypes_array = sw.alloc(name, sample_count, variant_count)
-    name = SharedArray.get_name(sw, "rotated-genotypes")
-    rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
-    name = SharedArray.get_name(sw, "stat")
-    stat_array: SharedArray = sw.alloc(name, 2, phenotype_count, variant_count)
+    with global_lock:
+        name = SharedArray.get_name(sw, "genotypes")
+        genotypes_array = sw.alloc(name, sample_count, variant_count)
+        name = SharedArray.get_name(sw, "rotated-genotypes")
+        rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
+        name = SharedArray.get_name(sw, "stat")
+        stat_array: SharedArray = sw.alloc(name, variant_count, 2 * phenotype_count)
     # Create the worker processes.
     t = TaskSyncCollection(job_count=job_count)
-    reader_proc = GenotypeReader(t, vcf_file, genotypes_array)
+    reader_proc = GenotypeReader(t, vcf_file, genotypes_array, name="GenotypeReader")
     calc_proc = Calc(
         t,
         genotypes_array,
@@ -81,9 +81,16 @@ def calc_score(
         scaled_residuals_arrays,
         stat_array,
         num_threads,
+        name="Calc",
     )
     writer_proc = ScoreWriter(
-        t, stat_array, stat_file_array, phenotype_offset, variant_offset
+        t,
+        vcf_file,
+        stat_array,
+        stat_file_array,
+        phenotype_offset,
+        variant_offset=0,
+        name="ScoreWriter",
     )
     # Start the loop
     procs = [reader_proc, calc_proc, writer_proc]

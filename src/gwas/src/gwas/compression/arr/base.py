@@ -2,17 +2,47 @@ from abc import abstractmethod
 from contextlib import AbstractContextManager
 from dataclasses import KW_ONLY, dataclass, field
 from math import prod
-from pathlib import Path
-from typing import Any, Generic, Mapping, MutableSequence, Type, TypeAlias, TypeVar
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Generic,
+    Literal,
+    Mapping,
+    Type,
+    TypeVar,
+    overload,
+)
 
 import numpy as np
 import pandas as pd
 from numpy import typing as npt
+from upath import UPath
+
+if TYPE_CHECKING:
+    pass
 
 
 @dataclass(frozen=True, kw_only=True)
-class TextCompressionMethod:
+class CompressionMethod:
     suffix: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class TextCompressionMethod(CompressionMethod):
+    type: ClassVar[str] = "text"
+
+
+@dataclass(frozen=True, kw_only=True)
+class Blosc2CompressionMethod(CompressionMethod):
+    type: ClassVar[str] = "blosc2"
+    suffix: str = ".b2array"
+
+
+@dataclass(frozen=True, kw_only=True)
+class ParquetCompressionMethod(CompressionMethod):
+    type: ClassVar[str] = "parquet"
+    suffix: str = ".parquet"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -20,10 +50,8 @@ class ZstdTextCompressionMethod(TextCompressionMethod):
     level: int
 
 
-CompressionMethod: TypeAlias = TextCompressionMethod
-
 zstd_high_text = ZstdTextCompressionMethod(suffix=".txt.zst", level=19)
-default_compression_method = zstd_high_text
+default_compression_method: CompressionMethod = zstd_high_text
 compression_methods: Mapping[str, CompressionMethod] = dict(
     zstd_text=ZstdTextCompressionMethod(suffix=".txt.zst", level=11),
     zstd_high_text=zstd_high_text,
@@ -33,43 +61,44 @@ compression_methods: Mapping[str, CompressionMethod] = dict(
     bzip2_text=TextCompressionMethod(suffix=".txt.bz2"),
     lz4_text=TextCompressionMethod(suffix=".txt.lz4"),
     text=TextCompressionMethod(suffix=".txt"),
+    blosc2=Blosc2CompressionMethod(),
+    parquet=ParquetCompressionMethod(),
 )
 
 
-def compression_method_from_file(file_path: Path) -> CompressionMethod:
+def compression_method_from_file(file_path: UPath) -> CompressionMethod:
     for compression_method in compression_methods.values():
         if str(file_path).endswith(compression_method.suffix):
             return compression_method
     return default_compression_method
 
 
-AxisMetadata: TypeAlias = pd.DataFrame | pd.Series | None
 ScalarType = TypeVar("ScalarType", bound=np.generic)
 
 
-def ensure_suffix(file_path: Path, compression_method: CompressionMethod) -> Path:
+def ensure_suffix(file_path: UPath, compression_method: CompressionMethod) -> UPath:
     if not str(file_path).endswith(compression_method.suffix):
         name = f"{file_path.name}{compression_method.suffix}"
         file_path = file_path.parent / name
     return file_path
 
 
-@dataclass
+@dataclass(kw_only=True)
 class FileArray(Generic[ScalarType], AbstractContextManager["FileArray[ScalarType]"]):
     _: KW_ONLY
-    file_path: Path
+    file_path: UPath
 
-    shape: tuple[int, ...]
+    shape: tuple[int, int]
     dtype: Type[ScalarType]
     compression_method: CompressionMethod
 
-    axis_metadata: MutableSequence[AxisMetadata] = field(init=False)
+    column_names: list[str] | None = None
+    row_metadata: pd.DataFrame | None = None
     extra_metadata: dict[str, Any] = field(default_factory=dict)
 
-    file_paths: set[Path] = field(default_factory=set)
+    file_paths: set[UPath] = field(default_factory=set)
 
     def __post_init__(self) -> None:
-        self.axis_metadata = [None] * len(self.shape)
         self.file_paths.add(self.file_path)
         self.file_path = ensure_suffix(self.file_path, self.compression_method)
         self.file_paths.add(self.file_path)
@@ -84,53 +113,77 @@ class FileArray(Generic[ScalarType], AbstractContextManager["FileArray[ScalarTyp
 
     @property
     def metadata_column_count(self) -> int:
-        row_metadata = self.axis_metadata[0]
-        if row_metadata is None:
+        if self.row_metadata is None:
             return 0
-        elif isinstance(row_metadata, pd.Series):
-            return 1
-        else:
-            return len(row_metadata.columns)
+        return len(self.row_metadata.columns)
 
     @classmethod
     def create(
         cls,
-        file_path: Path,
+        file_path: UPath,
         shape: tuple[int, ...],
         dtype: Type[ScalarType],
         compression_method: CompressionMethod,
+        num_threads: int,
         **kwargs: Any,
     ) -> "FileArrayWriter[ScalarType]":
+        kwargs = dict(
+            file_path=file_path,
+            shape=shape,
+            dtype=dtype,
+            compression_method=compression_method,
+            num_threads=num_threads,
+            **kwargs,
+        )
         if isinstance(compression_method, TextCompressionMethod):
             from .text import TextFileArrayWriter
 
-            return TextFileArrayWriter(
-                file_path=file_path,
-                shape=shape,
-                dtype=dtype,
-                compression_method=compression_method,
-                **kwargs,
-            )
+            return TextFileArrayWriter(**kwargs)
+        elif isinstance(compression_method, Blosc2CompressionMethod):
+            from .blosc2 import Blosc2FileArrayWriter
+
+            return Blosc2FileArrayWriter(**kwargs)
+        elif isinstance(compression_method, ParquetCompressionMethod):
+            from .parquet import ParquetFileArrayWriter
+
+            return ParquetFileArrayWriter(**kwargs)
         else:
             raise NotImplementedError
 
     @classmethod
-    def from_file(cls, file_path: Path, dtype: Type[ScalarType]) -> "FileArrayReader":
+    def from_file(
+        cls, file_path: UPath, dtype: Type[ScalarType], num_threads: int
+    ) -> "FileArrayReader":
         compression_method = compression_method_from_file(file_path)
         if isinstance(compression_method, TextCompressionMethod):
             from .text import TextFileArrayReader
 
-            return TextFileArrayReader.from_file(file_path, dtype)
+            return TextFileArrayReader.from_file(file_path, dtype, num_threads)
+        elif isinstance(compression_method, Blosc2CompressionMethod):
+            from .blosc2 import Blosc2FileArrayReader
+
+            return Blosc2FileArrayReader.from_file(file_path, dtype, num_threads)
+        elif isinstance(compression_method, ParquetCompressionMethod):
+            from .parquet import ParquetFileArrayReader
+
+            return ParquetFileArrayReader.from_file(file_path, dtype, num_threads)
         else:
             raise NotImplementedError
 
 
-@dataclass
+@dataclass(kw_only=True)
 class FileArrayWriter(FileArray[ScalarType]):
     num_threads: int
 
-    def set_axis_metadata(self, axis: int, metadata: pd.DataFrame | pd.Series) -> None:
-        self.axis_metadata[axis] = metadata
+    @overload
+    def set_axis_metadata(self, axis: Literal[0], metadata: pd.DataFrame) -> None: ...
+    @overload
+    def set_axis_metadata(self, axis: Literal[1], metadata: list[str]) -> None: ...
+    def set_axis_metadata(self, axis, metadata):
+        if axis == 0:
+            self.row_metadata = metadata
+        elif axis == 1:
+            self.column_names = metadata
 
     @abstractmethod
     def __setitem__(
@@ -139,7 +192,7 @@ class FileArrayWriter(FileArray[ScalarType]):
         raise NotImplementedError
 
 
-@dataclass
+@dataclass(kw_only=True)
 class FileArrayReader(FileArray[ScalarType]):
     @abstractmethod
     def read_indices(

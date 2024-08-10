@@ -1,5 +1,4 @@
 from multiprocessing import cpu_count
-from pathlib import Path
 
 import pytest
 from gwas.testing.convert import (
@@ -9,6 +8,7 @@ from gwas.testing.convert import (
 )
 from gwas.testing.simulate import SimulationResult, simulate
 from gwas.vcf.base import VCFFile
+from upath import UPath
 
 from ..conftest import DirectoryFactory
 
@@ -24,7 +24,7 @@ missing_value_pattern_count: int = 3
 @pytest.fixture(scope="session")
 def pfile_paths(
     directory_factory: DirectoryFactory, sample_size: int, vcf_files: list[VCFFile]
-) -> list[Path]:
+) -> list[UPath]:
     tmp_path = directory_factory.get("pfile", sample_size)
 
     vcf_paths = [
@@ -37,8 +37,8 @@ def pfile_paths(
 
 @pytest.fixture(scope="session")
 def bfile_path(
-    directory_factory: DirectoryFactory, sample_size: int, pfile_paths: list[Path]
-) -> Path:
+    directory_factory: DirectoryFactory, sample_size: int, pfile_paths: list[UPath]
+) -> UPath:
     tmp_path = directory_factory.get("bfile", sample_size)
 
     bfile_path = tmp_path / "plink"
@@ -51,8 +51,8 @@ def bfile_path(
 def simulation(
     directory_factory: DirectoryFactory,
     sample_size: int,
-    bfile_path: Path,
-    pfile_paths: list[Path],
+    bfile_path: UPath,
+    pfile_paths: list[UPath],
 ) -> SimulationResult:
     """
     This needs a lot of memory, so we do this before we allocate the shared workspace

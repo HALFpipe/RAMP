@@ -2,12 +2,12 @@ from dataclasses import dataclass
 from functools import partial
 from math import sqrt
 from operator import attrgetter
-from pathlib import Path
 from typing import Self, Sequence
 
 import numpy as np
 from numpy import typing as npt
 from tqdm.auto import tqdm
+from upath import UPath
 
 from .._matrix_functions import dgesvdq
 from ..log import logger
@@ -17,6 +17,7 @@ from ..tri.base import Triangular
 from ..utils import (
     IterationOrder,
     chromosomes_set,
+    global_lock,
     make_pool_or_null_context,
 )
 
@@ -91,7 +92,7 @@ class Eigendecomposition(SharedArray):
 
         # Ensure that we have full rank
         if numrank < sample_count:
-            raise RuntimeError
+            raise ValueError(f"Matrix is not full rank: {numrank} < {sample_count}")
 
         # The contents of the input arrays have been destroyed
         # so we remove them from the workspace
@@ -109,8 +110,9 @@ class Eigendecomposition(SharedArray):
         sw: SharedWorkspace,
     ) -> Self:
         sample_count = len(samples)
-        name = cls.get_name(sw, chromosome=chromosome)
-        sw.alloc(name, sample_count, sample_count + 1)
+        with global_lock:
+            name = cls.get_name(sw, chromosome=chromosome)
+            sw.alloc(name, sample_count, sample_count + 1)
         return cls(
             name=name,
             samples=samples,
@@ -217,7 +219,7 @@ class Eigendecomposition(SharedArray):
     @classmethod
     def from_files(
         cls,
-        *tri_paths: Path,
+        *tri_paths: UPath,
         sw: SharedWorkspace,
         samples: list[str] | None = None,
         chromosome: int | str | None = None,
@@ -229,7 +231,7 @@ class Eigendecomposition(SharedArray):
 
 
 def load_tri_arrays(
-    tri_paths: Sequence[Path], sw: SharedWorkspace, num_threads: int = 1
+    tri_paths: Sequence[UPath], sw: SharedWorkspace, num_threads: int = 1
 ) -> list[Triangular]:
     load = partial(Triangular.from_file, sw=sw, dtype=np.float64)
     pool, iterator = make_pool_or_null_context(

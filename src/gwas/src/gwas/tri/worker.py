@@ -1,4 +1,4 @@
-from pathlib import Path
+from upath import UPath
 
 from ..log import logger
 from ..utils import Process
@@ -10,7 +10,7 @@ class TriWorker(Process):
     def __init__(
         self,
         tsqr: TallSkinnyQR,
-        tri_path: Path,
+        tri_path: UPath,
         t: TaskSyncCollection,
         num_threads: int,
         name: str | None = None,

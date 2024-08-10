@@ -1,6 +1,5 @@
 from collections import OrderedDict
 from dataclasses import dataclass, fields
-from pathlib import Path
 from typing import IO, Any, ClassVar
 
 import numpy as np
@@ -8,6 +7,7 @@ import pandas as pd
 import scipy
 from numpy import typing as npt
 from tqdm.auto import tqdm
+from upath import UPath
 
 from .. import __version__
 from ..compression.pipe import CompressedTextReader, CompressedTextWriter
@@ -172,7 +172,7 @@ class Scorefile:
     @classmethod
     def read_header(
         cls,
-        file_path: Path | str,
+        file_path: UPath | str,
     ) -> ScorefileHeader:
         header_dict: dict[str, Any] = dict(
             null_model_estimates=list(),
@@ -210,7 +210,7 @@ class Scorefile:
     @classmethod
     def read(
         cls,
-        file_path: Path | str,
+        file_path: UPath | str,
     ) -> tuple[ScorefileHeader, npt.NDArray[np.float64]]:
         line_count = 0
         with CompressedTextReader(file_path) as file:
@@ -242,7 +242,7 @@ class Scorefile:
     @classmethod
     def from_stat(
         cls,
-        file_path: Path | str,
+        file_path: UPath | str,
         header: ScorefileHeader,
         variants: pd.DataFrame,
         u_stat: npt.NDArray[np.float64],
@@ -257,7 +257,7 @@ class Scorefile:
     @classmethod
     def write(
         cls,
-        file_path: Path | str,
+        file_path: UPath | str,
         header: ScorefileHeader,
         array: npt.NDArray[np.float64],
         num_threads: int,

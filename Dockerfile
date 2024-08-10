@@ -44,22 +44,22 @@ RUN echo "int mkl_serv_intel_cpu_true() {return 1;}" | \
     gcc -x "c" -shared -fPIC -o "/opt/libfakeintel.so" -
 
 RUN --mount=source=recipes/dosage-convertor,target=/dosage-convertor \
-    conda build --no-anaconda-upload --numpy "1.26" "dosage-convertor"
+    conda build --no-anaconda-upload --numpy "2.0" "dosage-convertor"
 RUN --mount=source=recipes/qctool,target=/qctool \
-    conda build --no-anaconda-upload --numpy "1.26" --use-local "qctool"
+    conda build --no-anaconda-upload --numpy "2.0" --use-local "qctool"
 RUN --mount=source=recipes/raremetal,target=/raremetal \
     --mount=source=recipes/raremetal-debug,target=/raremetal-debug \
-    conda build --no-anaconda-upload --numpy "1.26" --use-local "raremetal" && \
-    conda build --no-anaconda-upload --numpy "1.26" --use-local "raremetal-debug"
+    conda build --no-anaconda-upload --numpy "2.0" --use-local "raremetal" && \
+    conda build --no-anaconda-upload --numpy "2.0" --use-local "raremetal-debug"
 RUN --mount=source=recipes/r-gmmat,target=/r-gmmat \
-    conda build --no-anaconda-upload --numpy "1.26" --use-local "r-gmmat"
-# RUN --mount=source=recipes/upload,target=/upload \
-#     conda build --no-anaconda-upload --numpy "1.26" --use-local "upload"
+    conda build --no-anaconda-upload --numpy "2.0" --use-local "r-gmmat"
+RUN --mount=source=recipes/upload,target=/upload \
+    conda build --no-anaconda-upload --numpy "2.0" --use-local "upload"
 # Mount .git folder too for setuptools_scm
 RUN --mount=source=recipes/gwas,target=/gwas-protocol/recipes/gwas \
     --mount=source=src/gwas,target=/gwas-protocol/src/gwas \
     --mount=source=.git,target=/gwas-protocol/.git \
-    conda build --no-anaconda-upload --numpy "1.26" --use-local "gwas-protocol/recipes/gwas"
+    conda build --no-anaconda-upload --numpy "2.0" --use-local "gwas-protocol/recipes/gwas"
 RUN conda build purge
 
 RUN conda index /opt/conda/conda-bld

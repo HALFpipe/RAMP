@@ -1,10 +1,12 @@
 import logging
 import multiprocessing as mp
-import os
 import sys
 from argparse import ArgumentParser, Namespace
-from pathlib import Path
 from typing import Literal
+
+from upath import UPath
+
+from ..utils import apply_num_threads
 
 
 def parse_arguments(argv: list[str]) -> Namespace:
@@ -76,7 +78,7 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
     from gwas.log import logger, setup_logging
     from gwas.mem.wkspace import SharedWorkspace
 
-    output_directory = Path(arguments.output_directory)
+    output_directory = UPath(arguments.output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
 
     setup_logging(level=arguments.log_level, path=output_directory)
@@ -85,8 +87,7 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
     if arguments.mem_gb is not None:
         size = int(arguments.mem_gb * 2**30)
 
-    os.environ["NUMEXPR_MAX_THREADS"] = str(arguments.num_threads)
-    os.environ["NUMEXPR_NUM_THREADS"] = str(arguments.num_threads)
+    apply_num_threads(arguments.num_threads)
 
     with SharedWorkspace.create(size=size) as sw:
         try:

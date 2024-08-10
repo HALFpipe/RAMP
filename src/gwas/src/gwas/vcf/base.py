@@ -1,16 +1,19 @@
 from abc import abstractmethod
 from enum import Enum, auto
 from functools import partial
-from pathlib import Path
 from typing import ClassVar
 
 import numpy as np
 import pandas as pd
 from numpy import typing as npt
 from tqdm.auto import tqdm
+from upath import UPath
 
-from ..compression.pipe import CompressedTextReader, load_from_cache, save_to_cache
+from ..compression.cache import load_from_cache, save_to_cache
+from ..compression.pipe import CompressedTextReader
 from ..log import logger
+from ..mem.data_frame import SharedDataFrame
+from ..mem.wkspace import SharedWorkspace
 from ..utils import (
     IterationOrder,
     chromosome_to_int,
@@ -101,14 +104,14 @@ class VCFFile(CompressedTextReader):
     samples: list[str]
     sample_indices: npt.NDArray[np.uint32]
 
-    vcf_variants: pd.DataFrame
+    shared_vcf_variants: SharedDataFrame
     variant_indices: npt.NDArray[np.uint32]
     allele_frequency_columns: list[str]
 
     minor_allele_frequency_cutoff: float
     r_squared_cutoff: float
 
-    def __init__(self, file_path: Path | str) -> None:
+    def __init__(self, file_path: UPath | str) -> None:
         super().__init__(file_path)
 
         self.allele_frequency_columns = [
@@ -131,12 +134,16 @@ class VCFFile(CompressedTextReader):
         self.set_samples(set(self.vcf_samples))
 
     @property
+    def vcf_variants(self) -> pd.DataFrame:
+        return self.shared_vcf_variants.to_pandas()
+
+    @property
     def sample_count(self) -> int:
         return len(self.samples)
 
     @property
     def vcf_variant_count(self) -> int:
-        return len(self.vcf_variants.index)
+        return self.shared_vcf_variants.shape[0]
 
     @property
     def variant_count(self) -> int:
@@ -184,8 +191,11 @@ class VCFFile(CompressedTextReader):
         )
         self.samples = [sample for sample in self.vcf_samples if sample in samples]
 
-    def save_to_cache(self, cache_path: Path, num_threads: int) -> None:
+    def save_to_cache(self, cache_path: UPath, num_threads: int) -> None:
         save_to_cache(cache_path, self.cache_key(self.file_path), self, num_threads)
+
+    def free(self) -> None:
+        self.shared_vcf_variants.free()
 
     @abstractmethod
     def read(
@@ -194,14 +204,16 @@ class VCFFile(CompressedTextReader):
     ) -> None: ...
 
     @staticmethod
-    def cache_key(vcf_path: Path) -> str:
+    def cache_key(vcf_path: UPath) -> str:
         stem = vcf_path.name.split(".")[0]
         cache_key = f"{stem}.vcf-metadata"
         return cache_key
 
     @classmethod
-    def load_from_cache(cls, cache_path: Path, vcf_path: Path) -> "VCFFile":
-        v = load_from_cache(cache_path, cls.cache_key(vcf_path))
+    def load_from_cache(
+        cls, cache_path: UPath, vcf_path: UPath, sw: SharedWorkspace
+    ) -> "VCFFile":
+        v = load_from_cache(cache_path, cls.cache_key(vcf_path), sw)
         if not isinstance(v, VCFFile):
             raise ValueError(f"Expected VCFFile, got {type(v)}: {v}")
         v.file_path = vcf_path
@@ -209,18 +221,19 @@ class VCFFile(CompressedTextReader):
 
     @staticmethod
     def from_path(
-        file_path: Path | str,
+        file_path: UPath | str,
+        sw: SharedWorkspace,
         samples: set[str] | None = None,
         engine: Engine = Engine.cpp,
     ) -> "VCFFile":
         if engine == Engine.python:
             from .python import PyVCFFile
 
-            vcf_file: VCFFile = PyVCFFile(file_path)
+            vcf_file: VCFFile = PyVCFFile(file_path, sw)
         elif engine == Engine.cpp:
             from .cpp import CppVCFFile
 
-            vcf_file = CppVCFFile(file_path)
+            vcf_file = CppVCFFile(file_path, sw)
         else:
             raise ValueError
 
@@ -228,6 +241,12 @@ class VCFFile(CompressedTextReader):
             vcf_file.set_samples(samples)
 
         return vcf_file
+
+    @classmethod
+    def make_shared_data_frame(
+        cls, vcf_variants: list[Variant], sw: SharedWorkspace
+    ) -> SharedDataFrame:
+        return SharedDataFrame.from_pandas(cls.make_data_frame(vcf_variants), sw)
 
     @staticmethod
     def make_data_frame(vcf_variants: list[Variant]) -> pd.DataFrame:
@@ -242,23 +261,25 @@ class VCFFile(CompressedTextReader):
             "format_str",
         ]:
             data_frame[column] = data_frame[column].astype("category")
-
         return data_frame
 
 
 def load_vcf(
-    cache_path: Path,
-    vcf_path: Path,
+    cache_path: UPath,
+    vcf_path: UPath,
     num_threads: int,
+    sw: SharedWorkspace,
     engine: Engine = Engine.cpp,
 ) -> VCFFile:
     vcf_file: VCFFile | None = None
     try:
-        vcf_file = VCFFile.load_from_cache(cache_path, vcf_path)
+        vcf_file = VCFFile.load_from_cache(cache_path, vcf_path, sw)
+        if not hasattr(vcf_file, "shared_vcf_variants"):
+            raise ValueError
     except ValueError:
         pass
     if vcf_file is None:
-        vcf_file = VCFFile.from_path(vcf_path, engine=engine)
+        vcf_file = VCFFile.from_path(vcf_path, sw, engine=engine)
         vcf_file.save_to_cache(cache_path, num_threads)
     else:
         logger.debug(f'Cached VCF file metadata for "{VCFFile.cache_key(vcf_path)}"')
@@ -266,15 +287,16 @@ def load_vcf(
 
 
 def calc_vcf(
-    vcf_paths: list[Path],
-    cache_path: Path,
-    num_threads: int = 1,
+    vcf_paths: list[UPath],
+    cache_path: UPath,
+    num_threads: int,
+    sw: SharedWorkspace,
     engine: Engine = Engine.cpp,
 ) -> list[VCFFile]:
     pool, iterator = make_pool_or_null_context(
         vcf_paths,
-        partial(load_vcf, cache_path, num_threads=1, engine=engine),
-        num_threads=num_threads,
+        partial(load_vcf, cache_path, num_threads=1, sw=sw, engine=engine),
+        num_threads=num_threads // 2,
         iteration_order=IterationOrder.UNORDERED,
     )
     with pool:

@@ -1,11 +1,11 @@
 from dataclasses import dataclass, fields
 from itertools import pairwise
-from pathlib import Path
 from typing import Any, ClassVar, Generic, Literal, Self, Type, TypeVar, overload
 
 import numpy as np
 import scipy
 from numpy import typing as npt
+from upath import UPath
 
 from .._matrix_functions import dimatcopy, set_tril
 from ..compression.arr.base import (
@@ -126,14 +126,15 @@ class SharedArray(Generic[ScalarType]):
     ) -> str:
         if prefix is None:
             prefix = cls.get_prefix(**kwargs)
-        allocations = sw.allocations
 
-        i = 0
-        while True:
-            name = f"{prefix}-{i}"
-            if name not in allocations:
-                return name
-            i += 1
+        with global_lock:
+            allocations = sw.allocations
+            i = 0
+            while True:
+                name = f"{prefix}-{i}"
+                if name not in allocations:
+                    return name
+                i += 1
 
     @classmethod
     def from_numpy(
@@ -142,10 +143,15 @@ class SharedArray(Generic[ScalarType]):
         sw: SharedWorkspace,
         **kwargs: Any,
     ) -> Self:
-        name = cls.get_name(sw, **kwargs)
-        sa = sw.alloc(name, *array.shape, dtype=array.dtype)
+        if array.dtype == np.object_:
+            raise ValueError("Cannot create SharedArray from object array")
 
-        sa.to_numpy()[:] = array
+        with global_lock:
+            name = cls.get_name(sw, **kwargs)
+            sa = sw.alloc(name, *array.shape, dtype=array.dtype)
+            a = sa.to_numpy()
+
+        a[:] = array
 
         cls_names = {field.name for field in fields(cls)}
         cls_kwargs = {name: v for name, v in kwargs.items() if name in cls_names}
@@ -154,12 +160,12 @@ class SharedArray(Generic[ScalarType]):
     @classmethod
     def from_file(
         cls,
-        file_path: Path,
+        file_path: UPath,
         sw: SharedWorkspace,
         dtype: Type[ScalarType],
         num_threads: int = 1,
     ) -> Self:
-        reader = FileArray.from_file(file_path, dtype)
+        reader = FileArray.from_file(file_path, dtype, num_threads)
         shape = reader.shape
 
         if reader.extra_metadata is not None:
@@ -167,7 +173,6 @@ class SharedArray(Generic[ScalarType]):
         else:
             kwargs = dict()
 
-        assert global_lock is not None
         with global_lock:
             name = cls.get_name(sw, **kwargs)
             sw.alloc(name, *shape, dtype=dtype)
@@ -179,7 +184,7 @@ class SharedArray(Generic[ScalarType]):
             reader.read((s, s), a)
         return array
 
-    def to_file(self, file_path: Path, num_threads: int = 1) -> Path:
+    def to_file(self, file_path: UPath, num_threads: int = 1) -> UPath:
         if file_path.is_dir():
             file_path = file_path / self.to_file_name()
 

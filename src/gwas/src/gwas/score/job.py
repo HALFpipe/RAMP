@@ -1,11 +1,10 @@
 from dataclasses import asdict, dataclass, field
 from itertools import chain
-from pathlib import Path
 from typing import Mapping, Sequence
 
 import numpy as np
-import pandas as pd
 import yaml
+from upath import UPath
 
 from ..compression.arr.base import CompressionMethod, FileArray, FileArrayWriter
 from ..compression.pipe import CompressedTextWriter
@@ -26,9 +25,9 @@ from .run import calc_score
 class JobCollection:
     vcf_file: VCFFile
     chromosomes: Sequence[int | str]
-    tri_paths_by_chromosome: Mapping[int | str, Path]
+    tri_paths_by_chromosome: Mapping[int | str, UPath]
     null_model_method: str
-    output_directory: Path
+    output_directory: UPath
     compression_method: CompressionMethod
     num_threads: int
 
@@ -60,9 +59,7 @@ class JobCollection:
             for phenotype_name in vc.phenotype_names
             for stat in ["u", "v"]
         ]
-        self.stat_file_array.set_axis_metadata(1, pd.Series(phenotype_names))
-        # Set row metadata
-        self.stat_file_array.set_axis_metadata(0, self.vcf_file.variants)
+        self.stat_file_array.set_axis_metadata(1, phenotype_names)
         # Try to load an existing summary collection.
         chunks_path = self.file_path.with_suffix(".yaml.gz")
         if chunks_path.is_file():
@@ -175,5 +172,5 @@ class JobCollection:
         )
 
     @property
-    def file_path(self) -> Path:
+    def file_path(self) -> UPath:
         return self.output_directory / f"chr{self.chromosome}.score"

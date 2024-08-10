@@ -1,11 +1,10 @@
-from pathlib import Path
-
 import numpy as np
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
+from upath import UPath
 
 
-def test_sa(tmp_path: Path) -> None:
+def test_sa(tmp_path: UPath) -> None:
     sw = SharedWorkspace.create(size=2**30)
 
     shape = (5, 7)

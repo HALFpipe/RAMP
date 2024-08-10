@@ -1,31 +1,38 @@
-from pathlib import Path
 from subprocess import check_call
-from typing import NamedTuple, Sequence
+from typing import Sequence
 
 import numpy as np
-import pandas as pd
 import pytest
-from gwas.compression.pipe import CompressedTextReader
+from gwas.mem.wkspace import SharedWorkspace
 from gwas.testing.convert import convert_vcf_to_bgen
 from gwas.tools import plink2
 from gwas.vcf.base import Engine, VCFFile
-from gwas.vcf.variant import Variant
-from numpy import typing as npt
 from pytest_benchmark.fixture import BenchmarkFixture
-from tqdm.auto import tqdm
+from upath import UPath
 
-sample_size_label = "small"
-chromosome: int = 22
+from .conftest import ReadResult, SampleSizeLabel
+
 engines: Sequence[Engine] = list(Engine.__members__.values())
 
 
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 @pytest.mark.parametrize("engine", engines)
 def test_vcf_file(
     engine: Engine,
-    vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]],
+    chromosome: int | str,
+    sample_size_label: SampleSizeLabel,
+    sw: SharedWorkspace,
+    vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, UPath]],
+    request: pytest.FixtureRequest,
 ) -> None:
+    allocation_names = set(sw.allocations.keys())
+    new_allocation_names: set[str] = set()
+
     vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
-    vcf_file = VCFFile.from_path(vcf_path, engine=engine)
+    vcf_file = VCFFile.from_path(vcf_path, sw, engine=engine)
+    new_allocation_names.update(vcf_file.shared_vcf_variants.allocation_names)
+    request.addfinalizer(vcf_file.free)
 
     array1 = np.zeros((4000, vcf_file.sample_count), dtype=float)
 
@@ -47,77 +54,58 @@ def test_vcf_file(
     assert np.allclose(array1[:1000, :], array2)
     assert np.allclose(array1[1000:2000, :], array3)
 
-
-@pytest.fixture(scope="session")
-def vcf_path(vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]]) -> Path:
-    vcf_path = vcf_paths_by_size_and_chromosome[sample_size_label][chromosome]
-    return vcf_path
+    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
 
 
-class ReadResult(NamedTuple):
-    variants: pd.DataFrame
-    dosages: npt.NDArray[np.float64]
-
-
-@pytest.fixture(scope="session")
-def numpy_read_result(vcf_path: Path) -> ReadResult:
-    with CompressedTextReader(vcf_path) as file_handle:
-        array = np.loadtxt(file_handle, dtype=object)
-
-    vcf_variants: list[Variant] = list()
-    vcf_dosages = np.zeros(
-        (array.shape[0], array.shape[1] - len(VCFFile.mandatory_columns))
-    )
-    for i, row in enumerate(tqdm(array)):
-        variant = Variant.from_metadata_columns(*row[VCFFile.metadata_column_indices])
-        vcf_variants.append(variant)
-        genotype_fields = variant.format_str.split(":")
-        dosage_field_index = genotype_fields.index("DS")
-        for j, dosage in enumerate(row[len(VCFFile.mandatory_columns) :]):
-            vcf_dosages[i, j] = float(dosage.split(":")[dosage_field_index])
-
-    return ReadResult(VCFFile.make_data_frame(vcf_variants), vcf_dosages)
-
-
-def vcf_read(engine: Engine, vcf_path: Path) -> ReadResult:
-    vcf_file = VCFFile.from_path(vcf_path, engine=engine)
+def vcf_read(engine: Engine, vcf_path: UPath, sw: SharedWorkspace) -> ReadResult:
+    vcf_file = VCFFile.from_path(vcf_path, sw, engine=engine)
     dosages = np.zeros((vcf_file.variant_count, vcf_file.sample_count))
     with vcf_file:
         vcf_file.read(dosages)
-
+    vcf_file.free()
     return ReadResult(vcf_file.vcf_variants, dosages)
 
 
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 @pytest.mark.parametrize("engine", engines)
 def test_read(
-    benchmark: BenchmarkFixture,
-    vcf_path: Path,
-    numpy_read_result: ReadResult,
     engine: Engine,
+    vcf_path: UPath,
+    sw: SharedWorkspace,
+    numpy_read_result: ReadResult,
+    benchmark: BenchmarkFixture,
 ) -> None:
-    read_result = benchmark(vcf_read, engine, vcf_path)
+    read_result = benchmark(vcf_read, engine, vcf_path, sw)
 
     assert np.all(numpy_read_result.variants == read_result.variants)
     assert np.allclose(numpy_read_result.dosages, read_result.dosages)
 
 
-def test_cpp(vcf_paths_by_size_and_chromosome: dict[str, dict[int | str, Path]]) -> None:
-    vcf_path = vcf_paths_by_size_and_chromosome["small"][chromosome]
-    vcf_file = VCFFile.from_path(vcf_path, engine=Engine.cpp)
-
-    # from pympler import muppy, summary
-
-    # all_objects = muppy.get_objects()
-    # rows = summary.summarize(all_objects)
-    # memtrace = "\n".join(summary.format_(rows))
-    # print(memtrace)
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
+def test_cpp(
+    vcf_path: UPath,
+    sw: SharedWorkspace,
+    request: pytest.FixtureRequest,
+) -> None:
+    vcf_file = VCFFile.from_path(vcf_path, sw, engine=Engine.cpp)
+    request.addfinalizer(vcf_file.free)
 
     dosages = np.zeros((vcf_file.variant_count, vcf_file.sample_count))
     with vcf_file:
         vcf_file.read(dosages)
 
 
-def test_converted(vcf_path: Path, tmp_path: Path) -> None:
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
+def test_converted(
+    vcf_path: UPath,
+    chromosome: int | str,
+    tmp_path: UPath,
+    sw: SharedWorkspace,
+    request: pytest.FixtureRequest,
+) -> None:
     converted_prefix = tmp_path / f"chr{chromosome}-converted"
     converted_bgen_path = convert_vcf_to_bgen(vcf_path, converted_prefix)
 
@@ -142,14 +130,18 @@ def test_converted(vcf_path: Path, tmp_path: Path) -> None:
 
     variant_indices = np.arange(4000, dtype=np.uint32)
 
-    vcf_file = VCFFile.from_path(vcf_path, engine=Engine.cpp)
+    vcf_file = VCFFile.from_path(vcf_path, sw, engine=Engine.cpp)
+    request.addfinalizer(vcf_file.free)
     array1 = np.zeros((4000, vcf_file.sample_count), dtype=float)
     with vcf_file:
         vcf_file.variant_indices = variant_indices
         vcf_file.read(array1)
 
-    vcf_file = VCFFile.from_path(converted_vcf_path, engine=Engine.cpp)
+    vcf_file = VCFFile.from_path(converted_vcf_path, sw, engine=Engine.cpp)
+    request.addfinalizer(vcf_file.free)
     array2 = np.zeros((4000, vcf_file.sample_count), dtype=float)
     with vcf_file:
         vcf_file.variant_indices = variant_indices
         vcf_file.read(array2)
+
+    np.testing.assert_allclose(array1, array2)

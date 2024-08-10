@@ -14,7 +14,7 @@ requirements:
   build:
     - "{{ compiler('c') }}"
     - "{{ compiler('cxx') }}"
-    - nodejs
+    - "nodejs<=21"
     - make
   host:
     - "nodejs<=21"

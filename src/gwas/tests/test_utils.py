@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 
 from gwas.log import (
     logger,
@@ -9,6 +8,7 @@ from gwas.log import (
 )
 from gwas.utils import Process
 from pytest import FixtureRequest, LogCaptureFixture
+from upath import UPath
 
 
 class LogProcess(Process):
@@ -17,7 +17,7 @@ class LogProcess(Process):
 
 
 def test_process(
-    caplog: LogCaptureFixture, request: FixtureRequest, tmp_path: Path
+    caplog: LogCaptureFixture, request: FixtureRequest, tmp_path: UPath
 ) -> None:
     caplog.set_level(logging.DEBUG)
 

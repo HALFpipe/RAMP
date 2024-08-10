@@ -2,7 +2,6 @@ import gzip
 from dataclasses import dataclass
 from functools import cache
 from multiprocessing import cpu_count
-from pathlib import Path
 from subprocess import check_call
 from typing import Any
 
@@ -27,9 +26,11 @@ from gwas.utils import (
     Pool,
     chromosome_to_int,
     chromosomes_set,
+    global_lock,
 )
 from gwas.vcf.base import VCFFile
 from numpy import typing as npt
+from upath import UPath
 
 from ..conftest import DirectoryFactory
 from .rmw_debug import rmw_debug
@@ -111,7 +112,7 @@ def variable_collections(
 def eigendecompositions(
     chromosome: int | str,
     other_chromosomes: list[str | int],
-    tri_paths_by_chromosome: dict[str | int, Path],
+    tri_paths_by_chromosome: dict[str | int, UPath],
     variable_collections: list[VariableCollection],
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
@@ -198,9 +199,9 @@ def raremetalworker_score_commands(
 @pytest.fixture(scope="session")
 def raremetalworker_scorefile_paths(
     raremetalworker_score_commands: list[RaremetalworkerScoreCommand],
-) -> list[Path]:
+) -> list[UPath]:
     commands: list[list[str]] = list()
-    scorefile_paths: list[Path] = list()
+    scorefile_paths: list[UPath] = list()
     for command, scorefile_path in raremetalworker_score_commands:
         scorefile_paths.append(scorefile_path)
         if not scorefile_path.is_file():
@@ -222,14 +223,14 @@ class RmwScore:
 
 
 @cache
-def read_scorefile(path: Path) -> tuple[ScorefileHeader, npt.NDArray[np.float64]]:
+def read_scorefile(path: UPath) -> tuple[ScorefileHeader, npt.NDArray[np.float64]]:
     header, array = Scorefile.read(path)
     return header, array
 
 
 @pytest.fixture(scope="session")
 def rmw_score(
-    raremetalworker_scorefile_paths: list[Path],
+    raremetalworker_scorefile_paths: list[UPath],
 ) -> RmwScore:
     headers = list()
     arrays = list()
@@ -259,9 +260,9 @@ def genotypes_array(
     variant_count = min(variant_count, vcf_file.variant_count)
 
     vcf_file.variant_indices = vcf_file.variant_indices[:variant_count]
-
-    name = SharedArray.get_name(sw, "genotypes")
-    genotypes_array = sw.alloc(name, sample_count, variant_count)
+    with global_lock:
+        name = SharedArray.get_name(sw, "genotypes")
+        genotypes_array = sw.alloc(name, sample_count, variant_count)
     request.addfinalizer(genotypes_array.free)
 
     genotypes = genotypes_array.to_numpy()

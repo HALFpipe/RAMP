@@ -1,13 +1,14 @@
 import logging
+import multiprocessing as mp
 import warnings
 from logging.handlers import QueueHandler, QueueListener
-from multiprocessing import get_context
 from multiprocessing.queues import Queue
-from pathlib import Path
 from typing import TextIO
 
+from upath import UPath
+
 logger = logging.getLogger("gwas")
-multiprocessing_context = get_context("forkserver")
+multiprocessing_context = mp.get_context("forkserver")
 multiprocessing_context.set_forkserver_preload(["gwas"])
 
 
@@ -36,7 +37,7 @@ def capture_warnings() -> None:
 
 
 def setup_logging(
-    level: str | int, path: Path | None = None, stream: bool = True
+    level: str | int, path: UPath | None = None, stream: bool = True
 ) -> None:
     setup_live_logging(level, path, stream)
     capture_warnings()
@@ -51,14 +52,14 @@ def add_handler(handler: logging.Handler) -> None:
 
 
 def setup_live_logging(
-    level: str | int = logging.DEBUG, path: Path | None = None, stream: bool = True
+    level: str | int = logging.DEBUG, path: UPath | None = None, stream: bool = True
 ) -> None:
     root = logging.getLogger()
     root.setLevel(level)
 
     formatter = logging.Formatter(
-        fmt="%(asctime)s [%(levelname)8s] [%(processName)14s] %(funcName)s: "
-        "%(message)s (%(filename)s:%(lineno)s)"
+        fmt="%(asctime)s [%(name)16s] [%(levelname)8s] [%(processName)20s] "
+        "%(funcName)s: %(message)s (%(filename)s:%(lineno)s)"
     )
 
     global handlers
@@ -68,10 +69,14 @@ def setup_live_logging(
         handlers.append(
             logging.FileHandler(path / "log.txt", "a", errors="backslashreplace")
         )
+
+    loggers: list[logging.Logger] = [root, mp.get_logger()]
     for handler in handlers:
         handler.setFormatter(formatter)
         handler.setLevel(level)
-        root.addHandler(handler)
+        for logger in loggers:
+            logger.setLevel(level)
+            logger.addHandler(handler)
 
 
 def setup_logging_queue() -> None:

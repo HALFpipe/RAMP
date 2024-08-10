@@ -1,10 +1,10 @@
-from pathlib import Path
 from shlex import join
 from subprocess import check_call
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import NamedTuple, Sequence
 
 from tqdm.auto import tqdm
+from upath import UPath
 
 from ..compression.pipe import CompressedTextReader
 from ..defaults import default_score_r_squared_cutoff
@@ -21,8 +21,8 @@ plink2_extra_arguments: Sequence[str] = [
 
 
 class ConvertVCFToPfileJob(NamedTuple):
-    vcf_path: Path
-    pfile_path: Path
+    vcf_path: UPath
+    pfile_path: UPath
 
 
 def convert_vcf_to_pfile(job: ConvertVCFToPfileJob) -> None:
@@ -30,7 +30,7 @@ def convert_vcf_to_pfile(job: ConvertVCFToPfileJob) -> None:
         CompressedTextReader(job.vcf_path) as file_handle,
         TemporaryDirectory() as temporary_directory_str,
     ):
-        temporary_directory_path = Path(temporary_directory_str)
+        temporary_directory_path = UPath(temporary_directory_str)
         gen_path = temporary_directory_path / "plink.gen.gz"
         sample_path = temporary_directory_path / "plink.sample"
         check_call(
@@ -64,11 +64,11 @@ def convert_vcf_to_pfile(job: ConvertVCFToPfileJob) -> None:
 
 
 def convert_vcf_to_pfiles(
-    vcf_paths: list[Path], output_directory: Path, num_threads: int
-) -> list[Path]:
+    vcf_paths: list[UPath], output_directory: UPath, num_threads: int
+) -> list[UPath]:
     output_directory.mkdir(parents=True, exist_ok=True)
 
-    pfiles: list[Path] = list()
+    pfiles: list[UPath] = list()
     jobs: list[ConvertVCFToPfileJob] = list()
     for vcf_path in vcf_paths:
         pfile_path = output_directory / vcf_path.name.split(".")[0]
@@ -95,11 +95,11 @@ def convert_vcf_to_pfiles(
     return pfiles
 
 
-def convert_vcf_to_bgen(vcf_path: Path, bgen_prefix: Path) -> Path:
+def convert_vcf_to_bgen(vcf_path: UPath, bgen_prefix: UPath) -> UPath:
     converted_bgen_path = bgen_prefix.with_suffix(".bgen")
     if not converted_bgen_path.is_file():
         with TemporaryDirectory() as temporary_directory_str:
-            temporary_directory = Path(temporary_directory_str)
+            temporary_directory = UPath(temporary_directory_str)
             check_call(
                 [
                     *plink2,
@@ -128,7 +128,7 @@ def convert_vcf_to_bgen(vcf_path: Path, bgen_prefix: Path) -> Path:
     return converted_bgen_path
 
 
-def merge_pfiles_to_bfile(pfile_paths: list[Path], bfile_path: Path) -> None:
+def merge_pfiles_to_bfile(pfile_paths: list[UPath], bfile_path: UPath) -> None:
     if is_bfile(bfile_path):
         return
 
@@ -136,7 +136,7 @@ def merge_pfiles_to_bfile(pfile_paths: list[Path], bfile_path: Path) -> None:
         file_handle.write("\n".join(map(str, pfile_paths)))
         file_handle.close()
 
-        pfile_list_path = Path(file_handle.name)
+        pfile_list_path = UPath(file_handle.name)
         check_call(
             [
                 *plink2,
@@ -159,7 +159,7 @@ def merge_pfiles_to_bfile(pfile_paths: list[Path], bfile_path: Path) -> None:
         )
 
 
-def get_pfile_variant_ids(pfile_paths: list[Path]) -> list[str]:
+def get_pfile_variant_ids(pfile_paths: list[UPath]) -> list[str]:
     variant_ids: list[str] = list()
     for pfile_path in pfile_paths:
         pvar_file = PVarFile(pfile_path.with_suffix(".pvar"))
@@ -169,8 +169,8 @@ def get_pfile_variant_ids(pfile_paths: list[Path]) -> list[str]:
 
 
 def merge_vcf_gz_files(
-    vcf_gz_paths: list[Path], bgzip_prefix: Path, num_threads: int
-) -> Path:
+    vcf_gz_paths: list[UPath], bgzip_prefix: UPath, num_threads: int
+) -> UPath:
     vcf_gz_path = bgzip_prefix / "dose.vcf.gz"
     if not vcf_gz_path.is_file():
         concat_command: list[str] = [

@@ -1,7 +1,7 @@
 from argparse import Namespace
-from pathlib import Path
 
 from tqdm.auto import tqdm
+from upath import UPath
 
 from ..mem.wkspace import SharedWorkspace
 from ..utils import IterationOrder, make_pool_or_null_context
@@ -10,12 +10,12 @@ from .make import PlotGenerator, get_file_path
 from .resolve import resolve_score_files
 
 
-def plot(arguments: Namespace, output_directory: Path, sw: SharedWorkspace) -> None:
-    input_directory = Path(arguments.input_directory)
+def plot(arguments: Namespace, output_directory: UPath, sw: SharedWorkspace) -> None:
+    input_directory = UPath(arguments.input_directory)
     num_threads = arguments.num_threads
 
     phenotype_names: list[str] = []
-    with Path(arguments.phenotype_list).open("rt") as file_handle:
+    with UPath(arguments.phenotype_list).open("r") as file_handle:
         for line in file_handle:
             phenotype_names.append(line.strip())
 

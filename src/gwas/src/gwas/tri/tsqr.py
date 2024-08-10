@@ -8,6 +8,7 @@ from numpy import typing as npt
 from ..log import logger
 from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
+from ..utils import global_lock
 from ..vcf.base import VCFFile
 from .base import TaskSyncCollection, Triangular
 
@@ -78,8 +79,9 @@ class TallSkinnyQR:
         sample_count = self.vcf_file.sample_count
         variant_count = self.vcf_file.variant_count
 
-        name = Triangular.get_name(self.sw, chromosome=self.vcf_file.chromosome)
-        shared_array = self.sw.alloc(name, variant_count, sample_count)
+        with global_lock:
+            name = Triangular.get_name(self.sw, chromosome=self.vcf_file.chromosome)
+            shared_array = self.sw.alloc(name, variant_count, sample_count)
 
         if self.variant_indices is not None:
             if self.variant_indices.size == 0:

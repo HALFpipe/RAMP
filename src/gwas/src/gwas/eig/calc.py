@@ -1,17 +1,17 @@
 from dataclasses import dataclass, field
 from multiprocessing import TimeoutError
 from multiprocessing.pool import ApplyResult
-from pathlib import Path
 
 import numpy as np
 from tqdm.auto import tqdm
+from upath import UPath
 
 from ..log import logger
 from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..tri.base import Triangular
 from ..tri.tsqr import TallSkinnyQR
-from ..utils import Pool, get_processes_and_num_threads
+from ..utils import Pool, get_processes_and_num_threads, global_lock
 from .base import Eigendecomposition, load_tri_arrays
 
 
@@ -27,6 +27,10 @@ def func(
     a.take(sample_indices, axis=0, out=b)
 
     eig.set_from_tri_array(tri_array)
+
+
+def error_callback(exception: BaseException) -> None:
+    raise exception
 
 
 @dataclass
@@ -110,13 +114,15 @@ class EigendecompositionsCalc:
                     eig = eigendecompositions[i]
 
                     try:
-                        tri_array = sw.alloc(
-                            Triangular.get_name(sw), len(samples), column_count
-                        )
+                        with global_lock:
+                            name = Triangular.get_name(sw)
+                            tri_array = sw.alloc(name, len(samples), column_count)
                         order.pop(0)  # Consume
                         logger.debug(f"Submitting task for eigendecomposition {i}")
                         self.results[i] = pool.apply_async(
-                            func, args=(eig, base_tri_array, tri_array)
+                            func,
+                            args=(eig, base_tri_array, tri_array),
+                            error_callback=error_callback,
                         )
                         continue  # We can run another task
                     except MemoryError:
@@ -136,7 +142,7 @@ class EigendecompositionsCalc:
 
 
 def calc_eigendecompositions(
-    *tri_paths: Path,
+    *tri_paths: UPath,
     sw: SharedWorkspace,
     samples_lists: list[list[str]],
     chromosome: int | str,
