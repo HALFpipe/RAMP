@@ -9,7 +9,7 @@ debugging_symbols_requested = "--with-debugging-symbols" in sys.argv
 if debugging_symbols_requested:
     sys.argv.remove("--with-debugging-symbols")
 
-extra_compile_args: list[str] = ["-O3", "-std=c++20", "-ggdb"]
+extra_compile_args: list[str] = ["-O3", "-ggdb"]
 extra_link_args: list[str] = ["-ggdb"]
 if debugging_symbols_requested:
     extra_compile_args.append("-Wall")
@@ -66,10 +66,13 @@ setup(
                     "src/gwas/vcf/_htslib.pyx",
                 ],
                 define_macros=[
+                    ("NPY_NO_DEPRECATED_API", None),
                     ("NDEBUG", None),
                 ],
-                include_dirs=[],
+                include_dirs=[np.get_include()],
                 libraries=["hts"],
+                extra_compile_args=extra_compile_args,
+                extra_link_args=extra_link_args,
             ),
         ]
     )
@@ -78,21 +81,21 @@ setup(
             "gwas.compression.arr._read_str",
             ["src/gwas/compression/arr/_read_str.cpp"],
             include_dirs=[np.get_include()],
-            extra_compile_args=extra_compile_args,
+            extra_compile_args=["-std=c++20", *extra_compile_args],
             extra_link_args=extra_link_args,
         ),
         Extension(
             "gwas.compression.arr._read_float",
             ["src/gwas/compression/arr/_read_float.cpp"],
             include_dirs=[np.get_include()],
-            extra_compile_args=extra_compile_args,
+            extra_compile_args=["-std=c++20", *extra_compile_args],
             extra_link_args=extra_link_args,
         ),
         Extension(
             "gwas.compression.arr._write_float",
             ["src/gwas/compression/arr/_write_float.cpp"],
             include_dirs=[np.get_include()],
-            extra_compile_args=extra_compile_args,
+            extra_compile_args=["-std=c++20", *extra_compile_args],
             extra_link_args=extra_link_args,
         ),
     ],

@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from contextlib import AbstractContextManager
 from enum import Enum, auto
 from functools import partial
 from typing import ClassVar
@@ -26,6 +27,7 @@ from .variant import Variant
 class Engine(Enum):
     python = auto()
     cpp = auto()
+    htslib = auto()
 
 
 variant_columns = [
@@ -66,7 +68,7 @@ def read_header(reader: CompressedTextReader) -> tuple[int, list[str], list[str]
     return header_length, columns, example_lines
 
 
-class VCFFile(CompressedTextReader):
+class VCFFile(AbstractContextManager):
     mandatory_columns: ClassVar[tuple[str, ...]] = (
         "CHROM",
         "POS",
@@ -98,6 +100,8 @@ class VCFFile(CompressedTextReader):
         dtype=np.uint32,
     )
 
+    file_path: UPath
+
     chromosome: int | str
 
     vcf_samples: list[str]
@@ -111,8 +115,8 @@ class VCFFile(CompressedTextReader):
     minor_allele_frequency_cutoff: float
     r_squared_cutoff: float
 
-    def __init__(self, file_path: UPath | str) -> None:
-        super().__init__(file_path)
+    def __init__(self, file_path: UPath) -> None:
+        self.file_path = file_path
 
         self.allele_frequency_columns = [
             "minor_allele_frequency",
@@ -121,17 +125,6 @@ class VCFFile(CompressedTextReader):
 
         self.minor_allele_frequency_cutoff = -np.inf
         self.r_squared_cutoff = -np.inf
-
-        # Read header information and example line.
-        self.header_length, self.columns, self.example_lines = read_header(self)
-
-        # Extract and check column names.
-        if tuple(self.columns[: len(self.mandatory_columns)]) != self.mandatory_columns:
-            raise ValueError
-
-        self.metadata_column_count = len(self.mandatory_columns)
-        self.vcf_samples: list[str] = self.columns[len(self.mandatory_columns) :]
-        self.set_samples(set(self.vcf_samples))
 
     @property
     def vcf_variants(self) -> pd.DataFrame:
@@ -221,7 +214,7 @@ class VCFFile(CompressedTextReader):
 
     @staticmethod
     def from_path(
-        file_path: UPath | str,
+        file_path: UPath,
         sw: SharedWorkspace,
         samples: set[str] | None = None,
         engine: Engine = Engine.cpp,
@@ -234,6 +227,10 @@ class VCFFile(CompressedTextReader):
             from .cpp import CppVCFFile
 
             vcf_file = CppVCFFile(file_path, sw)
+        elif engine == Engine.htslib:
+            from .htslib import HtslibVCFFile
+
+            vcf_file = HtslibVCFFile(file_path, sw)
         else:
             raise ValueError
 
@@ -252,6 +249,9 @@ class VCFFile(CompressedTextReader):
     def make_data_frame(vcf_variants: list[Variant]) -> pd.DataFrame:
         data_frame = pd.DataFrame(vcf_variants, columns=variant_columns)
 
+        if all(v.format_str is None for v in vcf_variants):
+            data_frame = data_frame.drop(columns=["format_str"])
+
         data_frame["position"] = data_frame["position"].astype(np.uint32)
 
         for column in [
@@ -260,8 +260,27 @@ class VCFFile(CompressedTextReader):
             "alternate_allele",
             "format_str",
         ]:
+            if column not in data_frame.columns:
+                continue
             data_frame[column] = data_frame[column].astype("category")
         return data_frame
+
+
+class VCFFileReader(VCFFile, CompressedTextReader):
+    def __init__(self, file_path: UPath) -> None:
+        super().__init__(file_path)
+        super(CompressedTextReader, self).__init__(file_path)
+
+        # Read header information and example line
+        self.header_length, self.columns, self.example_lines = read_header(self)
+
+        # Extract and check column names.
+        if tuple(self.columns[: len(self.mandatory_columns)]) != self.mandatory_columns:
+            raise ValueError
+
+        self.metadata_column_count = len(self.mandatory_columns)
+        self.vcf_samples: list[str] = self.columns[len(self.mandatory_columns) :]
+        self.set_samples(set(self.vcf_samples))
 
 
 def load_vcf(

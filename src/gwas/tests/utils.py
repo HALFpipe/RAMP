@@ -1,10 +1,12 @@
+from functools import partial
+
 import numpy as np
 from gwas.log import logger
 from jaxtyping import jaxtyped
 from numpy import typing as npt
 from typeguard import typechecked as typechecker
 
-check_types = jaxtyped(typechecker=typechecker)
+check_types = partial(jaxtyped, typechecker=typechecker)
 
 
 def regress(

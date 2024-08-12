@@ -10,12 +10,12 @@ from ..compression.arr._read_float import (
 )
 from ..mem.wkspace import SharedWorkspace
 from ..utils import chromosome_from_int
-from .base import VCFFile
+from .base import VCFFileReader
 from .variant import Variant
 
 
-class CppVCFFile(VCFFile):
-    def __init__(self, file_path: UPath | str, sw: SharedWorkspace) -> None:
+class CppVCFFile(VCFFileReader):
+    def __init__(self, file_path: UPath, sw: SharedWorkspace) -> None:
         super().__init__(file_path)
 
         vcf_variants: list[Variant] = list()

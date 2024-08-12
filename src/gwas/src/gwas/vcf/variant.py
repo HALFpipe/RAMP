@@ -16,7 +16,7 @@ class Variant(NamedTuple):
     minor_allele_frequency: float
     r_squared: float
 
-    format_str: str
+    format_str: str | None = None
 
     @classmethod
     def from_metadata_columns(

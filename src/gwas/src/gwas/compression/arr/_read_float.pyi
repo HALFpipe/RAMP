@@ -1,9 +1,8 @@
-from typing import NewType, TypeVar
+from typing import NewType
 
 import numpy as np
 from numpy import typing as npt
 
-T = TypeVar("T")
 FloatReader = NewType("FloatReader", object)
 
 def create_vcf_float_reader(

@@ -8,12 +8,12 @@ from gwas.mem.wkspace import SharedWorkspace
 
 from ..log import logger
 from ..utils import chromosome_from_int
-from .base import VCFFile
+from .base import VCFFileReader
 from .variant import Variant
 
 
-class PyVCFFile(VCFFile):
-    def __init__(self, file_path: UPath | str, sw: SharedWorkspace) -> None:
+class PyVCFFile(VCFFileReader):
+    def __init__(self, file_path: UPath, sw: SharedWorkspace) -> None:
         super().__init__(file_path)
 
         # Read metadata.

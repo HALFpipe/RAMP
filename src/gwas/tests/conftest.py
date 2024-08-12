@@ -253,22 +253,26 @@ def vcf_path(
 
 
 @pytest.fixture(scope="session")
+def vcf_gz_path(
+    vcf_path: UPath,
+    sample_size_label: SampleSizeLabel,
+    directory_factory: DirectoryFactory,
+) -> UPath:
+    tmp_path = directory_factory.get("bgzip", sample_size_label=sample_size_label)
+    vcf_gz_path = to_bgzip(vcf_path, tmp_path, num_threads=cpu_count())
+    return vcf_gz_path
+
+
+@pytest.fixture(scope="session")
 def vcf_gz_file(
-    vcf_file: VCFFile,
+    vcf_gz_path: UPath,
     sample_size_label: SampleSizeLabel,
     cache_path_by_size: Mapping[SampleSizeLabel, UPath],
     sw: SharedWorkspace,
-    directory_factory: DirectoryFactory,
 ) -> VCFFile:
-    tmp_path = directory_factory.get("bgzip", sample_size_label=sample_size_label)
-    vcf_gz_path = to_bgzip(vcf_file.file_path, tmp_path, num_threads=cpu_count())
-    vcf_file = load_vcf(
-        cache_path_by_size[sample_size_label],
-        vcf_gz_path,
-        num_threads=cpu_count(),
-        sw=sw,
-    )
-    vcf_file.file_path = vcf_gz_path
+    cache_path = cache_path_by_size[sample_size_label]
+    vcf_file = load_vcf(cache_path, vcf_gz_path, num_threads=cpu_count(), sw=sw)
+    vcf_file.file_path = vcf_gz_path  # Overwrite path in case the zstd one was cached
     return vcf_file
 
 
@@ -289,6 +293,8 @@ def numpy_read_result(vcf_path: UPath) -> ReadResult:
     for i, row in enumerate(tqdm(array)):
         variant = Variant.from_metadata_columns(*row[VCFFile.metadata_column_indices])
         vcf_variants.append(variant)
+        if variant.format_str is None:
+            raise ValueError("Format string is missing")
         genotype_fields = variant.format_str.split(":")
         dosage_field_index = genotype_fields.index("DS")
         for j, dosage in enumerate(row[len(VCFFile.mandatory_columns) :]):
