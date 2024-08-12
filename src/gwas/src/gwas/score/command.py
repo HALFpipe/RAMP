@@ -295,3 +295,7 @@ class GwasCommand:
         # Clean up
         for variable_collection in variable_collections:
             variable_collection.free()
+
+    def free(self):
+        for vcf_file in self.vcf_by_chromosome.values():
+            vcf_file.free()

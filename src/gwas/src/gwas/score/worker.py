@@ -176,7 +176,7 @@ class Calc(Worker):
                 shape=(sample_count, variant_count)
             )
 
-            (_, phenotype_count, _) = self.stat_array.shape
+            phenotype_count = self.stat_array.shape[1] // 2
             stat = self.stat_array.to_numpy(shape=(variant_count, 2 * phenotype_count))
 
             for i in range(job_count):
@@ -266,7 +266,7 @@ class ScoreWriter(Worker):
 
     def func(self) -> None:
         job_count = len(self.t.can_write)
-        (_, phenotype_count, _) = self.stat_array.shape
+        phenotype_count = self.stat_array.shape[1] // 2
         phenotype_slice = slice(
             2 * self.phenotype_offset, 2 * (self.phenotype_offset + phenotype_count)
         )

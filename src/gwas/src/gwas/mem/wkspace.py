@@ -216,8 +216,11 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             )
 
             allocations = self.allocations
-            del allocations[name]
-            self.allocations = allocations
+
+            if name in allocations:
+                del allocations[name]
+                self.allocations = allocations
+
         logger.debug(f'Freed allocation "{name}" ')
 
     def squash(self, names: set[str] | None = None) -> None:

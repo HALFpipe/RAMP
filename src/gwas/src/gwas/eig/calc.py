@@ -118,7 +118,10 @@ class EigendecompositionsCalc:
                             name = Triangular.get_name(sw)
                             tri_array = sw.alloc(name, len(samples), column_count)
                         order.pop(0)  # Consume
-                        logger.debug(f"Submitting task for eigendecomposition {i}")
+                        logger.debug(
+                            f"Submitting task for eigendecomposition {i} "
+                            f'with tri array "{name}"'
+                        )
                         self.results[i] = pool.apply_async(
                             func,
                             args=(eig, base_tri_array, tri_array),

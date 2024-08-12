@@ -104,6 +104,8 @@ def test_run(
         ]
     )
     command = GwasCommand(arguments, tmp_path, sw)
+    request.addfinalizer(command.free)
+
     command_variable_collections = command.setup_variable_collections()
     for a, b in zip(command_variable_collections, variable_collections, strict=True):
         assert a.phenotype_names == b.phenotype_names
@@ -114,8 +116,16 @@ def test_run(
 
         request.addfinalizer(a.free)
 
+    for v in command.vcf_by_chromosome.values():
+        new_allocation_names.update(v.shared_vcf_variants.allocation_names)
+
     command = GwasCommand(arguments, tmp_path, sw)
+    request.addfinalizer(command.free)
+
     command.run()
+
+    for v in command.vcf_by_chromosome.values():
+        new_allocation_names.update(v.shared_vcf_variants.allocation_names)
 
     sc = SummaryCollection.from_file(tmp_path / f"chr{chromosome}.metadata.yaml.gz")
     (summaries,) = sc.chunks.values()
