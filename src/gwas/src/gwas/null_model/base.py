@@ -4,11 +4,12 @@ from typing import ClassVar, Self
 import numpy as np
 from numpy import typing as npt
 
+from gwas.utils import get_global_lock
+
 from ..eig.base import Eigendecomposition
 from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..pheno import VariableCollection
-from ..utils import global_lock
 
 
 @dataclass
@@ -79,7 +80,7 @@ class NullModelCollection:
         (sample_count, phenotype_count) = variance.shape
         half_scaled_residuals = self.half_scaled_residuals.to_numpy()
 
-        with global_lock:
+        with get_global_lock():
             inverse_variance_array = self.sw.alloc(
                 SharedArray.get_name(self.sw, "inverse-variance"),
                 sample_count,
@@ -118,7 +119,7 @@ class NullModelCollection:
 
         sw = eig.sw
 
-        with global_lock:
+        with get_global_lock():
             name = SharedArray.get_name(sw, "regression-weights")
             regression_weights = sw.alloc(name, vc.phenotype_count, vc.covariate_count)
             name = SharedArray.get_name(sw, "standard-errors")

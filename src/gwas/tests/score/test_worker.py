@@ -7,7 +7,7 @@ from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.score.worker import Calc, TaskSyncCollection
-from gwas.utils import global_lock
+from gwas.utils import get_global_lock
 from gwas.vcf.base import VCFFile
 
 
@@ -29,7 +29,7 @@ def test_calc_worker(
     sample_count, variant_count = genotypes_array.shape
     phenotype_count = nm.phenotype_count
 
-    with global_lock:
+    with get_global_lock():
         name = SharedArray.get_name(sw, "test-rotated-genotypes")
         test_rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
         name = SharedArray.get_name(sw, "test-stat")

@@ -13,8 +13,8 @@ from ..tri.tsqr import TallSkinnyQR
 from ..utils import (
     Process,
     SharedState,
+    get_global_lock,
     get_processes_and_num_threads,
-    global_lock,
     wait,
 )
 from .base import Eigendecomposition, load_tri_arrays
@@ -150,7 +150,7 @@ class EigendecompositionsCalc:
                 eig = eigendecompositions[i]
 
                 try:
-                    with global_lock:
+                    with get_global_lock():
                         name = Triangular.get_name(sw)
                         tri_array = sw.alloc(name, len(samples), column_count)
                 except MemoryError:
@@ -158,7 +158,7 @@ class EigendecompositionsCalc:
 
                 order.pop(0)  # Consume
                 logger.debug(
-                    f"Submitting task for eigendecomposition {i} "
+                    f"Starting process for eigendecomposition {i} "
                     f'with tri array "{name}"'
                 )
 

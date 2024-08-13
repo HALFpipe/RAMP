@@ -26,7 +26,7 @@ from gwas.utils import (
     Pool,
     chromosome_to_int,
     chromosomes_set,
-    global_lock,
+    get_global_lock,
 )
 from gwas.vcf.base import VCFFile
 from numpy import typing as npt
@@ -260,7 +260,7 @@ def genotypes_array(
     variant_count = min(variant_count, vcf_file.variant_count)
 
     vcf_file.variant_indices = vcf_file.variant_indices[:variant_count]
-    with global_lock:
+    with get_global_lock():
         name = SharedArray.get_name(sw, "genotypes")
         genotypes_array = sw.alloc(name, sample_count, variant_count)
     request.addfinalizer(genotypes_array.free)

@@ -7,7 +7,11 @@ from tqdm import tqdm
 from .mem.arr import SharedArray
 from .mem.data_frame import SharedDataFrame
 from .pheno import VariableCollection
-from .utils import global_lock, make_pool_or_null_context, make_sample_boolean_vectors
+from .utils import (
+    get_global_lock,
+    make_pool_or_null_context,
+    make_sample_boolean_vectors,
+)
 from .vcf.base import VCFFile
 
 
@@ -84,7 +88,7 @@ def calc_mean(
     sample_boolean_array = make_sample_boolean_array(variable_collections, base_samples)
     _, missing_value_pattern_count = sample_boolean_array.shape
 
-    with global_lock:
+    with get_global_lock():
         name = SharedArray.get_name(sw, "alternate-allele-frequency")
         alternate_allele_frequency_array = sw.alloc(
             name, vcf_variant_count, missing_value_pattern_count

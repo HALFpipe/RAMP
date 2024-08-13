@@ -9,7 +9,7 @@ from ..eig.base import Eigendecomposition
 from ..eig.collection import EigendecompositionCollection
 from ..log import logger
 from ..mem.arr import SharedArray
-from ..utils import global_lock, soft_close
+from ..utils import get_global_lock, soft_close
 from ..vcf.base import VCFFile
 from .worker import (
     Calc,
@@ -62,7 +62,7 @@ def calc_score(
         f"need {per_variant_size} bytes per variant."
     )
     # Allocate the arrays in shared memory.
-    with global_lock:
+    with get_global_lock():
         name = SharedArray.get_name(sw, "genotypes")
         genotypes_array = sw.alloc(name, sample_count, variant_count)
         name = SharedArray.get_name(sw, "rotated-genotypes")

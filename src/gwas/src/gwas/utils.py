@@ -7,6 +7,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum, auto
 from logging import LogRecord
+from multiprocessing import parent_process
 from multiprocessing import pool as mp_pool
 from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event, RLock
@@ -45,7 +46,15 @@ except ImportError:
 else:
     cleanup_on_sigterm()
 
-global_lock: RLock = multiprocessing_context.RLock()
+_global_lock: RLock | None = None
+if parent_process() is None:
+    _global_lock = multiprocessing_context.RLock()
+
+
+def get_global_lock() -> RLock:
+    if _global_lock is None:
+        raise ValueError("Global lock not set")
+    return _global_lock
 
 
 def parse_chromosome(chromosome: str) -> int | str:
@@ -131,7 +140,7 @@ def get_initargs(num_threads: int | None = None) -> InitArgs:
         num_threads,
         logging_queue,
         logger.getEffectiveLevel(),
-        global_lock,
+        get_global_lock(),
     )
     logger.debug(f"Initializer arguments for child process are: {pformat(initargs)}")
     return initargs
@@ -199,8 +208,8 @@ def initializer(
         f"with {pformat(threadpool_info())}"
     )
 
-    global global_lock
-    global_lock = lock
+    global _global_lock
+    _global_lock = lock
 
 
 class Pool(mp_pool.Pool):

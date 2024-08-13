@@ -6,7 +6,7 @@ from numpy import typing as npt
 
 from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
-from ..utils import global_lock, make_sample_boolean_vectors
+from ..utils import get_global_lock, make_sample_boolean_vectors
 from ..vcf.base import VCFFile
 from .base import Eigendecomposition
 
@@ -61,7 +61,7 @@ class EigendecompositionCollection:
             sample_count = len(eig.samples)
 
             prefix = eig.get_prefix(chromosome=eig.chromosome)
-            with global_lock:
+            with get_global_lock():
                 name = SharedArray.get_name(sw, f"expanded-{prefix}")
                 array = sw.alloc(name, base_sample_count, sample_count)
 

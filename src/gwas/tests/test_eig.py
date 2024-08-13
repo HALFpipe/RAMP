@@ -20,7 +20,7 @@ from gwas.raremetalworker.ped import write_dummy_ped_and_dat_files
 from gwas.tools import bcftools, raremetalworker, tabix
 from gwas.tri.base import Triangular
 from gwas.tri.tsqr import scale
-from gwas.utils import global_lock
+from gwas.utils import get_global_lock
 from gwas.vcf.base import VCFFile
 from upath import UPath
 
@@ -48,7 +48,7 @@ def load_genotypes(
         )
         variant_count += vcf_file.variant_count
 
-    with global_lock:
+    with get_global_lock():
         name = SharedArray.get_name(sw, "genotypes")
         array = sw.alloc(name, variant_count, sample_count)
     a = array.to_numpy()

@@ -16,7 +16,7 @@ from numpy import typing as npt
 from psutil import virtual_memory
 
 from ..log import logger
-from ..utils import get_lock_name, global_lock
+from ..utils import get_global_lock, get_lock_name
 from ._os import c_memfd_create
 
 if TYPE_CHECKING:
@@ -106,7 +106,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             return SharedArray(name, self)
 
     def get_allocation_start(self, allocation_size: int, item_size: int) -> int:
-        with global_lock:
+        with get_global_lock():
             allocations = self.allocations
             allocations_list = sorted(allocations.values(), key=attrgetter("start"))
 
@@ -176,6 +176,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         else:
             numpy_dtype = np.dtype(dtype)
 
+        global_lock = get_global_lock()
         with global_lock:
             logger.debug(
                 f'Acquired lock "{global_lock}" with name '
@@ -209,6 +210,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         return array
 
     def free(self, name: str) -> None:
+        global_lock = get_global_lock()
         with global_lock:
             logger.debug(
                 f'Acquired lock "{global_lock}" with name '
@@ -235,7 +237,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             dtype=np.uint8,
         )
 
-        with global_lock:
+        with get_global_lock():
             allocations = self.allocations
 
             to_squash = list(allocations.keys())
@@ -280,6 +282,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
 
     @allocations.setter
     def allocations(self, allocations: dict[str, Allocation]) -> None:
+        global_lock = get_global_lock()
         with global_lock:
             logger.debug(
                 f"Storing {len(allocations)} allocations after locking "

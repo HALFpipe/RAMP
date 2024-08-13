@@ -12,7 +12,7 @@ from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection
 from gwas.score.calc import calc_u_stat, calc_v_stat
-from gwas.utils import global_lock, make_sample_boolean_vectors
+from gwas.utils import get_global_lock, make_sample_boolean_vectors
 from gwas.vcf.base import VCFFile
 from matplotlib import pyplot as plt
 from numpy import typing as npt
@@ -46,7 +46,7 @@ def rotated_genotypes_arrays(
         eigendecompositions, sample_boolean_vectors, strict=True
     ):
         sample_count = eig.sample_count
-        with global_lock:
+        with get_global_lock():
             name = SharedArray.get_name(sw, "rotated-genotypes")
             rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
         request.addfinalizer(rotated_genotypes_array.free)

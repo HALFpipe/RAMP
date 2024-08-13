@@ -17,7 +17,7 @@ from ..tri.base import Triangular
 from ..utils import (
     IterationOrder,
     chromosomes_set,
-    global_lock,
+    get_global_lock,
     make_pool_or_null_context,
 )
 
@@ -110,7 +110,7 @@ class Eigendecomposition(SharedArray):
         sw: SharedWorkspace,
     ) -> Self:
         sample_count = len(samples)
-        with global_lock:
+        with get_global_lock():
             name = cls.get_name(sw, chromosome=chromosome)
             sw.alloc(name, sample_count, sample_count + 1)
         return cls(

@@ -14,7 +14,7 @@ from ..compression.arr.base import (
     default_compression_method,
 )
 from ..log import logger
-from ..utils import global_lock, invert_pivot
+from ..utils import get_global_lock, invert_pivot
 from .wkspace import Allocation, SharedWorkspace
 
 ScalarType = TypeVar("ScalarType", bound=np.generic)
@@ -127,7 +127,7 @@ class SharedArray(Generic[ScalarType]):
         if prefix is None:
             prefix = cls.get_prefix(**kwargs)
 
-        with global_lock:
+        with get_global_lock():
             allocations = sw.allocations
             i = 0
             while True:
@@ -146,7 +146,7 @@ class SharedArray(Generic[ScalarType]):
         if array.dtype == np.object_:
             raise ValueError("Cannot create SharedArray from object array")
 
-        with global_lock:
+        with get_global_lock():
             name = cls.get_name(sw, **kwargs)
             sa = sw.alloc(name, *array.shape, dtype=array.dtype)
             a = sa.to_numpy()
@@ -173,7 +173,7 @@ class SharedArray(Generic[ScalarType]):
         else:
             kwargs = dict()
 
-        with global_lock:
+        with get_global_lock():
             name = cls.get_name(sw, **kwargs)
             sw.alloc(name, *shape, dtype=dtype)
             array = cls(name, sw, **kwargs)
@@ -248,7 +248,7 @@ class SharedArray(Generic[ScalarType]):
         None
 
         """
-        with global_lock:
+        with get_global_lock():
             allocations = self.sw.allocations
             a = allocations[self.name]
 
@@ -281,7 +281,7 @@ class SharedArray(Generic[ScalarType]):
             If the allocations are not contiguous or have different dtypes or
             incompatible shapes.
         """
-        with global_lock:
+        with get_global_lock():
             names = [a.name for a in arrays]
             sw = arrays[0].sw
 
@@ -348,7 +348,7 @@ class SharedArray(Generic[ScalarType]):
             return
 
         # update array shape
-        with global_lock:
+        with get_global_lock():
             allocations = self.sw.allocations
             a = allocations[self.name]
 
