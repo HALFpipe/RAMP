@@ -76,21 +76,20 @@ def load_genotypes(
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 @pytest.mark.parametrize("subset_proportion", [0.8, 1])
 def test_eig(
     subset_proportion: float,
-    vcf_files_by_size_and_chromosome: Mapping[str, Mapping[int | str, VCFFile]],
-    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, UPath]],
+    vcf_files_by_chromosome: Mapping[int | str, VCFFile],
+    tri_paths_by_chromosome: Mapping[str | int, UPath],
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
 ) -> None:
     allocation_names = set(sw.allocations.keys())
 
-    sample_size_label = "small"
     chromosomes: Sequence[int | str] = [7, 8, 9, 10]
 
-    vcf_files = list(vcf_files_by_size_and_chromosome[sample_size_label].values())
-    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sample_size_label]
+    vcf_files = list(vcf_files_by_chromosome.values())
     vcf_file = vcf_files[0]
     samples = vcf_file.samples
     if not np.isclose(subset_proportion, 1):
@@ -169,8 +168,8 @@ def test_eig(
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
 
 
-@pytest.mark.parametrize("chromosome", [22], indirect=True)
 @pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
 def test_eig_rmw(
     tmp_path: UPath,
     chromosome: int | str,
@@ -288,16 +287,14 @@ def test_eig_rmw(
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
 
 
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 def test_eig_mp(
-    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, UPath]],
+    tri_paths_by_chromosome: Mapping[str | int, UPath],
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
 ) -> None:
     allocation_names = set(sw.allocations.keys())
 
-    sample_size_label = "small"
-
-    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sample_size_label]
     tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes if c != "X"]
 
     eig_array = Eigendecomposition.from_files(*tri_paths, sw=sw, num_threads=2)
@@ -310,17 +307,15 @@ def test_eig_mp(
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
 
 
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 def test_eig_multiple(
-    tri_paths_by_size_and_chromosome: Mapping[str, Mapping[str | int, UPath]],
+    tri_paths_by_chromosome: Mapping[str | int, UPath],
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
 ) -> None:
     allocation_names = set(sw.allocations.keys())
     new_allocation_names: set[str] = set()
 
-    sample_size_label = "small"
-
-    tri_paths_by_chromosome = tri_paths_by_size_and_chromosome[sample_size_label]
     tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes if c != "X"]
 
     tri_array = Triangular.from_file(tri_paths[0], sw, np.float64)

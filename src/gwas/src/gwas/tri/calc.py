@@ -18,7 +18,7 @@ from gwas.utils import get_processes_and_num_threads
 
 from ..log import logger
 from ..mem.wkspace import SharedWorkspace
-from ..utils import IterationOrder, make_pool_or_null_context, soft_close
+from ..utils import IterationOrder, make_pool_or_null_context, soft_close, wait
 from ..vcf.base import VCFFile
 from .base import TaskSyncCollection, Triangular
 from .tsqr import TallSkinnyQR
@@ -339,10 +339,3 @@ def check_running(
             # Reset the event so that we don't start another task before
             # this one has initialized
             t.can_run.clear()
-
-
-def wait(running: list[TriWorker]) -> None:
-    for proc in running:
-        proc.join(timeout=1)
-        if proc.is_alive():
-            break

@@ -274,7 +274,7 @@ class SharedState:
                 pass
 
     def wait(self, event: Event) -> Action:
-        logger.debug(f'Waiting for queue "{self.get_name(event)}"')
+        logger.debug(f'Waiting for event "{self.get_name(event)}"')
         while True:
             if self.should_exit.is_set():
                 return Action.EXIT
@@ -309,6 +309,13 @@ class Process(multiprocessing_context.Process):  # type: ignore
             logger.exception(f'An error occurred in process "{self.name}"', exc_info=e)
             if self.exception_queue is not None:
                 self.exception_queue.put_nowait(e)
+
+
+def wait(running: list[Process]) -> None:
+    for proc in running:
+        proc.join(timeout=1)
+        if proc.is_alive():
+            break
 
 
 def soft_kill(proc: mp.Process) -> None:

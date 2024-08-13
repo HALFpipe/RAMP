@@ -1,6 +1,5 @@
-from dataclasses import dataclass, field
-from multiprocessing import TimeoutError
-from multiprocessing.pool import ApplyResult
+from dataclasses import dataclass
+from queue import Empty
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -11,26 +10,54 @@ from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..tri.base import Triangular
 from ..tri.tsqr import TallSkinnyQR
-from ..utils import Pool, get_processes_and_num_threads, global_lock
+from ..utils import (
+    Process,
+    SharedState,
+    get_processes_and_num_threads,
+    global_lock,
+    wait,
+)
 from .base import Eigendecomposition, load_tri_arrays
 
 
-def func(
-    eig: Eigendecomposition,
-    base_tri_array: Triangular,
-    tri_array: SharedArray,
-) -> None:
-    a = base_tri_array.to_numpy()
-    b = tri_array.to_numpy()
-
-    sample_indices = base_tri_array.get_sample_indices(eig.samples)
-    a.take(sample_indices, axis=0, out=b)
-
-    eig.set_from_tri_array(tri_array)
+@dataclass
+class TaskSyncCollection(SharedState):
+    pass
 
 
-def error_callback(exception: BaseException) -> None:
-    raise exception
+class EigendecompositionWorker(Process):
+    def __init__(
+        self,
+        eig: Eigendecomposition,
+        base_tri_array: Triangular,
+        tri_array: SharedArray,
+        t: TaskSyncCollection,
+        num_threads: int,
+        name: str | None = None,
+    ) -> None:
+        if name is None:
+            k = int(eig.name.split("-")[-1])
+            name = f"EigWorker-{k}"
+
+        super().__init__(t.exception_queue, num_threads=num_threads, name=name)
+
+        self.eig = eig
+        self.base_tri_array = base_tri_array
+        self.tri_array = tri_array
+
+    def func(self) -> None:
+        eig = self.eig
+        base_tri_array = self.base_tri_array
+        tri_array = self.tri_array
+
+        a = base_tri_array.to_numpy()
+        b = tri_array.to_numpy()
+
+        samples = eig.samples
+        sample_indices = base_tri_array.get_sample_indices(samples)
+        a.take(sample_indices, axis=0, out=b)
+
+        eig.set_from_tri_array(tri_array)
 
 
 @dataclass
@@ -41,30 +68,6 @@ class EigendecompositionsCalc:
     samples_lists: list[list[str]]
 
     num_threads: int = 1
-
-    results: dict[int, ApplyResult[None]] = field(init=False)
-
-    def __post_init__(self) -> None:
-        self.results = dict()
-
-    def wait(self) -> set[int]:
-        if len(self.results) == 0:
-            return set()
-        while True:
-            ready = {i for i, result in self.results.items() if result.ready()}
-            for i in ready:
-                logger.debug(f"Finished task for eigendecomposition {i}")
-                self.results.pop(i)
-            if ready:
-                return ready
-
-            # Wait for one second
-            for result in self.results.values():
-                try:
-                    result.wait(timeout=1)
-                except TimeoutError:
-                    pass
-                break
 
     def run(self) -> list[Eigendecomposition]:
         base_tri_array = self.base_tri_array
@@ -95,51 +98,79 @@ class EigendecompositionsCalc:
         )
 
         logger.debug(f"Running {count} eigendecompositions in {processes} processes")
-        pool = Pool(processes=processes, num_threads=num_threads_per_process)
 
-        progress_bar = tqdm(
+        # Start with largest eigendecomposition first
+        order = sorted(range(count), key=lambda i: -len(self.samples_lists[i]))
+
+        t = TaskSyncCollection()
+        running: list[EigendecompositionWorker] = list()
+        with tqdm(
             desc="decomposing kinship matrices",
             unit="eigendecompositions",
             total=count,
             leave=False,
-        )
-
-        # Start with largest eigendecomposition first
-        order = sorted(range(count), key=lambda i: -len(self.samples_lists[i]))
-        with pool, progress_bar:
+        ) as progress_bar:
             while True:
-                if len(order) > 0:  # There are more tasks to run
-                    i = order[0]
-                    samples = self.samples_lists[i]
-                    eig = eigendecompositions[i]
+                # Check if an error has occurred
+                try:
+                    raise t.exception_queue.get_nowait()
+                except Empty:
+                    pass
 
-                    try:
-                        with global_lock:
-                            name = Triangular.get_name(sw)
-                            tri_array = sw.alloc(name, len(samples), column_count)
-                        order.pop(0)  # Consume
-                        logger.debug(
-                            f"Submitting task for eigendecomposition {i} "
-                            f'with tri array "{name}"'
-                        )
-                        self.results[i] = pool.apply_async(
-                            func,
-                            args=(eig, base_tri_array, tri_array),
-                            error_callback=error_callback,
-                        )
-                        continue  # We can run another task
-                    except MemoryError:
-                        pass
+                # Sleep for one second if a process is running
+                wait(running)
 
-                # Check completion
-                finished = self.wait()
-                progress_bar.update(len(finished))
-                can_squash.update(eigendecompositions[i].name for i in finished)
-                sw.squash(can_squash)
+                # Update progress bar with the number of processes that have finished
+                progress_bar.update(sum(1 for proc in running if not proc.is_alive()))
+
+                # Update list of running processes
+                if any(not proc.is_alive() for proc in running):
+                    running = [proc for proc in running if proc.is_alive()]
+
+                    can_squash.update(
+                        proc.eig.name for proc in running if not proc.is_alive()
+                    )
+                    sw.squash(can_squash)
+
+                # Check if we can exit
+                if len(running) == 0 and len(order) == 0:
+                    # All tasks have been completed
+                    break
 
                 if len(order) == 0:
-                    if len(self.results) == 0:
-                        break
+                    # No more tasks to run
+                    continue
+
+                if len(running) >= processes:
+                    # We are at capacity
+                    continue
+
+                i = order[0]
+                samples = self.samples_lists[i]
+                eig = eigendecompositions[i]
+
+                try:
+                    with global_lock:
+                        name = Triangular.get_name(sw)
+                        tri_array = sw.alloc(name, len(samples), column_count)
+                except MemoryError:
+                    continue
+
+                order.pop(0)  # Consume
+                logger.debug(
+                    f"Submitting task for eigendecomposition {i} "
+                    f'with tri array "{name}"'
+                )
+
+                proc = EigendecompositionWorker(
+                    eig,
+                    base_tri_array,
+                    tri_array,
+                    t,
+                    num_threads=num_threads_per_process,
+                )
+                proc.start()
+                running.append(proc)
 
         return eigendecompositions
 
