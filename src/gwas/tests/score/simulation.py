@@ -1,5 +1,3 @@
-from multiprocessing import cpu_count
-
 import pytest
 from gwas.testing.convert import (
     convert_vcf_to_pfiles,
@@ -7,6 +5,7 @@ from gwas.testing.convert import (
     merge_pfiles_to_bfile,
 )
 from gwas.testing.simulate import SimulationResult, simulate
+from gwas.utils import cpu_count
 from gwas.vcf.base import VCFFile
 from upath import UPath
 

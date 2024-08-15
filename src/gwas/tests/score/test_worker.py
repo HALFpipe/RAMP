@@ -1,5 +1,3 @@
-from multiprocessing import cpu_count
-
 import pytest
 from gwas.eig.base import Eigendecomposition
 from gwas.eig.collection import EigendecompositionCollection
@@ -7,7 +5,7 @@ from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.score.worker import Calc, TaskSyncCollection
-from gwas.utils import get_global_lock
+from gwas.utils import cpu_count, get_global_lock
 from gwas.vcf.base import VCFFile
 
 
@@ -56,8 +54,8 @@ def test_calc_worker(
     for can_calc in t.can_calc:
         can_calc.set()
 
-    t.read_count_queue.put_nowait(int(variant_count))
-    t.read_count_queue.put_nowait(int(0))
+    t.read_count_queue.put(int(variant_count))
+    t.read_count_queue.put(int(0))
 
     calc_worker = Calc(
         t,

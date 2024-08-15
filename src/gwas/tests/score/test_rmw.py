@@ -1,4 +1,3 @@
-from multiprocessing import cpu_count
 from time import time
 
 import numpy as np
@@ -9,6 +8,7 @@ from gwas.compression.arr.base import (
 )
 from gwas.compression.pipe import CompressedTextReader
 from gwas.log import logger
+from gwas.utils import cpu_count
 from upath import UPath
 
 from .conftest import RmwScore

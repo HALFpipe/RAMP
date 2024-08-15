@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from multiprocessing.queues import Queue
+from multiprocessing.queues import SimpleQueue
 from multiprocessing.synchronize import Event
 
 import numpy as np
@@ -26,18 +26,22 @@ class TaskSyncCollection(SharedState):
     # Genotypes array can be overwritten by fresh data
     can_read: Event = field(default_factory=multiprocessing_context.Event)
     # Passes the number of variants that were read to the calculation process
-    read_count_queue: Queue[int] = field(default_factory=multiprocessing_context.Queue)
+    read_count_queue: SimpleQueue[int] = field(
+        default_factory=multiprocessing_context.SimpleQueue
+    )
     # Indicates that writing has finished and we can calculate
     can_calc: list[Event] = field(init=False)
     # Passes the number of variants that have finished calculating to the writer
     # process
-    calc_count_queue: Queue[int] = field(default_factory=multiprocessing_context.Queue)
+    calc_count_queue: SimpleQueue[int] = field(
+        default_factory=multiprocessing_context.SimpleQueue
+    )
     # Indicates that calculation has finished and we can write out the results
     can_write: list[Event] = field(init=False)
 
     # Passes the current progress to the main process
-    progress_queue: Queue[TaskProgress] = field(
-        default_factory=multiprocessing_context.Queue
+    progress_queue: SimpleQueue[TaskProgress] = field(
+        default_factory=multiprocessing_context.SimpleQueue
     )
 
     def __post_init__(self) -> None:
@@ -79,7 +83,7 @@ class GenotypeReader(Worker):
             while len(variant_indices) > 0:
                 # Make sure the genotypes array is not in use
                 action = self.t.wait(self.t.can_read)
-                if action is Action.EXIT:
+                if action is Action.Exit:
                     break
                 self.t.can_read.clear()
                 # Read the genotypes
@@ -90,14 +94,12 @@ class GenotypeReader(Worker):
                 logger.debug("Reading genotypes")
                 self.vcf_file.read(genotypes.transpose())
                 # Pass how many variants were read to the calculation process
-                self.t.read_count_queue.put_nowait(
-                    int(self.vcf_file.variant_indices.size)
-                )
+                self.t.read_count_queue.put(int(self.vcf_file.variant_indices.size))
                 # Remove already read variant indices
                 variant_indices = variant_indices[variant_count:]
                 if variant_indices.size == 0:
                     # Signal that we are done
-                    self.t.read_count_queue.put_nowait(0)
+                    self.t.read_count_queue.put(0)
                     # Exit the process
                     logger.debug("Genotype reader has finished and will exit")
                     break
@@ -161,12 +163,12 @@ class Calc(Worker):
         while True:
             logger.debug("Waiting for the reader to finish reading")
             value = self.t.get(self.t.read_count_queue)
-            if value is Action.EXIT:
+            if value is Action.Exit:
                 break
             elif not isinstance(value, int):
                 raise ValueError("Expected an integer.")
             variant_count = value
-            self.t.calc_count_queue.put_nowait(variant_count)
+            self.t.calc_count_queue.put(variant_count)
             if value == 0:
                 # Exit the process
                 return
@@ -222,7 +224,7 @@ class Calc(Worker):
 
                 logger.debug("Waiting for the writer to finish writing")
                 action = self.t.wait(can_calc)
-                if action is Action.EXIT:
+                if action is Action.Exit:
                     break
                 can_calc.clear()
 
@@ -279,7 +281,7 @@ class ScoreWriter(Worker):
             while True:
                 logger.debug("Wait for the calculation to start")
                 value = self.t.get(self.t.calc_count_queue)
-                if value is Action.EXIT:
+                if value is Action.Exit:
                     break
                 elif not isinstance(value, int):
                     raise ValueError("Expected an integer")
@@ -292,7 +294,7 @@ class ScoreWriter(Worker):
                 for i in range(job_count):
                     can_write = self.t.can_write[i]
                     action = self.t.wait(can_write)
-                    if action is Action.EXIT:
+                    if action is Action.Exit:
                         break
                     can_write.clear()
 
@@ -313,4 +315,4 @@ class ScoreWriter(Worker):
                     can_calc.set()
 
                 variant_index += variant_count
-                self.t.progress_queue.put_nowait(TaskProgress(variant_count))
+                self.t.progress_queue.put(TaskProgress(variant_count))

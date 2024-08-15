@@ -79,10 +79,10 @@ class JobCollection:
         )
 
     def dump(self) -> None:
+        summary_path = self.file_path.with_suffix(".metadata.yaml.gz")
+        logger.debug(f'Saving job collection summary to "{summary_path}"')
         value = asdict(self.summary_collection)
-        with CompressedTextWriter(
-            self.file_path.with_suffix(".metadata.yaml.gz"), self.num_threads
-        ) as file_handle:
+        with CompressedTextWriter(summary_path, self.num_threads) as file_handle:
             yaml.dump(value, file_handle, sort_keys=False, width=np.inf)
 
     def get_eigendecompositions(

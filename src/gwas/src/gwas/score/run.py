@@ -1,4 +1,3 @@
-from queue import Empty
 from typing import Callable
 
 import numpy as np
@@ -72,6 +71,7 @@ def calc_score(
     # Create the worker processes.
     t = TaskSyncCollection(job_count=job_count)
     reader_proc = GenotypeReader(t, vcf_file, genotypes_array, name="GenotypeReader")
+    reader_proc.start()
     calc_proc = Calc(
         t,
         genotypes_array,
@@ -81,8 +81,9 @@ def calc_score(
         scaled_residuals_arrays,
         stat_array,
         num_threads,
-        name="Calc",
+        name="ScoreCalc",
     )
+    calc_proc.start()
     writer_proc = ScoreWriter(
         t,
         vcf_file,
@@ -92,6 +93,7 @@ def calc_score(
         variant_offset=0,
         name="ScoreWriter",
     )
+    writer_proc.start()
     # Start the loop
     procs = [reader_proc, calc_proc, writer_proc]
     with tqdm(
@@ -102,11 +104,10 @@ def calc_score(
     ) as progress_bar:
 
         def update_progress_bar() -> None:
-            try:
-                task_progress: TaskProgress = t.progress_queue.get_nowait()
-                progress_bar.update(task_progress.variant_count)
-            except Empty:
-                pass
+            if t.progress_queue.empty():
+                return
+            task_progress: TaskProgress = t.progress_queue.get()
+            progress_bar.update(task_progress.variant_count)
 
         try:
             check_procs(t, procs, update_progress_bar)
@@ -124,27 +125,23 @@ def calc_score(
 def check_procs(
     t: TaskSyncCollection, procs: list[Worker], update_progress_bar: Callable[[], None]
 ) -> None:
-    for proc in procs:
-        proc.start()
-        # Allow use of genotypes_array and stat_array.
+    # Allow use of genotypes_array and stat_array
     t.can_read.set()
     for can_calc in t.can_calc:
         can_calc.set()
     while True:
         # Error handling
-        try:
-            raise t.exception_queue.get_nowait()
-        except Empty:
-            pass
+        if not t.exception_queue.empty():
+            raise t.exception_queue.get()
         for proc in procs:
             if proc.exitcode is not None and proc.exitcode != 0:
                 raise RuntimeError(
                     f'Process "{proc.name}" exited with code {proc.exitcode}'
                 )
-                # Check if we are done
         update_progress_bar()
         for proc in procs:
             proc.join(timeout=1)
+        # Check if we are done
         if all(not proc.is_alive() for proc in procs):
             break
     update_progress_bar()

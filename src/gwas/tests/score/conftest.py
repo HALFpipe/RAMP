@@ -1,7 +1,6 @@
 import gzip
 from dataclasses import dataclass
 from functools import cache
-from multiprocessing import cpu_count
 from subprocess import check_call
 from typing import Any
 
@@ -26,6 +25,7 @@ from gwas.utils import (
     Pool,
     chromosome_to_int,
     chromosomes_set,
+    cpu_count,
     get_global_lock,
 )
 from gwas.vcf.base import VCFFile

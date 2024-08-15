@@ -1,5 +1,4 @@
 import pickle
-from multiprocessing import cpu_count
 
 import numpy as np
 import pytest
@@ -9,6 +8,7 @@ from gwas.compression.pipe import (
     CompressedTextReader,
     CompressedTextWriter,
 )
+from gwas.utils import cpu_count
 from upath import UPath
 
 

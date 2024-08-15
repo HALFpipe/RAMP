@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from functools import partial
-from queue import Empty
 from typing import (
     Collection,
     Iterable,
@@ -273,10 +272,8 @@ def check_running(
     ) as progress_bar:
         while True:
             # Check if an error has occurred
-            try:
-                raise t.exception_queue.get_nowait()
-            except Empty:
-                pass
+            if not t.exception_queue.empty():
+                raise t.exception_queue.get()
 
             # Sleep for one second if a process is running
             wait(running)

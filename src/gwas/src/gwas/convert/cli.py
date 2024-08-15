@@ -1,6 +1,4 @@
 import logging
-import multiprocessing as mp
-import os
 import sys
 from argparse import ArgumentParser, Namespace
 from typing import Literal
@@ -17,7 +15,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
     argument_parser.add_argument(
         "--log-level", choices=logging.getLevelNamesMapping().keys(), default="INFO"
     )
-    argument_parser.add_argument("--num-threads", type=int, default=mp.cpu_count())
+    argument_parser.add_argument("--num-threads", type=int, default=None)
 
     return argument_parser.parse_args(argv)
 
@@ -29,12 +27,14 @@ def main() -> None:
 def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") -> None:
     arguments = parse_arguments(argv)
 
-    from gwas.log import logger, setup_logging
+    from ..log import logger, setup_logging
+    from ..utils import apply_num_threads, cpu_count
 
     setup_logging(level=arguments.log_level)
 
-    os.environ["NUMEXPR_MAX_THREADS"] = str(arguments.num_threads)
-    os.environ["NUMEXPR_NUM_THREADS"] = str(arguments.num_threads)
+    if arguments.num_threads is None:
+        arguments.num_threads = cpu_count()
+    apply_num_threads(arguments.num_threads)
 
     try:
         from .command import convert

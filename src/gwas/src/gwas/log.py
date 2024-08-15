@@ -1,9 +1,10 @@
 import logging
 import multiprocessing as mp
 import warnings
+from logging import Handler, LogRecord
 from logging.handlers import QueueHandler, QueueListener
-from multiprocessing.queues import Queue
-from typing import TextIO
+from multiprocessing.queues import SimpleQueue
+from typing import TextIO, override
 
 from upath import UPath
 
@@ -12,10 +13,45 @@ multiprocessing_context = mp.get_context("forkserver")
 multiprocessing_context.set_forkserver_preload(["gwas"])
 
 
-logging_queue: Queue[logging.LogRecord] | None = None
+logging_queue: SimpleQueue[LogRecord] | None = None
 queue_listener: QueueListener | None = None
 
-handlers: list[logging.Handler] = []
+handlers: list[Handler] = []
+
+
+class _QueueHandler(QueueHandler):
+    queue: SimpleQueue[LogRecord]  # type: ignore
+
+    def __init__(self, queue: SimpleQueue[LogRecord]) -> None:
+        Handler.__init__(self)
+        self.queue = queue
+
+    @override
+    def enqueue(self, record: LogRecord) -> None:
+        self.queue.put(record)
+
+
+class _QueueListener(QueueListener):
+    queue: SimpleQueue[LogRecord]  # type: ignore
+
+    def __init__(
+        self,
+        queue: SimpleQueue[LogRecord],
+        *handlers: Handler,
+        respect_handler_level: bool = False,
+    ) -> None:
+        self.queue = queue
+        self.handlers = handlers
+        self._thread = None
+        self.respect_handler_level = respect_handler_level
+
+    @override
+    def dequeue(self, block: bool) -> LogRecord:
+        return self.queue.get()
+
+    @override
+    def enqueue_sentinel(self):
+        self.queue.put(self._sentinel)  # type: ignore
 
 
 def _showwarning(
@@ -46,7 +82,7 @@ def setup_logging(
     logger.debug(f"Configured logging with handlers {handlers}")
 
 
-def add_handler(handler: logging.Handler) -> None:
+def add_handler(handler: Handler) -> None:
     global handlers
     handlers.append(handler)
 
@@ -83,8 +119,8 @@ def setup_logging_queue() -> None:
     global logging_queue, queue_listener, handlers
     if logging_queue is not None:
         return
-    logging_queue = multiprocessing_context.Queue()
-    queue_listener = QueueListener(logging_queue, *handlers, respect_handler_level=True)
+    logging_queue = multiprocessing_context.SimpleQueue()
+    queue_listener = _QueueListener(logging_queue, *handlers, respect_handler_level=True)
     queue_listener.start()
 
 
@@ -106,9 +142,9 @@ def teardown_logging() -> None:
 
 
 def worker_configurer(
-    logging_queue: Queue[logging.LogRecord], log_level: int | str
+    logging_queue: SimpleQueue[LogRecord], log_level: int | str
 ) -> None:
-    queue_handler = QueueHandler(logging_queue)
+    queue_handler = _QueueHandler(logging_queue)
     queue_handler.setLevel(log_level)
 
     root = logging.getLogger()

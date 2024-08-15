@@ -261,17 +261,17 @@ def unpack_key(
     if row_start != row_index:
         raise ValueError(
             "Can only write file sequentially, row start must be "
-            f"{row_index} (got {row_start})"
+            f"{row_index} (got {row_start}): {key}"
         )
     if col_start != 0:
         raise ValueError(
             "Can only write file sequentially, column start must be 0 "
-            f"(got {col_start})"
+            f"(got {col_start}): {key}"
         )
     if col_stop != shape[1]:
         raise ValueError(
             "Can only write file sequentially, column stop must be "
-            f"{shape[1]} (got {col_start})"
+            f"{shape[1]} (got {col_start}): {key}"
         )
 
     # Validate key
@@ -280,13 +280,14 @@ def unpack_key(
     if value_shape != (row_size, col_size):
         raise ValueError(
             f"Value shape {value_shape} does not match key shape "
-            f"{(row_size, col_size)}"
+            f"{(row_size, col_size)}: {key}"
         )
     if col_start != 0:
         raise ValueError("Cannot write partial rows to file: column start must be 0")
     if col_stop != shape[1]:
         raise ValueError(
-            "Cannot write partial rows to file: " f"column stop must be {shape[1]}"
+            "Cannot write partial rows to file: "
+            f"column stop must be {shape[1]}: {key}"
         )
 
     return row_start, row_stop, col_start, col_stop

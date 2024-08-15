@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from queue import Empty
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -112,10 +111,8 @@ class EigendecompositionsCalc:
         ) as progress_bar:
             while True:
                 # Check if an error has occurred
-                try:
-                    raise t.exception_queue.get_nowait()
-                except Empty:
-                    pass
+                if not t.exception_queue.empty():
+                    raise t.exception_queue.get()
 
                 # Sleep for one second if a process is running
                 wait(running)

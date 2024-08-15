@@ -1,13 +1,10 @@
 import logging
-import multiprocessing as mp
 import sys
 from argparse import ArgumentParser, Namespace
 from typing import Literal
 
 import numpy as np
 from upath import UPath
-
-from .base import Triangular
 
 
 def main() -> None:
@@ -40,7 +37,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
     )
     argument_parser.add_argument("--debug", action="store_true", default=False)
     argument_parser.add_argument("--mem-gb", type=float)
-    argument_parser.add_argument("--num-threads", type=int, default=mp.cpu_count())
+    argument_parser.add_argument("--num-threads", type=int, default=None)
 
     return argument_parser.parse_args(argv)
 
@@ -48,8 +45,10 @@ def parse_arguments(argv: list[str]) -> Namespace:
 def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") -> None:
     arguments = parse_arguments(argv)
 
-    from gwas.log import logger, setup_logging
-    from gwas.mem.wkspace import SharedWorkspace
+    from ..log import logger, setup_logging
+    from ..mem.wkspace import SharedWorkspace
+    from ..utils import apply_num_threads, cpu_count
+    from .base import Triangular
 
     output_directory = UPath(arguments.output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -59,6 +58,10 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
     size: int | None = None
     if arguments.mem_gb is not None:
         size = int(arguments.mem_gb * 2**30)
+
+    if arguments.num_threads is None:
+        arguments.num_threads = cpu_count()
+    apply_num_threads(arguments.num_threads)
 
     with SharedWorkspace.create(size=size) as sw:
         try:

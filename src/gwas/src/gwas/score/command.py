@@ -8,7 +8,7 @@ from threadpoolctl import threadpool_limits
 from tqdm.auto import tqdm
 from upath import UPath
 
-from ..compression.arr.base import compression_methods
+from ..compression.arr.base import TextCompressionMethod, compression_methods
 from ..log import logger
 from ..mean import calc_mean
 from ..mem.wkspace import SharedWorkspace
@@ -250,9 +250,10 @@ class GwasCommand:
                 current_chunk = list()
 
         chunks.append(current_chunk)
+        logger.debug(f"Split variable collections into {len(chunks)} chunks")
         return chunks
 
-    def run_chunk(
+    def run_chromosome(
         self, chromosome: int | str, variable_collections: list[VariableCollection]
     ) -> None:
         vcf_file = self.vcf_by_chromosome[chromosome]
@@ -268,13 +269,21 @@ class GwasCommand:
         # into memory
         chunks = self.split_into_chunks(variable_collections)
 
+        compression_method = compression_methods[self.arguments.compression_method]
+
+        if len(chunks) > 1 and isinstance(compression_method, TextCompressionMethod):
+            raise ValueError(
+                "Cannot use text compression method for multiple chunks. "
+                "Please use a different compression method"
+            )
+
         self.job_collection = JobCollection(
             vcf_file,
             self.chromosomes,
             self.tri_paths_by_chromosome,
             self.arguments.null_model_method,
             self.output_directory,
-            compression_methods[self.arguments.compression_method],
+            compression_method,
             self.arguments.num_threads,
             chunks,
         )
@@ -290,7 +299,7 @@ class GwasCommand:
             unit="chromosomes",
             desc="processing chromosomes",
         ):
-            self.run_chunk(chromosome, variable_collections.copy())
+            self.run_chromosome(chromosome, variable_collections.copy())
 
         # Clean up
         for variable_collection in variable_collections:

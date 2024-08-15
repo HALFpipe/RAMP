@@ -6,6 +6,7 @@ import yaml
 from upath import UPath
 
 from .compression.pipe import CompressedTextReader
+from .log import logger
 from .null_model.base import NullModelCollection
 from .pheno import VariableCollection, VariableSummary
 from .utils import parse_obj_as
@@ -114,6 +115,9 @@ class SummaryCollection:
     def from_variable_collection_chunks(
         cls, variable_collection_chunks: list[list[VariableCollection]]
     ) -> Self:
+        logger.debug(
+            f"Creating summary collection for {len(variable_collection_chunks)} chunks"
+        )
         chunks: dict[str, dict[str, VariableCollectionSummary]] = dict()
         for i, variable_collections in enumerate(variable_collection_chunks):
             chunk: dict[str, VariableCollectionSummary] = dict()

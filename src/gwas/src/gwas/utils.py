@@ -6,14 +6,15 @@ import signal
 from contextlib import nullcontext
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum, auto
+from functools import cache
 from logging import LogRecord
 from multiprocessing import parent_process
 from multiprocessing import pool as mp_pool
-from multiprocessing.queues import Queue
+from multiprocessing.queues import SimpleQueue
 from multiprocessing.synchronize import Event, RLock
 from pprint import pformat
-from queue import Empty
 from shutil import which
+from subprocess import check_output
 from threading import Thread
 from typing import (
     Any,
@@ -21,6 +22,7 @@ from typing import (
     ContextManager,
     Iterable,
     Iterator,
+    Literal,
     NamedTuple,
     Sequence,
     Sized,
@@ -123,7 +125,7 @@ def underscore(x: str) -> str:
 class InitArgs(NamedTuple):
     sched_affinity: set[int] | None
     num_threads: int | None
-    logging_queue: Queue[LogRecord] | None
+    logging_queue: SimpleQueue[LogRecord] | None
     log_level: int | str
     lock: RLock
 
@@ -185,11 +187,16 @@ def apply_num_threads(num_threads: int | None) -> None:
     jax.config.update("jax_platform_name", "cpu")
     # jax.config.update("jax_traceback_filtering", "off")
 
+    logger.debug(
+        f'Configured process "{mp.current_process().name}" '
+        f"with {pformat(threadpool_info())}"
+    )
+
 
 def initializer(
     sched_affinity: set[int] | None,
     num_threads: int | None,
-    logging_queue: Queue[LogRecord] | None,
+    logging_queue: SimpleQueue[LogRecord] | None,
     log_level: int | str,
     lock: RLock,
 ) -> None:
@@ -201,15 +208,12 @@ def initializer(
 
     if logging_queue is None:
         raise ValueError("Trying to initialize process without logging queue")
-
     worker_configurer(logging_queue, log_level)
-    logger.debug(
-        f'Configured process "{mp.current_process().name}" '
-        f"with {pformat(threadpool_info())}"
-    )
 
     global _global_lock
     _global_lock = lock
+
+    logger.debug(f'Finished initializer for process "{mp.current_process().name}"')
 
 
 class Pool(mp_pool.Pool):
@@ -238,8 +242,8 @@ class Pool(mp_pool.Pool):
 
 
 class Action(Enum):
-    EVENT = auto()
-    EXIT = auto()
+    Event = auto()
+    Exit = auto()
 
 
 V = TypeVar("V")
@@ -250,8 +254,8 @@ class SharedState:
     # Indicates that we should exit
     should_exit: Event = field(default_factory=multiprocessing_context.Event)
     # Passes exceptions
-    exception_queue: Queue[Exception] = field(
-        default_factory=multiprocessing_context.Queue
+    exception_queue: SimpleQueue[Exception] = field(
+        default_factory=multiprocessing_context.SimpleQueue
     )
 
     def get_name(self, value: Any) -> str:
@@ -264,11 +268,11 @@ class SharedState:
                 return f"{dataclass_field.name}[{index}]"
         return repr(value)
 
-    def get(self, queue: Queue[V]) -> V | Action:
+    def get(self, queue: SimpleQueue[V]) -> V | Literal[Action.Exit]:
         """Get an item from a queue while checking for exit.
 
         Args:
-            queue (Queue[T]): The queue to get an item from.
+            queue (SimpleQueue[T]): The queue to get an item from.
 
         Returns:
             T | Action: The item from the queue or Action.EXIT if we should exit.
@@ -276,25 +280,25 @@ class SharedState:
         logger.debug(f'Waiting for queue "{self.get_name(queue)}"')
         while True:
             if self.should_exit.is_set():
-                return Action.EXIT
-            try:
-                return queue.get(timeout=1)
-            except Empty:
-                pass
+                return Action.Exit
+            if queue.empty():
+                self.should_exit.wait(timeout=1)
+                continue
+            return queue.get()
 
     def wait(self, event: Event) -> Action:
         logger.debug(f'Waiting for event "{self.get_name(event)}"')
         while True:
             if self.should_exit.is_set():
-                return Action.EXIT
+                return Action.Exit
             if event.wait(timeout=1):
-                return Action.EVENT
+                return Action.Event
 
 
 class Process(multiprocessing_context.Process):  # type: ignore
     def __init__(
         self,
-        exception_queue: "mp.Queue[Exception] | None",
+        exception_queue: SimpleQueue[Exception] | None,
         num_threads: int | None,
         name: str | None = None,
     ) -> None:
@@ -317,7 +321,7 @@ class Process(multiprocessing_context.Process):  # type: ignore
         except Exception as e:
             logger.exception(f'An error occurred in process "{self.name}"', exc_info=e)
             if self.exception_queue is not None:
-                self.exception_queue.put_nowait(e)
+                self.exception_queue.put(e)
 
 
 def wait(running: list[Process]) -> None:
@@ -514,3 +518,8 @@ def get_processes_and_num_threads(
     )
 
     return processes, num_threads_per_process
+
+
+@cache
+def cpu_count() -> int:
+    return int(check_output(["nproc"]).decode().strip())

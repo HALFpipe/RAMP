@@ -1,5 +1,4 @@
 import logging
-import multiprocessing as mp
 import sys
 from argparse import ArgumentParser, Namespace
 from typing import Literal
@@ -16,7 +15,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
         default_score_r_squared_cutoff,
     )
     from ..null_model.base import NullModelCollection
-    from ..utils import chromosomes_set
+    from ..utils import chromosomes_set, cpu_count
     from ..vcf.base import Engine
 
     argument_parser = ArgumentParser()
@@ -91,7 +90,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
     )
     argument_parser.add_argument("--debug", action="store_true", default=False)
     argument_parser.add_argument("--mem-gb", type=float)
-    argument_parser.add_argument("--num-threads", type=int, default=mp.cpu_count())
+    argument_parser.add_argument("--num-threads", type=int, default=cpu_count())
     argument_parser.add_argument(
         "--vcf-engine",
         choices=Engine,
@@ -109,9 +108,9 @@ def main() -> None:
 def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") -> None:
     arguments = parse_arguments(argv)
 
-    from gwas.log import logger, setup_logging
-    from gwas.mem.wkspace import SharedWorkspace
-    from gwas.utils import apply_num_threads
+    from ..log import logger, setup_logging
+    from ..mem.wkspace import SharedWorkspace
+    from ..utils import apply_num_threads
 
     output_directory = UPath(arguments.output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)

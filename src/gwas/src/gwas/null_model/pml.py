@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from functools import cache, cached_property, partial
+from itertools import chain
 from typing import Any, Callable, NamedTuple, Self, TypeVar
 
 import numpy as np
@@ -29,7 +30,7 @@ class OptimizeInput(NamedTuple):
 
 @dataclass
 class OptimizeJob:
-    indices: tuple[int, int]
+    indices: tuple[int, int | None]
 
     eig: Eigendecomposition
     vc: VariableCollection
@@ -249,11 +250,9 @@ class ProfileMaximumLikelihood:
         return OptimizeResult(x=optimize_result.x, fun=optimize_result.fun)
 
     @classmethod
-    def apply(cls, optimize_job: OptimizeJob) -> tuple[tuple[int, int], NullModelResult]:
-        (_, phenotype_index) = optimize_job.indices
-        eig = optimize_job.eig
-        vc = optimize_job.vc
-
+    def inner(
+        cls, vc: VariableCollection, phenotype_index: int, eig: Eigendecomposition
+    ) -> NullModelResult:
         eigenvectors = eig.eigenvectors
         covariates = vc.covariates.to_numpy().copy()
         phenotype = vc.phenotypes.to_numpy()[:, phenotype_index, np.newaxis]
@@ -291,14 +290,32 @@ class ProfileMaximumLikelihood:
             )
         except Exception as e:
             logger.error(
-                "Failed to fit null model for phenotype at index "
-                f"{optimize_job.indices}",
+                "Failed to fit null model for phenotype at index " f"{phenotype_index}",
                 exc_info=e,
             )
             null_model_result = NullModelResult(
                 np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
             )
-        return optimize_job.indices, null_model_result
+        return null_model_result
+
+    @classmethod
+    def apply(
+        cls, optimize_job: OptimizeJob
+    ) -> list[tuple[tuple[int, int], NullModelResult]]:
+        (variable_collection_index, phenotype_index) = optimize_job.indices
+        eig = optimize_job.eig
+        vc = optimize_job.vc
+
+        o: list[tuple[tuple[int, int], NullModelResult]] = list()
+        if phenotype_index is not None:
+            indices = (variable_collection_index, phenotype_index)
+            o.append((indices, cls.inner(vc, phenotype_index, eig)))
+        else:
+            for phenotype_index in range(vc.phenotype_count):
+                indices = (variable_collection_index, phenotype_index)
+                o.append((indices, cls.inner(vc, phenotype_index, eig)))
+
+        return o
 
     @classmethod
     def fit(
@@ -308,18 +325,31 @@ class ProfileMaximumLikelihood:
         null_model_collections: list[NullModelCollection],
         num_threads: int,
     ) -> None:
-        # Fit null model for each phenotype
-        optimize_jobs = [
-            OptimizeJob((collection_index, phenotype_index), eig, vc)
-            for collection_index, (eig, vc) in enumerate(
-                zip(
-                    eigendecompositions,
-                    variable_collections,
-                    strict=True,
+        if len(variable_collections) < num_threads:
+            logger.debug("Running one job for each phenotype")
+            optimize_jobs = [
+                OptimizeJob((collection_index, phenotype_index), eig, vc)
+                for collection_index, (eig, vc) in enumerate(
+                    zip(
+                        eigendecompositions,
+                        variable_collections,
+                        strict=True,
+                    )
                 )
-            )
-            for phenotype_index in range(vc.phenotype_count)
-        ]
+                for phenotype_index in range(vc.phenotype_count)
+            ]
+        else:
+            logger.debug("Running one job for each variable collection")
+            optimize_jobs = [
+                OptimizeJob((collection_index, None), eig, vc)
+                for collection_index, (eig, vc) in enumerate(
+                    zip(
+                        eigendecompositions,
+                        variable_collections,
+                        strict=True,
+                    )
+                )
+            ]
 
         pool, iterator = make_pool_or_null_context(
             optimize_jobs,
@@ -328,15 +358,15 @@ class ProfileMaximumLikelihood:
             iteration_order=IterationOrder.UNORDERED,
         )
         with pool:
-            for indices, r in tqdm(
-                iterator,
+            for indices, null_model_result in tqdm(
+                chain.from_iterable(iterator),
                 desc="fitting null models",
                 unit="phenotypes",
                 total=len(optimize_jobs),
             ):
                 collection_index, phenotype_index = indices
                 nm = null_model_collections[collection_index]
-                nm.put(phenotype_index, r)
+                nm.put(phenotype_index, null_model_result)
 
     def softplus_penalty(
         self, terms: Float[Array, " terms_count"], o: OptimizeInput

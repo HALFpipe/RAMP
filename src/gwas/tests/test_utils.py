@@ -29,7 +29,7 @@ def test_process(
     assert queue_listener is not None
     queue_listener.handlers = (*logging.getLogger().handlers,)
 
-    exception_queue = multiprocessing_context.Queue()
+    exception_queue = multiprocessing_context.SimpleQueue()
     process = LogProcess(
         name="LogProcess", num_threads=None, exception_queue=exception_queue
     )

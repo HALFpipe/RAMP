@@ -1,6 +1,5 @@
 import gzip
 from contextlib import chdir
-from multiprocessing import cpu_count
 from random import sample, seed
 from subprocess import check_call
 from typing import Mapping, Sequence
@@ -20,7 +19,7 @@ from gwas.raremetalworker.ped import write_dummy_ped_and_dat_files
 from gwas.tools import bcftools, raremetalworker, tabix
 from gwas.tri.base import Triangular
 from gwas.tri.tsqr import scale
-from gwas.utils import get_global_lock
+from gwas.utils import cpu_count, get_global_lock
 from gwas.vcf.base import VCFFile
 from upath import UPath
 

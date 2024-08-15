@@ -1,21 +1,31 @@
-from multiprocessing import cpu_count
+import sys
 
 import numpy as np
 import pandas as pd
 import pytest
 from gwas.compression.arr.base import (
+    Blosc2CompressionMethod,
     FileArray,
     TextCompressionMethod,
     compression_methods,
 )
 from gwas.compression.arr.text import header_prefix
 from gwas.compression.pipe import CompressedTextReader
+from gwas.utils import cpu_count
 from upath import UPath
+
+try:
+    import blosc2 as blosc2
+except ImportError:
+    pass
 
 
 @pytest.mark.parametrize("compression_method_name", compression_methods.keys())
 def test_file_array(compression_method_name: str, tmp_path: UPath) -> None:
     compression_method = compression_methods[compression_method_name]
+    if isinstance(compression_method, Blosc2CompressionMethod):
+        if "blosc2" not in sys.modules:
+            pytest.skip("blosc2 not installed")
 
     shape = (10, 10)
     writer = FileArray.create(

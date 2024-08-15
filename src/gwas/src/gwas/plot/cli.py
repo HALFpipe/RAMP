@@ -1,12 +1,9 @@
 import logging
-import multiprocessing as mp
 import sys
 from argparse import ArgumentParser, Namespace
 from typing import Literal
 
 from upath import UPath
-
-from ..utils import apply_num_threads
 
 
 def parse_arguments(argv: list[str]) -> Namespace:
@@ -62,7 +59,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
     argument_parser.add_argument(
         "--log-level", choices=logging.getLevelNamesMapping().keys(), default="INFO"
     )
-    argument_parser.add_argument("--num-threads", type=int, default=mp.cpu_count())
+    argument_parser.add_argument("--num-threads", type=int, default=None)
     argument_parser.add_argument("--mem-gb", type=float)
 
     return argument_parser.parse_args(argv)
@@ -75,8 +72,9 @@ def main() -> None:
 def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") -> None:
     arguments = parse_arguments(argv)
 
-    from gwas.log import logger, setup_logging
-    from gwas.mem.wkspace import SharedWorkspace
+    from ..log import logger, setup_logging
+    from ..mem.wkspace import SharedWorkspace
+    from ..utils import apply_num_threads, cpu_count
 
     output_directory = UPath(arguments.output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -87,6 +85,8 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
     if arguments.mem_gb is not None:
         size = int(arguments.mem_gb * 2**30)
 
+    if arguments.num_threads is None:
+        arguments.num_threads = cpu_count()
     apply_num_threads(arguments.num_threads)
 
     with SharedWorkspace.create(size=size) as sw:
