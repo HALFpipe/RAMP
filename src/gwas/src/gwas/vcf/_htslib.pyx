@@ -1,5 +1,5 @@
 # cython: language_level=3
-from cython cimport wraparound
+from cython cimport cast, wraparound
 from libc.stdint cimport int64_t, int32_t, uint32_t
 from libc.stdlib cimport free
 import numpy as np
@@ -245,6 +245,8 @@ def read_dosages(
                 raise RuntimeError(
                     "The operation could not be completed (e.g. out of memory)"
                 )
+            elif count < 0:
+                raise RuntimeError("Unknown error")
 
             if buffer == NULL:
                 raise RuntimeError("Received NULL buffer")
@@ -252,7 +254,7 @@ def read_dosages(
             sample_indices_index = 0
             while sample_indices_index < sample_indices.size:
                 sample_index = sample_indices[sample_indices_index]
-                if sample_index >= count:
+                if sample_index >= cast(uint32_t, count):
                     raise ValueError(
                         f"Sample index {sample_index} is out of "
                         f"bounds of the buffer size {count}"
