@@ -76,20 +76,18 @@ Next, install `mamba` using `conda install mamba` and then create the environmen
 ```bash
 conda create --name "gwas-protocol" \
   "conda-build" \
-  "bzip2" "p7zip" \
-  "bcftools" "plink" "plink2" "tabix" \
-  "gcta" \
+  "bcftools" "plink" "plink2" "tabix" "gcta" \
   "parallel" \
   "jupyterlab" "ipywidgets" \
-  "python=3.12" "more-itertools" \
-  "numpy" "scipy" "pandas" "threadpoolctl" \
-  "seaborn" \
+  "python=3.12" "more-itertools" "psutil" "tqdm" "pyyaml" \
+  "python-blosc2" \
+  "numpy" "scipy" "pandas" "threadpoolctl" "universal_pathlib" \
+  "matplotlib" "seaborn" \
   "jax" "jaxlib=*=cpu*" "jaxtyping" "chex" \
-  "mkl-include" "mkl" \
-  "mypy" "types-pyyaml"  \
+  "mkl-include" "mkl" "c-blosc2" \
+  "mypy" "pandas-stubs" "types-psutil" "types-pyyaml" "types-seaborn" "types-setuptools" "types-tqdm" \
   "pytest-benchmark" "pytest-cov" \
-  "setuptools-rust" "cython>=3" "zlib" \
-  "gxx_linux-64>=13" "gcc_linux-64>=13" "rust" "sysroot_linux-64>=2.17"
+  "cython" "gxx_linux-64>=13" "gcc_linux-64>=13" "sysroot_linux-64>=2.17" "zlib"
 ```
 
 Finally, install the `gwas` package using the following command:

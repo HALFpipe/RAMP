@@ -304,8 +304,8 @@ class ScoreWriter(Worker):
                     shape=(variant_count, 2 * phenotype_count)
                 )
                 logger.debug(
-                    f"Writing variants {variant_slice} to {type(self.stat_file_array)} "
-                    f"with shape {stat.shape}"
+                    f"Writing variants {variant_slice} with shape {stat.shape}"
+                    f"to {self.stat_file_array} with shape {self.stat_file_array.shape}"
                 )
                 self.stat_file_array[variant_slice, phenotype_slice] = stat
 

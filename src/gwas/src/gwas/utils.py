@@ -159,7 +159,8 @@ num_threads_variables: Sequence[str] = [
 
 
 def apply_num_threads(num_threads: int | None) -> None:
-    faulthandler.register(signal.SIGUSR1)
+    faulthandler.enable(all_threads=True)
+    faulthandler.register(signal.SIGUSR1, all_threads=True)
     # Write a traceback to standard out every six hours
     faulthandler.dump_traceback_later(60 * 60 * 6, repeat=True)
 
