@@ -3,6 +3,7 @@ from pathlib import Path
 from time import time
 
 import numpy as np
+
 from gwas.compression.arr.base import (
     FileArray,
     TextCompressionMethod,

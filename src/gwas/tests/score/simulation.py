@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+
 from gwas.testing.convert import (
     convert_vcf_to_pfiles,
     get_pfile_variant_ids,

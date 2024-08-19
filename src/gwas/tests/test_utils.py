@@ -1,6 +1,8 @@
 import logging
 from pathlib import Path
 
+from pytest import FixtureRequest, LogCaptureFixture
+
 from gwas.log import (
     logger,
     multiprocessing_context,
@@ -8,7 +10,6 @@ from gwas.log import (
     teardown_logging,
 )
 from gwas.utils import Process
-from pytest import FixtureRequest, LogCaptureFixture
 
 
 class LogProcess(Process):
