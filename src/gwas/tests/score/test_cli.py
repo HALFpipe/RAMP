@@ -6,6 +6,8 @@ from typing import Mapping
 
 import numpy as np
 import pandas as pd
+from pytest import FixtureRequest
+
 from gwas.compression.pipe import cache_suffix
 from gwas.eig.base import Eigendecomposition
 from gwas.mem.wkspace import SharedWorkspace
@@ -15,7 +17,6 @@ from gwas.score.cli import parse_arguments
 from gwas.score.command import GwasCommand
 from gwas.score.job import SummaryCollection
 from gwas.vcf.base import VCFFile
-from pytest import FixtureRequest
 
 from ..conftest import chromosomes
 from ..utils import assert_both_close, check_bias

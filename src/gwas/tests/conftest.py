@@ -5,14 +5,15 @@ from pathlib import Path
 from typing import Literal, Mapping
 
 import pytest
+from psutil import virtual_memory
+from pytest import FixtureRequest
+
 from gwas.compression.convert import to_bgzip
 from gwas.log import add_handler, setup_logging_queue, teardown_logging
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri.calc import calc_tri
 from gwas.utils import apply_num_threads, chromosome_to_int, chromosomes_set
 from gwas.vcf.base import VCFFile, calc_vcf, load_vcf
-from psutil import virtual_memory
-from pytest import FixtureRequest
 
 base_path: Path = Path(os.environ["DATA_PATH"])
 dataset: str = "opensnp"

@@ -10,6 +10,7 @@ from typing import Mapping, Sequence
 import numpy as np
 import pytest
 import scipy
+
 from gwas.defaults import (
     default_kinship_minor_allele_frequency_cutoff,
     default_kinship_r_squared_cutoff,

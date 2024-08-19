@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import pytest
+
 from gwas._matrix_functions import dgesvdq, dimatcopy, set_tril, set_triu
 
 

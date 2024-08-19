@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
 from gwas.compression.arr.base import FileArray, compression_methods
 from gwas.compression.arr.text import header_prefix
 from gwas.compression.pipe import CompressedTextReader

@@ -6,14 +6,15 @@ from typing import NamedTuple, Sequence
 import numpy as np
 import pandas as pd
 import pytest
+from numpy import typing as npt
+from pytest_benchmark.fixture import BenchmarkFixture
+from tqdm.auto import tqdm
+
 from gwas.compression.pipe import CompressedTextReader
 from gwas.testing.convert import convert_vcf_to_bgen
 from gwas.tools import plink2
 from gwas.vcf.base import Engine, VCFFile
 from gwas.vcf.variant import Variant
-from numpy import typing as npt
-from pytest_benchmark.fixture import BenchmarkFixture
-from tqdm.auto import tqdm
 
 sample_size_label = "small"
 chromosome: int = 22

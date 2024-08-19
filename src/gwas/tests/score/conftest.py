@@ -9,6 +9,8 @@ from typing import Any
 
 import numpy as np
 import pytest
+from numpy import typing as npt
+
 from gwas.eig.base import Eigendecomposition
 from gwas.eig.calc import calc_eigendecompositions
 from gwas.mem.arr import SharedArray
@@ -30,7 +32,6 @@ from gwas.utils import (
     chromosomes_set,
 )
 from gwas.vcf.base import VCFFile
-from numpy import typing as npt
 
 from ..conftest import DirectoryFactory
 from .rmw_debug import rmw_debug
