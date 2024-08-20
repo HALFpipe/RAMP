@@ -74,13 +74,13 @@ Then update your `.bashrc` or `.zshrc` with `mamba init`. This will allow you to
 Next, install `mamba` using `conda install mamba` and then create the environment using the following command:
 
 ```bash
-conda create --name "gwas-protocol" \
+micromamba create --name "gwas-protocol" \
   "conda-build" \
   "bcftools" "plink" "plink2" "tabix" "gcta" \
   "parallel" \
   "jupyterlab" "ipywidgets" \
   "python=3.12" "more-itertools" "psutil" "tqdm" "pyyaml" \
-  "python-blosc2" \
+  "python-blosc2" "pyarrow" \
   "numpy" "scipy" "pandas" "threadpoolctl" "universal_pathlib" \
   "matplotlib" "seaborn" \
   "jax" "jaxlib=*=cpu*" "jaxtyping" "chex" \

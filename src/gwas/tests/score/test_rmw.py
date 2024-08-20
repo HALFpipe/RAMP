@@ -1,12 +1,11 @@
 from time import time
 
 import numpy as np
+import pytest
 from gwas.compression.arr.base import (
     FileArray,
-    TextCompressionMethod,
     compression_methods,
 )
-from gwas.compression.pipe import CompressedTextReader
 from gwas.log import logger
 from gwas.utils import cpu_count
 from upath import UPath
@@ -14,6 +13,8 @@ from upath import UPath
 from .conftest import RmwScore
 
 
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 def test_compression(
     tmp_path: UPath,
     rmw_score: RmwScore,
@@ -24,6 +25,7 @@ def test_compression(
 
     variant_count, phenotype_count, _ = scores.shape
     scores = scores.reshape(variant_count, phenotype_count * 2)
+    scores = np.asfortranarray(scores)
 
     for name, compression_method in compression_methods.items():
         file_path = tmp_path / f"score.{name}{compression_method.suffix}"
@@ -47,9 +49,6 @@ def test_compression(
             f"in {end - start:.2f} seconds"
         )
 
-        if isinstance(compression_method, TextCompressionMethod):
-            with CompressedTextReader(file_path) as file_handle:
-                array = np.loadtxt(file_handle)
-        else:
-            raise NotImplementedError
+        reader = FileArray.from_file(file_path, np.float64, cpu_count())
+        array = reader[:, :]
         np.testing.assert_array_equal(scores, array[...])

@@ -10,6 +10,7 @@ from numpy import typing as npt
 from upath import UPath
 
 from ...compression.pipe import CompressedBytesReader
+from ...log import logger
 from .base import Blosc2CompressionMethod, FileArrayReader, FileArrayWriter, ScalarType
 
 base_cparams = dict(
@@ -26,8 +27,10 @@ def get_vlmeta(array: blosc2.NDArray, key: str) -> Any:
 
 
 def set_vlmeta(array: blosc2.NDArray, key: str, value: Any) -> None:
+    value_bytes = pickle.dumps(value)
+    logger.debug(f"Setting vlmeta key {key} with {len(value_bytes)} bytes")
     vlmeta = array.schunk.vlmeta
-    vlmeta.set_vlmeta(key, pickle.dumps(value), **base_cparams)
+    vlmeta.set_vlmeta(key, value_bytes, **base_cparams)
 
 
 @dataclass(kw_only=True)
@@ -87,7 +90,10 @@ def load_metadata(
         for key in keys:
             extra_metadata[key] = get_vlmeta(array, key)
 
-    return row_metadata, list(column_metadata), extra_metadata
+    if column_metadata is not None:
+        column_metadata = list(column_metadata)
+
+    return row_metadata, column_metadata, extra_metadata
 
 
 @dataclass(kw_only=True)

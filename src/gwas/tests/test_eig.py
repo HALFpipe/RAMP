@@ -116,6 +116,7 @@ def test_eig(
     # Check that QR is equal
     (numpy_tri,) = scipy.linalg.qr(a.transpose(), mode="r")
 
+    sw.squash()
     tri_arrays = [
         Triangular.from_file(tri_paths_by_chromosome[c], sw, np.float64)
         for c in chromosomes

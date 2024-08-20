@@ -1,3 +1,4 @@
+import pickle
 import sys
 
 import numpy as np
@@ -6,6 +7,7 @@ import pytest
 from gwas.compression.arr.base import (
     Blosc2CompressionMethod,
     FileArray,
+    ParquetCompressionMethod,
     TextCompressionMethod,
     compression_methods,
 )
@@ -40,8 +42,10 @@ def test_file_array(compression_method_name: str, tmp_path: UPath) -> None:
     writer.set_axis_metadata(1, column_names)
 
     row_names = [f"row_{i + 1:04d}" for i in range(writer.shape[0])]
-    row_data = np.random.rand(writer.shape[0])
-    writer.set_axis_metadata(0, pd.DataFrame({"name": row_names, "data": row_data}))
+    row_metadata = pd.DataFrame(
+        {"name": row_names, "data": np.random.rand(writer.shape[0])}
+    )
+    writer.set_axis_metadata(0, row_metadata)
 
     with writer:
         writer[0:3, 0 : shape[1]] = np.full(
@@ -53,16 +57,28 @@ def test_file_array(compression_method_name: str, tmp_path: UPath) -> None:
 
     file_path = writer.file_path
 
-    if isinstance(compression_method, TextCompressionMethod):
-        with CompressedTextReader(file_path) as file_handle:
-            data_frame = pd.read_csv(file_handle, sep="\t", skiprows=1)
+    if isinstance(compression_method, Blosc2CompressionMethod):
+        array = blosc2.open(str(file_path))
+        matrix = array[:, :]
+        metadata_bytes = array.schunk.vlmeta.get_vlmeta("axis_metadata")
+        data_frame, column_names = pickle.loads(metadata_bytes)
+    else:
+        if isinstance(compression_method, TextCompressionMethod):
+            with CompressedTextReader(file_path) as file_handle:
+                data_frame = pd.read_csv(file_handle, sep="\t", skiprows=1)
             data_frame = data_frame.rename(
                 columns=lambda c: c.removeprefix(header_prefix)
             )
-            assert (data_frame.columns == ["name", "data", *column_names]).all()
-            assert (data_frame["name"] == row_names).all()
-            assert np.allclose(data_frame["data"], row_data)
-            assert np.allclose(data_frame[column_names], 7)
+        elif isinstance(compression_method, ParquetCompressionMethod):
+            data_frame = pd.read_parquet(file_path)
+        else:
+            raise NotImplementedError
+
+        matrix = data_frame[column_names].to_numpy()
+        data_frame = data_frame.drop(columns=column_names)
+
+    pd.testing.assert_frame_equal(data_frame, row_metadata)
+    assert np.allclose(matrix, 7)
 
     reader = FileArray.from_file(file_path, dtype=np.float64, num_threads=cpu_count())
     assert reader.shape == writer.shape

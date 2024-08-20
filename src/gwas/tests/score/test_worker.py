@@ -31,7 +31,7 @@ def test_calc_worker(
         name = SharedArray.get_name(sw, "test-rotated-genotypes")
         test_rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
         name = SharedArray.get_name(sw, "test-stat")
-        stat_array: SharedArray = sw.alloc(name, variant_count, phenotype_count, 2)
+        stat_array: SharedArray = sw.alloc(name, variant_count, phenotype_count * 2)
     request.addfinalizer(test_rotated_genotypes_array.free)
     request.addfinalizer(stat_array.free)
 

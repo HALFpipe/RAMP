@@ -1,6 +1,7 @@
 from functools import partial
 
 import numpy as np
+import scipy
 from gwas.log import logger
 from jaxtyping import jaxtyped
 from numpy import typing as npt
@@ -13,13 +14,18 @@ def regress(
     a: npt.NDArray[np.float64],
     b: npt.NDArray[np.float64],
     indices: npt.NDArray[np.bool_] | None = None,
-) -> tuple[float, float, float]:
+) -> tuple[float, float, float, float]:
     if indices is None:
         a = a.ravel()
         b = b.ravel()
     else:
         a = a[indices]
         b = b[indices]
+
+    missing_overlap = scipy.spatial.distance.dice(np.isnan(a), np.isnan(b))
+    mask = np.logical_and(np.isfinite(a), np.isfinite(b))
+    a = a[mask]
+    b = b[mask]
 
     a = a[:, np.newaxis]
     b = b[:, np.newaxis]
@@ -35,7 +41,7 @@ def regress(
         sum_residuals = float(sum_residuals[0])
     mean_residuals = sum_residuals / a.size
 
-    return float(intercept.item()), float(slope.item()), mean_residuals
+    return float(intercept.item()), float(slope.item()), mean_residuals, missing_overlap
 
 
 def check_bias(
@@ -46,11 +52,12 @@ def check_bias(
     check_slope: bool = True,
     check_residuals: bool = True,
 ) -> bool:
-    intercept, slope, mean_residuals = regress(a, b, indices)
+    intercept, slope, mean_residuals, missing_overlap = regress(a, b, indices)
     logger.debug(
         f"intercept={intercept:f} "
         f"|slope - 1|={np.abs(1 - slope):f} "
-        f"mean_residuals={mean_residuals:f}"
+        f"mean_residuals={mean_residuals:f} "
+        f"missing_overlap={missing_overlap:f}"
     )
     is_ok: np.bool_ | bool = True
     is_ok = is_ok and np.isclose(intercept, 0, atol=tolerance, rtol=tolerance)

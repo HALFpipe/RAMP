@@ -21,9 +21,11 @@ requirements:
     - pip
     - "setuptools>=62"
     - "setuptools_scm>=6.2"
-    # - "setuptools-rust"
     - wheel
     - zlib
+    - htslib
+    - c-blosc2
+    - python-blosc2
   run:
     - python
     # python dependencies
