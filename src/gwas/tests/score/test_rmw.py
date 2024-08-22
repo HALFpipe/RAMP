@@ -2,13 +2,14 @@ from time import time
 
 import numpy as np
 import pytest
+from upath import UPath
+
 from gwas.compression.arr.base import (
     FileArray,
     compression_methods,
 )
 from gwas.log import logger
 from gwas.utils import cpu_count
-from upath import UPath
 
 from .conftest import RmwScore
 

@@ -1,7 +1,8 @@
 import numpy as np
+from upath import UPath
+
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
-from upath import UPath
 
 
 def test_sa(tmp_path: UPath) -> None:

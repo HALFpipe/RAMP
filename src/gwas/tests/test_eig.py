@@ -7,6 +7,8 @@ from typing import Mapping, Sequence
 import numpy as np
 import pytest
 import scipy
+from upath import UPath
+
 from gwas.defaults import (
     default_kinship_minor_allele_frequency_cutoff,
     default_kinship_r_squared_cutoff,
@@ -21,7 +23,6 @@ from gwas.tri.base import Triangular
 from gwas.tri.tsqr import scale
 from gwas.utils import cpu_count, get_global_lock
 from gwas.vcf.base import VCFFile
-from upath import UPath
 
 from .conftest import chromosomes
 

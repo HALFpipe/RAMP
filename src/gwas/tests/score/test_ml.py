@@ -2,6 +2,8 @@ from typing import Type
 
 import numpy as np
 import pytest
+from jax import numpy as jnp
+
 from gwas.log import logger
 from gwas.null_model.fastlmm import FaSTLMM
 from gwas.null_model.ml import MaximumLikelihood
@@ -11,7 +13,6 @@ from gwas.null_model.pml import (
     ProfileMaximumLikelihood,
 )
 from gwas.null_model.reml import RestrictedMaximumLikelihood
-from jax import numpy as jnp
 
 from ..utils import assert_both_close, check_bias, check_types
 from .rmw_debug import RmwDebug

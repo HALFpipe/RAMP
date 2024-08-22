@@ -1,8 +1,9 @@
 import numpy as np
 import pytest
+from numpy import typing as npt
+
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
-from numpy import typing as npt
 
 
 def test_sw_merge() -> None:

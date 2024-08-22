@@ -4,12 +4,13 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 import pytest
+from pytest_benchmark.fixture import BenchmarkFixture
+from upath import UPath
+
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.testing.convert import convert_vcf_to_bgen
 from gwas.tools import plink2
 from gwas.vcf.base import Engine, VCFFile
-from pytest_benchmark.fixture import BenchmarkFixture
-from upath import UPath
 
 from .conftest import ReadResult
 from .utils import check_bias

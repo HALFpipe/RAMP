@@ -2,6 +2,8 @@ import pickle
 
 import numpy as np
 import pytest
+from upath import UPath
+
 from gwas.compression.pipe import (
     CompressedBytesReader,
     CompressedBytesWriter,
@@ -9,7 +11,6 @@ from gwas.compression.pipe import (
     CompressedTextWriter,
 )
 from gwas.utils import cpu_count
-from upath import UPath
 
 
 @pytest.mark.parametrize("compression", ["zst", "xz", "gz", "bz2", "lz4"])

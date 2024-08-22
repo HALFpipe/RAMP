@@ -1,4 +1,6 @@
 import pytest
+from upath import UPath
+
 from gwas.testing.convert import (
     convert_vcf_to_pfiles,
     get_pfile_variant_ids,
@@ -7,7 +9,6 @@ from gwas.testing.convert import (
 from gwas.testing.simulate import SimulationResult, simulate
 from gwas.utils import cpu_count
 from gwas.vcf.base import VCFFile
-from upath import UPath
 
 from ..conftest import DirectoryFactory
 

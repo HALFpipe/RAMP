@@ -4,6 +4,12 @@ from typing import Literal, Mapping, NamedTuple
 import numpy as np
 import pandas as pd
 import pytest
+from numpy import typing as npt
+from psutil import virtual_memory
+from pytest import FixtureRequest
+from tqdm.auto import tqdm
+from upath import UPath
+
 from gwas.compression.convert import to_bgzip
 from gwas.compression.pipe import CompressedTextReader
 from gwas.log import add_handler, setup_logging_queue, teardown_logging
@@ -12,11 +18,6 @@ from gwas.tri.calc import calc_tri
 from gwas.utils import apply_num_threads, chromosome_to_int, chromosomes_set, cpu_count
 from gwas.vcf.base import VCFFile, calc_vcf, load_vcf
 from gwas.vcf.variant import Variant
-from numpy import typing as npt
-from psutil import virtual_memory
-from pytest import FixtureRequest
-from tqdm.auto import tqdm
-from upath import UPath
 
 base_path: UPath = UPath(os.environ["DATA_PATH"])
 dataset: str = "opensnp"

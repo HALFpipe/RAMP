@@ -2,10 +2,11 @@ from functools import partial
 
 import numpy as np
 import scipy
-from gwas.log import logger
 from jaxtyping import jaxtyped
 from numpy import typing as npt
 from typeguard import typechecked as typechecker
+
+from gwas.log import logger
 
 check_types = partial(jaxtyped, typechecker=typechecker)
 

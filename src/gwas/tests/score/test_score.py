@@ -4,6 +4,10 @@ import numpy as np
 import pytest
 import scipy
 import seaborn as sns
+from matplotlib import pyplot as plt
+from numpy import typing as npt
+from upath import UPath
+
 from gwas.eig.base import Eigendecomposition
 from gwas.eig.collection import EigendecompositionCollection
 from gwas.log import logger
@@ -14,9 +18,6 @@ from gwas.pheno import VariableCollection
 from gwas.score.calc import calc_u_stat, calc_v_stat
 from gwas.utils import get_global_lock, make_sample_boolean_vectors
 from gwas.vcf.base import VCFFile
-from matplotlib import pyplot as plt
-from numpy import typing as npt
-from upath import UPath
 
 from ..utils import check_bias
 from .conftest import RmwScore

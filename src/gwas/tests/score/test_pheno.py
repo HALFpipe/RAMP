@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
-from gwas.mem.wkspace import SharedWorkspace
-from gwas.pheno import VariableCollection
 from numpy.testing import assert_array_equal
 from pytest import FixtureRequest
 from upath import UPath
+
+from gwas.mem.wkspace import SharedWorkspace
+from gwas.pheno import VariableCollection
 
 from .simulation import missing_value_rate
 

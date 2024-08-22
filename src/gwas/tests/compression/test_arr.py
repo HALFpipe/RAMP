@@ -4,6 +4,8 @@ import sys
 import numpy as np
 import pandas as pd
 import pytest
+from upath import UPath
+
 from gwas.compression.arr.base import (
     Blosc2CompressionMethod,
     FileArray,
@@ -14,7 +16,6 @@ from gwas.compression.arr.base import (
 from gwas.compression.arr.text import header_prefix
 from gwas.compression.pipe import CompressedTextReader
 from gwas.utils import cpu_count
-from upath import UPath
 
 try:
     import blosc2 as blosc2
