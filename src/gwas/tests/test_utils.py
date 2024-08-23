@@ -9,7 +9,7 @@ from gwas.log import (
     setup_logging,
     teardown_logging,
 )
-from gwas.utils import Process
+from gwas.utils.multiprocessing import Process
 
 
 class LogProcess(Process):

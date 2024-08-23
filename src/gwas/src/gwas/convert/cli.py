@@ -28,9 +28,10 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
     arguments = parse_arguments(argv)
 
     from ..log import logger, setup_logging
-    from ..utils import apply_num_threads, cpu_count
 
     setup_logging(level=arguments.log_level)
+
+    from ..utils.threads import apply_num_threads, cpu_count
 
     if arguments.num_threads is None:
         arguments.num_threads = cpu_count()

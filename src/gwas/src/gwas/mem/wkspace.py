@@ -16,7 +16,7 @@ from numpy import typing as npt
 from psutil import virtual_memory
 
 from ..log import logger
-from ..utils import get_global_lock, get_lock_name
+from ..utils.multiprocessing import get_global_lock, get_lock_name
 from ._os import c_memfd_create
 
 if TYPE_CHECKING:

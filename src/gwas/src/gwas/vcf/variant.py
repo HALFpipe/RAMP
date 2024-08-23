@@ -2,7 +2,7 @@ from typing import NamedTuple, Self
 
 import numpy as np
 
-from ..utils import chromosome_to_int
+from ..utils.genetics import chromosome_to_int
 
 
 class Variant(NamedTuple):

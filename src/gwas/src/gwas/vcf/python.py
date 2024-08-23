@@ -7,7 +7,7 @@ from upath import UPath
 from gwas.mem.wkspace import SharedWorkspace
 
 from ..log import logger
-from ..utils import chromosome_from_int
+from ..utils.genetics import chromosome_from_int
 from .base import VCFFileReader
 from .variant import Variant
 

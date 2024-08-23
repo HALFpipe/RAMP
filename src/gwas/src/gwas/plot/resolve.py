@@ -9,7 +9,8 @@ from upath import UPath
 from ..compression.arr.base import FileArray, FileArrayReader
 from ..log import logger
 from ..summary import SummaryCollection
-from ..utils import IterationOrder, chromosomes_list, make_pool_or_null_context
+from ..utils.genetics import chromosomes_list
+from ..utils.multiprocessing import IterationOrder, make_pool_or_null_context
 
 
 @dataclass(frozen=True)

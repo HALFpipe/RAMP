@@ -15,7 +15,8 @@ def parse_arguments(argv: list[str]) -> Namespace:
         default_score_r_squared_cutoff,
     )
     from ..null_model.base import NullModelCollection
-    from ..utils import chromosomes_set, cpu_count
+    from ..utils.genetics import chromosomes_set
+    from ..utils.threads import cpu_count
     from ..vcf.base import Engine
 
     argument_parser = ArgumentParser()
@@ -109,19 +110,21 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
     arguments = parse_arguments(argv)
 
     from ..log import logger, setup_logging
-    from ..mem.wkspace import SharedWorkspace
-    from ..utils import apply_num_threads
 
     output_directory = UPath(arguments.output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
 
     setup_logging(level=arguments.log_level, path=output_directory)
 
+    from ..utils.threads import apply_num_threads
+
+    apply_num_threads(arguments.num_threads)
+
+    from ..mem.wkspace import SharedWorkspace
+
     size: int | None = None
     if arguments.mem_gb is not None:
         size = int(arguments.mem_gb * 2**30)
-
-    apply_num_threads(arguments.num_threads)
 
     with SharedWorkspace.create(size=size) as sw:
         try:

@@ -13,11 +13,15 @@ import numpy as np
 from tqdm.auto import tqdm
 from upath import UPath
 
-from gwas.utils import get_processes_and_num_threads
-
 from ..log import logger
 from ..mem.wkspace import SharedWorkspace
-from ..utils import IterationOrder, make_pool_or_null_context, soft_close, wait
+from ..utils.multiprocessing import (
+    IterationOrder,
+    get_processes_and_num_threads,
+    make_pool_or_null_context,
+    soft_close,
+    wait,
+)
 from ..vcf.base import VCFFile
 from .base import TaskSyncCollection, Triangular
 from .tsqr import TallSkinnyQR

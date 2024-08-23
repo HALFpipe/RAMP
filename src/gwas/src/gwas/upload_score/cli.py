@@ -9,7 +9,7 @@ from typing import Iterable, Literal
 from upath import UPath
 
 from ..log import logger, setup_logging
-from ..utils import unwrap_which
+from ..utils.shutil import unwrap_which
 
 path_patterns: list[str] = [
     "chr*.metadata.yaml.gz",

@@ -8,7 +8,7 @@ from numpy import typing as npt
 from ..log import logger
 from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
-from ..utils import get_global_lock
+from ..utils.multiprocessing import get_global_lock
 from ..vcf.base import VCFFile
 from .base import TaskSyncCollection, Triangular
 

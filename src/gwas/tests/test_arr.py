@@ -5,7 +5,7 @@ from upath import UPath
 
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
-from gwas.utils import get_global_lock
+from gwas.utils.multiprocessing import get_global_lock
 
 shape = (5, 7)
 

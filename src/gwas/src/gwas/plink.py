@@ -1,9 +1,7 @@
 import numpy as np
 from upath import UPath
 
-from .compression.arr._read_str import read_str
 from .compression.pipe import CompressedTextReader
-from .vcf.base import read_header
 
 
 def identity(variant_id: str) -> str:
@@ -25,6 +23,8 @@ class ColumnReader(CompressedTextReader):
         self.column_index = column_index
 
     def read_values(self) -> list[str]:
+        from .compression.arr._read_str import read_str
+
         values: list[str] = list()
         with self as file_handle:
             read_str(
@@ -40,6 +40,9 @@ class ColumnReader(CompressedTextReader):
 
 class HeaderColumnReader(ColumnReader):
     def __init__(self, file_path: UPath, column: str) -> None:
+        from .compression.pipe import CompressedTextReader
+        from .vcf.base import read_header
+
         compressed_text_reader = CompressedTextReader(file_path)
         header_length, columns, _ = read_header(compressed_text_reader)
         column_index = columns.index(column)
@@ -76,3 +79,17 @@ class FamFile(ColumnReader):
 
     def read_samples(self) -> list[str]:
         return self.read_values()
+
+
+def is_bfile(path: UPath) -> bool:
+    return all(
+        (path.parent / f"{path.name}{suffix}").is_file()
+        for suffix in {".bed", ".bim", ".fam"}
+    )
+
+
+def is_pfile(path: UPath) -> bool:
+    return all(
+        (path.parent / f"{path.name}{suffix}").is_file()
+        for suffix in {".pgen", ".pvar", ".psam"}
+    )

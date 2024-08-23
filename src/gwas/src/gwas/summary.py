@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from itertools import chain
-from typing import Literal, Self
+from typing import Any, Literal, Self, Type, TypeVar, get_args, get_origin
 
 import yaml
 from upath import UPath
@@ -9,7 +9,38 @@ from .compression.pipe import CompressedTextReader
 from .log import logger
 from .null_model.base import NullModelCollection
 from .pheno import VariableCollection, VariableSummary
-from .utils import parse_obj_as
+
+T = TypeVar("T")
+
+
+def parse_obj_as(cls: Type[T], data: Any) -> T:
+    """Parses an object as the specified type. Inspired by the Pydantic function of the
+    same name.
+
+    Args:
+        cls (Type[T]): The type to parse as.
+        data (Any): The data to parse.
+
+    Returns:
+        T: The parsed object.
+    """
+    if is_dataclass(cls):
+        return cls(
+            **{f.name: parse_obj_as(f.type, data.get(f.name)) for f in fields(cls)}
+        )  # type: ignore
+
+    origin = get_origin(cls)
+    if origin is list:
+        (value_cls,) = get_args(cls)
+        return [parse_obj_as(value_cls, element) for element in data]  # type: ignore
+    elif origin is dict:
+        (key_cls, value_cls) = get_args(cls)
+        return {
+            parse_obj_as(key_cls, key): parse_obj_as(value_cls, value)
+            for key, value in data.items()
+        }  # type: ignore
+
+    return data
 
 
 @dataclass(frozen=True, slots=True)

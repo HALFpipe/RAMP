@@ -3,7 +3,6 @@ from contextlib import AbstractContextManager
 from dataclasses import KW_ONLY, dataclass, field
 from math import prod
 from typing import (
-    TYPE_CHECKING,
     Any,
     ClassVar,
     Generic,
@@ -18,9 +17,6 @@ import numpy as np
 import pandas as pd
 from numpy import typing as npt
 from upath import UPath
-
-if TYPE_CHECKING:
-    pass
 
 
 @dataclass(frozen=True, kw_only=True)

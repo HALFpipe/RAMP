@@ -7,7 +7,7 @@ from typing import IO, Generic, Mapping, Type, TypeVar
 from upath import UPath
 
 from ..log import logger
-from ..utils import unwrap_which
+from ..utils.shutil import unwrap_which
 
 decompress_commands: Mapping[str, list[str]] = {
     ".zst": [

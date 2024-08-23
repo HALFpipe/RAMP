@@ -10,7 +10,7 @@ from gwas.compression.pipe import (
     CompressedTextReader,
     CompressedTextWriter,
 )
-from gwas.utils import cpu_count
+from gwas.utils.threads import cpu_count
 
 
 @pytest.mark.parametrize("compression", ["zst", "xz", "gz", "bz2", "lz4"])

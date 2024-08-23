@@ -16,7 +16,7 @@ from tqdm.auto import tqdm
 from ..eig.base import Eigendecomposition
 from ..log import logger
 from ..pheno import VariableCollection
-from ..utils import IterationOrder, make_pool_or_null_context
+from ..utils.multiprocessing import IterationOrder, make_pool_or_null_context
 from .base import NullModelCollection, NullModelResult
 
 terms_count = TypeVar("terms_count")

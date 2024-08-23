@@ -9,7 +9,7 @@ from numpy import typing as npt
 from upath import UPath
 
 from ...log import logger
-from ...utils import to_str
+from ...utils.numpy import to_str
 from ..pipe import CompressedTextReader, CompressedTextWriter
 from ._read_float import read_float
 from ._read_str import (

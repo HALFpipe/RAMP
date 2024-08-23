@@ -9,7 +9,7 @@ from gwas.compression.arr.base import (
     compression_methods,
 )
 from gwas.log import logger
-from gwas.utils import cpu_count
+from gwas.utils.threads import cpu_count
 
 from .conftest import RmwScore
 

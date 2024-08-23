@@ -4,12 +4,11 @@ from typing import ClassVar, Self
 import numpy as np
 from numpy import typing as npt
 
-from gwas.utils import get_global_lock
-
 from ..eig.base import Eigendecomposition
 from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..pheno import VariableCollection
+from ..utils.multiprocessing import get_global_lock
 
 
 @dataclass

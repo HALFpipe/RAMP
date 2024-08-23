@@ -7,11 +7,11 @@ from tqdm import tqdm
 from .mem.arr import SharedArray
 from .mem.data_frame import SharedDataFrame
 from .pheno import VariableCollection
-from .utils import (
+from .utils.multiprocessing import (
     get_global_lock,
     make_pool_or_null_context,
-    make_sample_boolean_vectors,
 )
+from .utils.numpy import make_sample_boolean_vectors
 from .vcf.base import VCFFile
 
 

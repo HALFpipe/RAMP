@@ -10,7 +10,7 @@ from ..compression.arr.base import FileArrayWriter
 from ..eig.collection import EigendecompositionCollection
 from ..log import logger, multiprocessing_context
 from ..mem.arr import SharedArray
-from ..utils import Action, Process, SharedState
+from ..utils.multiprocessing import Action, Process, SharedState
 from ..vcf.base import VCFFile
 from .calc import calc_u_stat, calc_v_stat
 

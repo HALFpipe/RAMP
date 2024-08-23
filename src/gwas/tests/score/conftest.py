@@ -24,13 +24,9 @@ from gwas.raremetalworker.score import (
 from gwas.raremetalworker.scorefile import Scorefile, ScorefileHeader
 from gwas.score.command import split_by_missing_values
 from gwas.testing.simulate import SimulationResult
-from gwas.utils import (
-    Pool,
-    chromosome_to_int,
-    chromosomes_set,
-    cpu_count,
-    get_global_lock,
-)
+from gwas.utils.genetics import chromosome_to_int, chromosomes_set
+from gwas.utils.multiprocessing import Pool, get_global_lock
+from gwas.utils.threads import cpu_count
 from gwas.vcf.base import VCFFile
 
 from ..conftest import DirectoryFactory

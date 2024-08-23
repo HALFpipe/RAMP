@@ -8,10 +8,10 @@ from .plink import BimFile as BimFile
 from .plink import FamFile as FamFile
 from .plink import PsamFile as PsamFile
 from .plink import PVarFile as PVarFile
-from .utils import chromosome_from_int as chromosome_from_int
-from .utils import chromosome_to_int as chromosome_to_int
-from .utils import chromosomes_list as chromosomes_list
-from .utils import chromosomes_set as chromosomes_set
+from .utils.genetics import chromosome_from_int as chromosome_from_int
+from .utils.genetics import chromosome_to_int as chromosome_to_int
+from .utils.genetics import chromosomes_list as chromosomes_list
+from .utils.genetics import chromosomes_set as chromosomes_set
 from .vcf.base import VCFFile as VCFFile
 from .vcf.cpp import CppVCFFile as CppVCFFile
 from .vcf.python import PyVCFFile as PyVCFFile

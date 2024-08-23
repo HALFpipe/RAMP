@@ -10,10 +10,10 @@ from ..compression.arr.base import FileArrayReader
 from ..log import logger
 from ..mem.arr import ScalarType, SharedArray
 from ..mem.wkspace import SharedWorkspace
-from ..utils import (
+from ..utils.genetics import make_variant_mask
+from ..utils.multiprocessing import (
     IterationOrder,
     make_pool_or_null_context,
-    make_variant_mask,
 )
 from .hg19 import offset
 from .resolve import Phenotype, ScoreFile

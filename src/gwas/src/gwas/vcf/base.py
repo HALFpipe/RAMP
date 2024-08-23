@@ -15,12 +15,8 @@ from ..compression.pipe import CompressedTextReader
 from ..log import logger
 from ..mem.data_frame import SharedDataFrame
 from ..mem.wkspace import SharedWorkspace
-from ..utils import (
-    IterationOrder,
-    chromosome_to_int,
-    make_pool_or_null_context,
-    make_variant_mask,
-)
+from ..utils.genetics import chromosome_to_int, make_variant_mask
+from ..utils.multiprocessing import IterationOrder, make_pool_or_null_context
 from .variant import Variant
 
 

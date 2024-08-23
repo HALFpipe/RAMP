@@ -24,7 +24,8 @@ from ..compression.arr.base import (
     default_compression_method,
 )
 from ..log import logger
-from ..utils import get_global_lock, invert_pivot
+from ..utils.multiprocessing import get_global_lock
+from ..utils.numpy import invert_pivot
 from .wkspace import Allocation, SharedWorkspace
 
 ScalarType = TypeVar("ScalarType", bound=np.generic)

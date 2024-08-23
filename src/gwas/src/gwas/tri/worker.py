@@ -1,7 +1,7 @@
 from upath import UPath
 
 from ..log import logger
-from ..utils import Process
+from ..utils.multiprocessing import Process
 from .base import TaskSyncCollection
 from .tsqr import TallSkinnyQR
 

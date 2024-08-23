@@ -13,7 +13,7 @@ from upath import UPath
 from gwas.mem.arr import SharedArray
 
 from ..log import logger
-from ..utils import chromosomes_list
+from ..utils.genetics import chromosomes_list
 from .get import PlotJob
 from .hg19 import (
     genome_wide_segments,

@@ -16,7 +16,8 @@ from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.pheno import VariableCollection
 from gwas.score.calc import calc_u_stat, calc_v_stat
-from gwas.utils import get_global_lock, make_sample_boolean_vectors
+from gwas.utils.multiprocessing import get_global_lock
+from gwas.utils.numpy import make_sample_boolean_vectors
 from gwas.vcf.base import VCFFile
 
 from ..utils import check_bias

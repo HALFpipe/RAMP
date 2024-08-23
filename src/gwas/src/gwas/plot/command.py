@@ -4,7 +4,7 @@ from tqdm.auto import tqdm
 from upath import UPath
 
 from ..mem.wkspace import SharedWorkspace
-from ..utils import IterationOrder, make_pool_or_null_context
+from ..utils.multiprocessing import IterationOrder, make_pool_or_null_context
 from .get import DataLoader
 from .make import PlotGenerator, get_file_path
 from .resolve import resolve_score_files

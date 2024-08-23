@@ -8,7 +8,7 @@ from numpy import typing as npt
 from ..log import multiprocessing_context
 from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
-from ..utils import SharedState
+from ..utils.multiprocessing import SharedState
 from ..vcf.base import VCFFile
 
 

@@ -6,7 +6,8 @@ from numpy import typing as npt
 
 from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
-from ..utils import get_global_lock, make_sample_boolean_vectors
+from ..utils.multiprocessing import get_global_lock
+from ..utils.numpy import make_sample_boolean_vectors
 from ..vcf.base import VCFFile
 from .base import Eigendecomposition
 

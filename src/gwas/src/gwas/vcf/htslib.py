@@ -6,7 +6,7 @@ from numpy import typing as npt
 from upath import UPath
 
 from ..mem.wkspace import SharedWorkspace
-from ..utils import chromosome_to_int
+from ..utils.genetics import chromosome_to_int
 from ._htslib import read_dosages, read_variants
 from .base import VCFFile
 from .variant import Variant

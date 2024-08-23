@@ -15,7 +15,10 @@ from ..compression.arr.base import (
 )
 from ..compression.pipe import CompressedBytesReader
 from ..log import logger
-from ..utils import get_processes_and_num_threads, make_pool_or_null_context
+from ..utils.multiprocessing import (
+    get_processes_and_num_threads,
+    make_pool_or_null_context,
+)
 
 suffix_to_convert = ".b2array"
 

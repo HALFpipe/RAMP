@@ -16,7 +16,7 @@ from gwas.compression.arr.base import (
 from gwas.covar import calc_covariance
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.pheno import VariableCollection
-from gwas.utils import cpu_count
+from gwas.utils.threads import cpu_count
 
 from ..utils import check_bias
 from .simulation import missing_value_rate

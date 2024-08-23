@@ -15,7 +15,7 @@ from gwas.compression.arr.base import (
 )
 from gwas.compression.arr.text import header_prefix
 from gwas.compression.pipe import CompressedTextReader
-from gwas.utils import cpu_count
+from gwas.utils.threads import cpu_count
 
 try:
     import blosc2 as blosc2

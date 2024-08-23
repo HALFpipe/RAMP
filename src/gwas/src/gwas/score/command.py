@@ -16,7 +16,7 @@ from ..mem.wkspace import SharedWorkspace
 from ..pheno import VariableCollection
 from ..score.job import JobCollection
 from ..tri.calc import calc_tri
-from ..utils import chromosome_to_int, parse_chromosome
+from ..utils.genetics import chromosome_to_int, parse_chromosome
 from ..vcf.base import VCFFile, calc_vcf
 
 

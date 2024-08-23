@@ -46,26 +46,28 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
     arguments = parse_arguments(argv)
 
     from ..log import logger, setup_logging
-    from ..mem.wkspace import SharedWorkspace
-    from ..utils import apply_num_threads, cpu_count
-    from .base import Triangular
 
     output_directory = UPath(arguments.output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
 
     setup_logging(level=arguments.log_level, path=output_directory)
 
-    size: int | None = None
-    if arguments.mem_gb is not None:
-        size = int(arguments.mem_gb * 2**30)
+    from ..utils.threads import apply_num_threads, cpu_count
 
     if arguments.num_threads is None:
         arguments.num_threads = cpu_count()
     apply_num_threads(arguments.num_threads)
 
+    from ..mem.wkspace import SharedWorkspace
+
+    size: int | None = None
+    if arguments.mem_gb is not None:
+        size = int(arguments.mem_gb * 2**30)
+
     with SharedWorkspace.create(size=size) as sw:
         try:
             from ..vcf.base import calc_vcf
+            from .base import Triangular
             from .tsqr import TallSkinnyQR
 
             (vcf_file,) = calc_vcf(

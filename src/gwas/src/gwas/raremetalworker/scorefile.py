@@ -1,3 +1,4 @@
+import re
 from collections import OrderedDict
 from dataclasses import dataclass, fields
 from typing import IO, Any, ClassVar
@@ -13,7 +14,11 @@ from .. import __version__
 from ..compression.pipe import CompressedTextReader, CompressedTextWriter
 from ..null_model.base import NullModelCollection
 from ..pheno import VariableCollection, VariableSummary
-from ..utils import to_str, underscore
+from ..utils.numpy import to_str
+
+
+def underscore(x: str) -> str:
+    return re.sub(r"([a-z\d])([A-Z])", r"\1_\2", x).lower()
 
 
 @dataclass

@@ -5,11 +5,12 @@ from typing import Any, Callable
 
 import numpy as np
 import pytest
-from gwas.log import logger
-from gwas.raremetalworker.score import RaremetalworkerScoreCommand
-from gwas.utils import unwrap_which
 from more_itertools import peekable
 from numpy import typing as npt
+
+from gwas.log import logger
+from gwas.raremetalworker.score import RaremetalworkerScoreCommand
+from gwas.utils.shutil import unwrap_which
 
 field_mapping: dict[str, str] = {
     "X:": "x",

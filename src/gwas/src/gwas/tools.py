@@ -1,4 +1,4 @@
-from .utils import unwrap_which
+from .utils.shutil import unwrap_which
 
 bcftools: list[str] = [unwrap_which("bcftools")]
 gcta64: list[str] = [unwrap_which("gcta64")]

@@ -9,7 +9,7 @@ from ..compression.arr._read_float import (
     run_vcf_float_reader,
 )
 from ..mem.wkspace import SharedWorkspace
-from ..utils import chromosome_from_int
+from ..utils.genetics import chromosome_from_int
 from .base import VCFFileReader
 from .variant import Variant
 

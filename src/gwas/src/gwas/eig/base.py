@@ -14,9 +14,9 @@ from ..log import logger
 from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..tri.base import Triangular
-from ..utils import (
+from ..utils.genetics import chromosomes_set
+from ..utils.multiprocessing import (
     IterationOrder,
-    chromosomes_set,
     get_global_lock,
     make_pool_or_null_context,
 )

@@ -8,7 +8,7 @@ from ..eig.base import Eigendecomposition
 from ..eig.collection import EigendecompositionCollection
 from ..log import logger
 from ..mem.arr import SharedArray
-from ..utils import get_global_lock, soft_close
+from ..utils.multiprocessing import get_global_lock, soft_close
 from ..vcf.base import VCFFile
 from .worker import (
     Calc,

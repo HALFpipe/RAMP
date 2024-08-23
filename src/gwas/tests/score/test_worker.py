@@ -6,7 +6,8 @@ from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
 from gwas.score.worker import Calc, TaskSyncCollection
-from gwas.utils import cpu_count, get_global_lock
+from gwas.utils.multiprocessing import get_global_lock
+from gwas.utils.threads import cpu_count
 from gwas.vcf.base import VCFFile
 
 

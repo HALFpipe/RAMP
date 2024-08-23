@@ -16,7 +16,7 @@ from ..mem.wkspace import SharedWorkspace
 from ..null_model.calc import calc_null_model_collections
 from ..pheno import VariableCollection
 from ..summary import SummaryCollection
-from ..utils import chromosome_to_int
+from ..utils.genetics import chromosome_to_int
 from ..vcf.base import VCFFile
 from .run import calc_score
 

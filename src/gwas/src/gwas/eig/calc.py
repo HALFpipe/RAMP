@@ -9,7 +9,7 @@ from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..tri.base import Triangular
 from ..tri.tsqr import TallSkinnyQR
-from ..utils import (
+from ..utils.multiprocessing import (
     Process,
     SharedState,
     get_global_lock,

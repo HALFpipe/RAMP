@@ -1,20 +1,14 @@
-import faulthandler
 import multiprocessing as mp
 import os
-import re
-import signal
 from contextlib import nullcontext
-from dataclasses import dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, field, fields
 from enum import Enum, auto
-from functools import cache
 from logging import LogRecord
 from multiprocessing import parent_process
 from multiprocessing import pool as mp_pool
 from multiprocessing.queues import SimpleQueue
 from multiprocessing.synchronize import Event, RLock
 from pprint import pformat
-from shutil import which
-from subprocess import check_output
 from threading import Thread
 from typing import (
     Any,
@@ -26,30 +20,22 @@ from typing import (
     NamedTuple,
     Sequence,
     Sized,
-    Type,
     TypeVar,
-    get_args,
-    get_origin,
     override,
 )
 
 import numpy as np
-import pandas as pd
-from numpy import typing as npt
-from threadpoolctl import threadpool_info, threadpool_limits
-from upath import UPath
 
-from .log import logger, multiprocessing_context, worker_configurer
+from ..log import logger, worker_configurer
 
-try:
-    from pytest_cov.embed import cleanup_on_sigterm
-except ImportError:
-    pass
-else:
-    cleanup_on_sigterm()
+S = TypeVar("S")
+T = TypeVar("T")
+V = TypeVar("V")
 
 _global_lock: RLock | None = None
 if parent_process() is None:
+    from ..log import multiprocessing_context
+
     _global_lock = multiprocessing_context.RLock()
 
 
@@ -57,69 +43,6 @@ def get_global_lock() -> RLock:
     if _global_lock is None:
         raise ValueError("Global lock not set")
     return _global_lock
-
-
-def parse_chromosome(chromosome: str) -> int | str:
-    if chromosome == "X":
-        return chromosome
-    elif chromosome.isdigit():
-        return int(chromosome)
-    else:
-        raise ValueError(f'Unknown chromosome "{chromosome}"')
-
-
-def chromosome_to_int(chromosome: int | str) -> int:
-    if chromosome == "X":
-        return 23
-    elif isinstance(chromosome, str) and chromosome.isdigit():
-        return int(chromosome)
-    elif isinstance(chromosome, int):
-        return chromosome
-    raise ValueError(f'Unknown chromsome "{chromosome}"')
-
-
-def chromosome_from_int(chromosome_int: int) -> int | str:
-    if chromosome_int == 23:
-        return "X"
-    else:
-        return chromosome_int
-
-
-def chromosomes_list() -> list[int | str]:
-    return [*range(1, 22 + 1), "X"]
-
-
-def chromosomes_set() -> set[int | str]:
-    return set(chromosomes_list())
-
-
-def unwrap_which(command: str) -> str:
-    executable = which(command)
-    if executable is None:
-        raise ValueError(f"Could not find executable for {command}")
-    return executable
-
-
-def scale_rows(
-    a: npt.NDArray[np.float64],
-    b: npt.NDArray[np.float64],
-) -> npt.NDArray[np.float64]:
-    return (a.transpose() * b.ravel()).transpose()
-
-
-def to_str(x: Any) -> str:
-    if isinstance(x, np.ndarray):
-        if x.size == 1:
-            x = x.item()
-    if np.issubdtype(type(x), np.floating):
-        if np.isnan(x):
-            return "NA"
-        return np.format_float_scientific(x)
-    return str(x)
-
-
-def underscore(x: str) -> str:
-    return re.sub(r"([a-z\d])([A-Z])", r"\1_\2", x).lower()
 
 
 class InitArgs(NamedTuple):
@@ -131,7 +54,7 @@ class InitArgs(NamedTuple):
 
 
 def get_initargs(num_threads: int | None = None) -> InitArgs:
-    from .log import logging_queue
+    from ..log import logger, logging_queue
 
     sched_affinity: set[int] | None = None
     if hasattr(os, "sched_getaffinity"):
@@ -148,52 +71,6 @@ def get_initargs(num_threads: int | None = None) -> InitArgs:
     return initargs
 
 
-num_threads_variables: Sequence[str] = [
-    "OMP_NUM_THREADS",
-    "OPENBLAS_NUM_THREADS",
-    "MKL_NUM_THREADS",
-    "VECLIB_MAXIMUM_THREADS",
-    "NUMEXPR_NUM_THREADS",
-    "NUMEXPR_MAX_THREADS",
-]
-
-
-def apply_num_threads(num_threads: int | None) -> None:
-    faulthandler.enable(all_threads=True)
-    faulthandler.register(signal.SIGUSR1, all_threads=True)
-    # Write a traceback to standard out every six hours
-    faulthandler.dump_traceback_later(60 * 60 * 6, repeat=True)
-
-    xla_flags = f'{os.getenv("XLA_FLAGS", "")} --xla_cpu_enable_fast_math=false'
-    if num_threads is not None:
-        threadpool_limits(limits=num_threads)
-        for variable in num_threads_variables:
-            os.environ[variable] = str(num_threads)
-        xla_flags = (
-            f"--xla_cpu_multi_thread_eigen={str(num_threads > 1).lower()} "
-            f"intra_op_parallelism_threads={num_threads} "
-            f"inter_op_parallelism_threads={num_threads} "
-            f"{xla_flags}"
-        )
-    os.environ["MKL_DYNAMIC"] = "FALSE"
-    os.environ["XLA_FLAGS"] = xla_flags
-
-    from chex import set_n_cpu_devices
-
-    set_n_cpu_devices(1)
-
-    import jax
-
-    jax.config.update("jax_enable_x64", True)
-    jax.config.update("jax_platform_name", "cpu")
-    # jax.config.update("jax_traceback_filtering", "off")
-
-    logger.debug(
-        f'Configured process "{mp.current_process().name}" '
-        f"with {pformat(threadpool_info())}"
-    )
-
-
 def initializer(
     sched_affinity: set[int] | None,
     num_threads: int | None,
@@ -201,20 +78,36 @@ def initializer(
     log_level: int | str,
     lock: RLock,
 ) -> None:
+    if logging_queue is None:
+        raise ValueError("Trying to initialize process without logging queue")
+
+    worker_configurer(logging_queue, log_level)
+
     if sched_affinity is not None:
         if hasattr(os, "sched_setaffinity"):
             os.sched_setaffinity(0, sched_affinity)
+    from .threads import apply_num_threads
 
     apply_num_threads(num_threads)
-
-    if logging_queue is None:
-        raise ValueError("Trying to initialize process without logging queue")
-    worker_configurer(logging_queue, log_level)
 
     global _global_lock
     _global_lock = lock
 
     logger.debug(f'Finished initializer for process "{mp.current_process().name}"')
+
+
+def soft_kill(proc: mp.Process) -> None:
+    try:
+        proc.join(timeout=1)
+        if proc.is_alive():
+            proc.terminate()
+        proc.join(timeout=1)
+        if proc.is_alive():
+            proc.kill()
+        proc.join()
+    except (ValueError, AttributeError, AssertionError) as e:
+        logger.debug(f"Could not kill process {proc}", exc_info=e)
+        pass
 
 
 class Pool(mp_pool.Pool):
@@ -245,9 +138,6 @@ class Pool(mp_pool.Pool):
 class Action(Enum):
     Event = auto()
     Exit = auto()
-
-
-V = TypeVar("V")
 
 
 @dataclass
@@ -332,20 +222,6 @@ def wait(running: list[Process]) -> None:
             break
 
 
-def soft_kill(proc: mp.Process) -> None:
-    try:
-        proc.join(timeout=1)
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(timeout=1)
-        if proc.is_alive():
-            proc.kill()
-        proc.join()
-    except (ValueError, AttributeError, AssertionError) as e:
-        logger.debug(f"Could not kill process {proc}", exc_info=e)
-        pass
-
-
 def soft_close(proc: Process) -> None:
     soft_kill(proc)
     try:
@@ -354,70 +230,9 @@ def soft_close(proc: Process) -> None:
         pass
 
 
-def invert_pivot(pivot: npt.NDArray[np.uint32]) -> npt.NDArray[np.uint32]:
-    """Calculates the inverse of a pivot array. Taken from
-    https://stackoverflow.com/a/25535723
-
-    Args:
-        pivot (npt.NDArray[np.integer]): The pivot array.
-
-    Returns:
-        npt.NDArray[np.integer]: The inverse.
-    """
-    inverse = np.empty_like(pivot)
-    inverse[pivot] = np.arange(pivot.size)
-    return inverse
-
-
-T = TypeVar("T")
-
-
-def parse_obj_as(cls: Type[T], data: Any) -> T:
-    """Parses an object as the specified type. Inspired by the Pydantic function of the
-    same name.
-
-    Args:
-        cls (Type[T]): The type to parse as.
-        data (Any): The data to parse.
-
-    Returns:
-        T: The parsed object.
-    """
-    if is_dataclass(cls):
-        return cls(
-            **{f.name: parse_obj_as(f.type, data.get(f.name)) for f in fields(cls)}
-        )  # type: ignore
-
-    origin = get_origin(cls)
-    if origin is list:
-        (value_cls,) = get_args(cls)
-        return [parse_obj_as(value_cls, element) for element in data]  # type: ignore
-    elif origin is dict:
-        (key_cls, value_cls) = get_args(cls)
-        return {
-            parse_obj_as(key_cls, key): parse_obj_as(value_cls, value)
-            for key, value in data.items()
-        }  # type: ignore
-
-    return data  # type: ignore
-
-
-def make_sample_boolean_vectors(
-    base_samples: list[str],
-    samples_iterable: Iterable[list[str]],
-) -> list[npt.NDArray[np.bool_]]:
-    return [
-        np.fromiter((sample in samples for sample in base_samples), dtype=np.bool_)
-        for samples in samples_iterable
-    ]
-
-
 class IterationOrder(Enum):
     ORDERED = auto()
     UNORDERED = auto()
-
-
-S = TypeVar("S")
 
 
 def make_pool_or_null_context(
@@ -458,51 +273,9 @@ def make_pool_or_null_context(
     return cm, output_iterator
 
 
-def greater_or_close(series: pd.Series, cutoff: float) -> npt.NDArray[np.bool_]:
-    value = np.asarray(series.values)
-    result = np.logical_or(
-        np.logical_or(value >= cutoff, np.isclose(value, cutoff)), np.isnan(value)
-    )
-    return result
-
-
-def make_variant_mask(
-    allele_frequencies: pd.Series | pd.DataFrame,
-    r_squared: pd.Series,
-    minor_allele_frequency_cutoff: float,
-    r_squared_cutoff: float,
-    aggregate_func: str = "max",
-) -> npt.NDArray[np.bool_]:
-    allele_frequencies = allele_frequencies.copy()
-    allele_frequencies = allele_frequencies.where(
-        allele_frequencies.to_numpy() <= 0.5, 1 - allele_frequencies
-    )
-    if isinstance(allele_frequencies, pd.DataFrame):
-        allele_frequencies = allele_frequencies.aggregate(aggregate_func, axis="columns")
-    variant_mask = greater_or_close(
-        allele_frequencies,
-        minor_allele_frequency_cutoff,
-    ) & greater_or_close(r_squared, r_squared_cutoff)
-    return variant_mask
-
-
 def get_lock_name(lock: RLock) -> str:
     assert hasattr(lock, "_semlock")
     return lock._semlock.name
-
-
-def is_bfile(path: UPath) -> bool:
-    return all(
-        (path.parent / f"{path.name}{suffix}").is_file()
-        for suffix in {".bed", ".bim", ".fam"}
-    )
-
-
-def is_pfile(path: UPath) -> bool:
-    return all(
-        (path.parent / f"{path.name}{suffix}").is_file()
-        for suffix in {".pgen", ".pvar", ".psam"}
-    )
 
 
 def get_processes_and_num_threads(
@@ -519,8 +292,3 @@ def get_processes_and_num_threads(
     )
 
     return processes, num_threads_per_process
-
-
-@cache
-def cpu_count() -> int:
-    return int(check_output(["nproc"]).decode().strip())

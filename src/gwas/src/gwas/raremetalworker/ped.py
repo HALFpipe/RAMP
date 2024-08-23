@@ -3,7 +3,7 @@ from numpy import typing as npt
 from upath import UPath
 
 from ..pheno import VariableCollection
-from ..utils import to_str
+from ..utils.numpy import to_str
 
 
 def format_row(a: npt.NDArray[np.float64]) -> str:

@@ -8,9 +8,9 @@ from upath import UPath
 
 from ..compression.pipe import CompressedTextReader
 from ..defaults import default_score_r_squared_cutoff
-from ..plink import PVarFile
+from ..plink import PVarFile, is_bfile, is_pfile
 from ..tools import bcftools, plink2
-from ..utils import IterationOrder, is_bfile, is_pfile, make_pool_or_null_context
+from ..utils.multiprocessing import IterationOrder, make_pool_or_null_context
 
 plink2_extra_arguments: Sequence[str] = [
     "--threads",

@@ -5,7 +5,7 @@ from gwas.mean import calc_mean, make_sample_boolean_array
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.pheno import VariableCollection
 from gwas.testing.simulate import generate_missing_value_patterns
-from gwas.utils import cpu_count
+from gwas.utils.threads import cpu_count
 from gwas.vcf.base import VCFFile
 
 from .conftest import ReadResult

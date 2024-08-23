@@ -15,7 +15,8 @@ from gwas.compression.pipe import CompressedTextReader
 from gwas.log import add_handler, setup_logging_queue, teardown_logging
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri.calc import calc_tri
-from gwas.utils import apply_num_threads, chromosome_to_int, chromosomes_set, cpu_count
+from gwas.utils.genetics import chromosome_to_int, chromosomes_set
+from gwas.utils.threads import apply_num_threads, cpu_count
 from gwas.vcf.base import VCFFile, calc_vcf, load_vcf
 from gwas.vcf.variant import Variant
 

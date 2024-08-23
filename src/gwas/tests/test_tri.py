@@ -8,7 +8,7 @@ from upath import UPath
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.tri.base import Triangular, is_lower_triangular
 from gwas.tri.tsqr import scale
-from gwas.utils import cpu_count
+from gwas.utils.threads import cpu_count
 from gwas.vcf.base import VCFFile
 
 sample_size_label = "large"
