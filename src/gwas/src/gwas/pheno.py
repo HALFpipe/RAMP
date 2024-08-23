@@ -348,11 +348,11 @@ class VariableCollection:
 
     def covariance_to_txt(
         self, path: UPath, compression_method: CompressionMethod, num_threads: int
-    ) -> None:
+    ) -> UPath:
         path = path.with_suffix(compression_method.suffix)
         if path.is_file():
             logger.debug("Skip writing covariance matrix because it already exists")
-            return
+            return path
 
         phenotype_array = self.phenotypes.to_numpy()
         covariate_array = self.covariates.to_numpy()
@@ -360,12 +360,12 @@ class VariableCollection:
         array = np.hstack((phenotype_array, covariate_array))
         names = [*self.phenotype_names, *self.covariate_names]
 
-        data_frame = pd.DataFrame(array, index=self.samples, columns=names)
-
         logger.debug("Calculating covariance matrix")
-        covariance: npt.NDArray[np.float64] = np.asfortranarray(
-            data_frame.cov().to_numpy(dtype=np.float64)
-        )
+        masked_array = np.ma.array(array, mask=np.isnan(array))
+        numpy_covariance = np.ma.cov(
+            masked_array, rowvar=False, allow_masked=True
+        ).filled(np.nan)
+        covariance: npt.NDArray[np.float64] = np.asfortranarray(numpy_covariance)
 
         writer: FileArrayWriter[np.float64] = FileArray.create(
             path,
@@ -381,6 +381,8 @@ class VariableCollection:
 
         with writer:
             writer[:, :] = covariance
+
+        return writer.file_path
 
 
 @dataclass

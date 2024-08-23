@@ -8,7 +8,10 @@ from numpy.testing import assert_array_equal
 from pytest import FixtureRequest
 from upath import UPath
 
-from gwas.compression.arr.base import Blosc2CompressionMethod, compression_methods
+from gwas.compression.arr.base import (
+    Blosc2CompressionMethod,
+    compression_methods,
+)
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.pheno import VariableCollection
 from gwas.utils import cpu_count
@@ -209,7 +212,7 @@ def test_covariance(
     request.addfinalizer(variable_collection.free)
 
     covariance_path = tmp_path / "covariance.tsv"
-    variable_collection.covariance_to_txt(
+    covariance_path = variable_collection.covariance_to_txt(
         covariance_path, compression_method, num_threads=cpu_count()
     )
 
