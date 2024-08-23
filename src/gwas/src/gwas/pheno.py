@@ -7,11 +7,6 @@ import pandas as pd
 from numpy import typing as npt
 from upath import UPath
 
-from .compression.arr.base import (
-    CompressionMethod,
-    FileArray,
-    FileArrayWriter,
-)
 from .log import logger
 from .mem.arr import SharedArray
 from .mem.wkspace import SharedWorkspace
@@ -292,41 +287,6 @@ class VariableCollection(SharedArray[np.float64]):
             sw,
             **kwargs,
         )
-
-    def covariance_to_txt(
-        self, path: UPath, compression_method: CompressionMethod, num_threads: int
-    ) -> UPath:
-        path = path.with_suffix(compression_method.suffix)
-        if path.is_file():
-            logger.debug("Skip writing covariance matrix because it already exists")
-            return path
-
-        array = self.to_numpy()
-        names = [*self.phenotype_names, *self.covariate_names]
-
-        logger.debug("Calculating covariance matrix")
-        masked_array = np.ma.array(array, mask=np.isnan(array))
-        numpy_covariance = np.ma.cov(
-            masked_array, rowvar=False, allow_masked=True
-        ).filled(np.nan)
-        covariance: npt.NDArray[np.float64] = np.asfortranarray(numpy_covariance)
-
-        writer: FileArrayWriter[np.float64] = FileArray.create(
-            path,
-            covariance.shape,
-            covariance.dtype.type,
-            compression_method,
-            num_threads=num_threads,
-        )
-
-        data_frame = pd.DataFrame(dict(variable=names))
-        writer.set_axis_metadata(0, data_frame)
-        writer.set_axis_metadata(1, names)
-
-        with writer:
-            writer[:, :] = covariance
-
-        return writer.file_path
 
 
 @dataclass

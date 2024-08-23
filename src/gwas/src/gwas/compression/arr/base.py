@@ -84,7 +84,7 @@ def ensure_suffix(file_path: UPath, compression_method: CompressionMethod) -> UP
 
 
 @dataclass(kw_only=True)
-class FileArray(Generic[ScalarType], AbstractContextManager["FileArray[ScalarType]"]):
+class FileArray(Generic[ScalarType]):
     _: KW_ONLY
     file_path: UPath
 
@@ -172,7 +172,9 @@ class FileArray(Generic[ScalarType], AbstractContextManager["FileArray[ScalarTyp
 
 
 @dataclass(kw_only=True)
-class FileArrayWriter(FileArray[ScalarType]):
+class FileArrayWriter(
+    FileArray[ScalarType], AbstractContextManager["FileArrayWriter[ScalarType]"]
+):
     num_threads: int
 
     @overload
@@ -193,7 +195,9 @@ class FileArrayWriter(FileArray[ScalarType]):
 
 
 @dataclass(kw_only=True)
-class FileArrayReader(FileArray[ScalarType]):
+class FileArrayReader(
+    FileArray[ScalarType], AbstractContextManager["FileArrayReader[ScalarType]"]
+):
     @abstractmethod
     def read_indices(
         self,

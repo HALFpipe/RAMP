@@ -47,3 +47,4 @@ repos:
           - types-seaborn
           - types-setuptools
           - types-tqdm
+          - universal_pathlib

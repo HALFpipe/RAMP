@@ -9,6 +9,7 @@ from tqdm.auto import tqdm
 from upath import UPath
 
 from ..compression.arr.base import TextCompressionMethod, compression_methods
+from ..covar import calc_covariance
 from ..log import logger
 from ..mean import calc_mean
 from ..mem.wkspace import SharedWorkspace
@@ -178,7 +179,8 @@ class GwasCommand:
         # Load phenotypes and covariates
         base_variable_collection = self.get_variable_collection()
         with threadpool_limits(limits=self.arguments.num_threads):
-            base_variable_collection.covariance_to_txt(
+            calc_covariance(
+                base_variable_collection,
                 self.output_directory / "covariance",
                 compression_methods[self.arguments.compression_method],
                 num_threads=self.arguments.num_threads,

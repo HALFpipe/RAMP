@@ -10,12 +10,15 @@ from upath import UPath
 
 from gwas.compression.arr.base import (
     Blosc2CompressionMethod,
+    FileArray,
     compression_methods,
 )
+from gwas.covar import calc_covariance
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.pheno import VariableCollection
 from gwas.utils import cpu_count
 
+from ..utils import check_bias
 from .simulation import missing_value_rate
 
 try:
@@ -204,9 +207,22 @@ def test_covariance(
     request.addfinalizer(variable_collection.free)
 
     covariance_path = tmp_path / "covariance.tsv"
-    covariance_path = variable_collection.covariance_to_txt(
-        covariance_path, compression_method, num_threads=cpu_count()
+    covariance_path = calc_covariance(
+        variable_collection, covariance_path, compression_method, num_threads=cpu_count()
     )
+
+    with FileArray.from_file(
+        covariance_path, np.float64, num_threads=cpu_count()
+    ) as reader:
+        covariance = reader[:, :]
+
+    pandas_covariance = pd.DataFrame(variable_collection.to_numpy()).cov().to_numpy()
+    check_bias(covariance, pandas_covariance)
+
+    array = variable_collection.to_numpy()
+    c = np.ma.array(array, mask=np.isnan(array))
+    numpy_covariance = np.ma.cov(c, rowvar=False, allow_masked=True).filled(np.nan)
+    np.testing.assert_allclose(covariance, numpy_covariance)
 
     new_allocation_names = {variable_collection.name}
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
