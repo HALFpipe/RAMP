@@ -23,9 +23,12 @@ def subset_variable_collection(
     base_variable_collection: VariableCollection,
     pattern_samples: list[str],
     pattern_phenotypes: list[str],
+    **kwargs,
 ) -> VariableCollection:
     variable_collection = base_variable_collection.copy(
-        samples=pattern_samples, phenotype_names=pattern_phenotypes
+        samples=pattern_samples,
+        phenotype_names=pattern_phenotypes,
+        **kwargs,
     )
     variable_collection.remove_zero_variance_covariates()
     if not variable_collection.is_finite:
@@ -37,12 +40,71 @@ def subset_variable_collection(
     return variable_collection
 
 
+def split_by_missing_values(
+    base_variable_collection: VariableCollection, prefix: str
+) -> list[VariableCollection]:
+    phenotype_names = base_variable_collection.phenotype_names
+    samples = base_variable_collection.samples
+
+    # Load phenotype and covariate data for all samples that have genetic data and
+    # count missing values.
+    (
+        missing_value_patterns,
+        missing_value_pattern_indices,
+    ) = np.unique(
+        np.isfinite(base_variable_collection.phenotypes),
+        axis=1,
+        return_inverse=True,
+    )
+    missing_value_pattern_indices = missing_value_pattern_indices.ravel()
+    (_, missing_value_pattern_count) = missing_value_patterns.shape
+
+    variable_collections: list[VariableCollection] = list()
+    for i in tqdm(
+        range(missing_value_pattern_count), unit="chunks", desc="loading phenotypes"
+    ):
+        missing_value_pattern = missing_value_patterns[:, i]
+        pattern_samples: list[str] = [
+            sample
+            for sample, has_data in zip(samples, missing_value_pattern, strict=True)
+            if has_data
+        ]
+        pattern_phenotypes: list[str] = sorted(
+            [
+                phenotype_name
+                for phenotype_name, j in zip(
+                    phenotype_names, missing_value_pattern_indices, strict=True
+                )
+                if i == j
+            ]
+        )
+        if len(pattern_samples) == 0:
+            logger.warning(
+                f"Phenotypes {pattern_phenotypes} are missing for all samples. "
+                "Skipping"
+            )
+            continue
+        if len(pattern_phenotypes) == 0:
+            raise RuntimeError(f"No phenotypes in chunk {i}. This should not happen")
+        variable_collection = subset_variable_collection(
+            base_variable_collection,
+            pattern_samples,
+            pattern_phenotypes,
+            name=f"{prefix}-{i:02d}",
+        )
+        variable_collections.append(variable_collection)
+
+    return variable_collections
+
+
 @dataclass
 class GwasCommand:
     arguments: Namespace
     output_directory: UPath
 
     sw: SharedWorkspace
+
+    variable_collection_prefix: str = "variableCollection"
 
     phenotype_paths: list[UPath] = field(init=False)
     covariate_paths: list[UPath] = field(init=False)
@@ -70,69 +132,6 @@ class GwasCommand:
             samples=self.vcf_samples,
             missing_value_strategy=self.arguments.missing_value_strategy,
         )
-
-    @staticmethod
-    def split_by_missing_values(
-        base_variable_collection: VariableCollection,
-    ) -> list[VariableCollection]:
-        sw = base_variable_collection.sw
-        phenotype_names = base_variable_collection.phenotype_names
-        samples = base_variable_collection.samples
-
-        # Load phenotype and covariate data for all samples that have genetic data and
-        # count missing values.
-        (
-            missing_value_patterns,
-            missing_value_pattern_indices,
-        ) = np.unique(
-            np.isfinite(base_variable_collection.phenotypes.to_numpy()),
-            axis=1,
-            return_inverse=True,
-        )
-        missing_value_pattern_indices = missing_value_pattern_indices.ravel()
-        (_, missing_value_pattern_count) = missing_value_patterns.shape
-
-        variable_collections: list[VariableCollection] = list()
-        for i in tqdm(
-            range(missing_value_pattern_count), unit="chunks", desc="loading phenotypes"
-        ):
-            missing_value_pattern = missing_value_patterns[:, i]
-            pattern_samples: list[str] = [
-                sample
-                for sample, has_data in zip(samples, missing_value_pattern, strict=True)
-                if has_data
-            ]
-            pattern_phenotypes: list[str] = sorted(
-                [
-                    phenotype_name
-                    for phenotype_name, j in zip(
-                        phenotype_names, missing_value_pattern_indices, strict=True
-                    )
-                    if i == j
-                ]
-            )
-            if len(pattern_samples) == 0:
-                logger.warning(
-                    f"Phenotypes {pattern_phenotypes} are missing for all samples. "
-                    "Skipping"
-                )
-                continue
-            if len(pattern_phenotypes) == 0:
-                raise RuntimeError(f"No phenotypes in chunk {i}. This should not happen")
-            variable_collection = subset_variable_collection(
-                base_variable_collection, pattern_samples, pattern_phenotypes
-            )
-            variable_collections.append(variable_collection)
-        sw.squash()
-
-        # Sort by number of phenotypes
-        variable_collections.sort(key=lambda vc: -vc.phenotype_count)
-
-        # Set names
-        for i, vc in enumerate(variable_collections):
-            vc.name = f"variableCollection-{i + 1:02d}"
-
-        return variable_collections
 
     def update_allele_frequencies(
         self, variable_collections: list[VariableCollection]
@@ -185,15 +184,18 @@ class GwasCommand:
                 num_threads=self.arguments.num_threads,
             )
         # Split into missing value chunks
-        variable_collections: list[VariableCollection] = self.split_by_missing_values(
-            base_variable_collection
+        variable_collections: list[VariableCollection] = split_by_missing_values(
+            base_variable_collection, self.variable_collection_prefix
         )
+        base_variable_collection.free()
+        self.sw.squash()
         if len(variable_collections) == 0:
             raise ValueError(
                 "No phenotypes to analyze. Please check if the sample IDs "
                 "match between your phenotype/covariate files and the VCF files."
             )
-        base_variable_collection.free()
+        # Sort by number of phenotypes
+        variable_collections.sort(key=lambda vc: -vc.phenotype_count)
 
         self.update_allele_frequencies(variable_collections)
 

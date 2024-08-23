@@ -82,12 +82,12 @@ class NullModelCollection:
 
         with get_global_lock():
             inverse_variance_array = self.sw.alloc(
-                SharedArray.get_name(self.sw, "inverse-variance"),
+                SharedArray.get_name(self.sw, prefix="inverse-variance"),
                 sample_count,
                 phenotype_count,
             )
             scaled_residuals_array = self.sw.alloc(
-                SharedArray.get_name(self.sw, "scaled-residuals"),
+                SharedArray.get_name(self.sw, prefix="scaled-residuals"),
                 sample_count,
                 phenotype_count,
             )
@@ -120,14 +120,14 @@ class NullModelCollection:
         sw = eig.sw
 
         with get_global_lock():
-            name = SharedArray.get_name(sw, "regression-weights")
+            name = SharedArray.get_name(sw, prefix="regression-weights")
             regression_weights = sw.alloc(name, vc.phenotype_count, vc.covariate_count)
-            name = SharedArray.get_name(sw, "standard-errors")
+            name = SharedArray.get_name(sw, prefix="standard-errors")
             standard_errors = sw.alloc(name, vc.phenotype_count, vc.covariate_count)
-            name = SharedArray.get_name(sw, "variance")
+            name = SharedArray.get_name(sw, prefix="variance")
             shape = list(vc.phenotypes.shape)
             variance = sw.alloc(name, *shape)
-            name = SharedArray.get_name(sw, "half-scaled-residuals")
+            name = SharedArray.get_name(sw, prefix="half-scaled-residuals")
             scaled_residuals = sw.alloc(name, *shape)
 
         nm = cls(

@@ -254,8 +254,8 @@ class ProfileMaximumLikelihood:
         cls, vc: VariableCollection, phenotype_index: int, eig: Eigendecomposition
     ) -> NullModelResult:
         eigenvectors = eig.eigenvectors
-        covariates = vc.covariates.to_numpy().copy()
-        phenotype = vc.phenotypes.to_numpy()[:, phenotype_index, np.newaxis]
+        covariates = vc.covariates.copy()
+        phenotype = vc.phenotypes[:, phenotype_index, np.newaxis]
 
         # Subtract column mean from covariates (except intercept).
         covariates[:, 1:] -= covariates[:, 1:].mean(axis=0)

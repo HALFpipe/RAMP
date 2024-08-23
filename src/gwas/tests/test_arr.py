@@ -1,53 +1,76 @@
 import numpy as np
+import pytest
+from pytest import FixtureRequest
 from upath import UPath
 
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
+from gwas.utils import get_global_lock
+
+shape = (5, 7)
 
 
-def test_sa(tmp_path: UPath) -> None:
-    sw = SharedWorkspace.create(size=2**30)
+@pytest.fixture(scope="function")
+def shared_array(request: FixtureRequest, sw: SharedWorkspace) -> SharedArray:
+    with get_global_lock():
+        shared_array = sw.alloc(SharedArray.get_name(sw), *shape)
+    request.addfinalizer(shared_array.free)
 
-    shape = (5, 7)
-    array = sw.alloc("a", *shape)
-    assert isinstance(array, SharedArray)
+    a = shared_array.to_numpy()
+    a[:] = np.random.rand(*shape)
 
-    # include trailing
-    a = array.to_numpy(include_trailing_free_memory=True)
+    return shared_array
+
+
+def test_include_trailing(shared_array: SharedArray) -> None:
+    a = shared_array.to_numpy(include_trailing_free_memory=True)
     assert a.shape[0] == shape[0]
     assert a.shape[1] > shape[1]
 
-    # initialize
-    a = array.to_numpy()
-    a[:] = np.random.rand(*shape)
-    b = a.copy()
 
-    # io
+def test_io(shared_array: SharedArray, tmp_path: UPath) -> None:
     path = tmp_path / "a"
-    path = array.to_file(path)
-    array = SharedArray.from_file(path, sw, np.float64)
+    path = shared_array.to_file(path)
+
+    array = SharedArray.from_file(path, shared_array.sw, np.float64)
+
+    a = shared_array.to_numpy()
     c = array.to_numpy()
     assert np.allclose(a, c)
 
-    # transpose
-    array.transpose()
-    a = array.to_numpy()
+
+def test_transpose(shared_array: SharedArray) -> None:
+    b = shared_array.to_numpy().copy()
+
+    shared_array.transpose()
+    a = shared_array.to_numpy()
     assert np.allclose(a, b.transpose())
-    array.transpose()
 
-    # compress
+
+def test_compress_rows(shared_array: SharedArray) -> None:
+    b = shared_array.to_numpy().copy()
+
     indices = np.array([0, 3, 4], dtype=np.uint32)
-    array.compress(indices)
-    a = array.to_numpy()
+    shared_array.compress(indices)
+    a = shared_array.to_numpy()
     assert np.allclose(b[indices, :], a)
-    b = b[indices, :]
 
-    # resize
-    m = len(indices)
-    array.resize(m, m)
-    a = array.to_numpy()
+
+def test_compress_columns(shared_array: SharedArray) -> None:
+    b = shared_array.to_numpy().copy()
+
+    indices = np.array([0, 3, 4], dtype=np.uint32)
+    shared_array.compress(indices, axis=1)
+    a = shared_array.to_numpy()
+    assert np.allclose(b[:, indices], a)
+
+
+def test_resize(shared_array: SharedArray) -> None:
+    b = shared_array.to_numpy().copy()
+
+    m = min(shape)
+    shared_array.resize(m, m)
+
+    a = shared_array.to_numpy()
     assert a.shape == (m, m)
     assert np.allclose(b[:, :m], a)
-
-    sw.close()
-    sw.unlink()

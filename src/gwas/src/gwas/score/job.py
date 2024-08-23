@@ -40,9 +40,7 @@ class JobCollection:
     def __post_init__(self) -> None:
         if len(self.variable_collection_chunks) == 0:
             raise ValueError("No phenotypes to analyze")
-        self.sw = next(
-            chain.from_iterable(self.variable_collection_chunks)
-        ).phenotypes.sw
+        self.sw = next(chain.from_iterable(self.variable_collection_chunks)).sw
         # Create an array proxy
         self.stat_file_array = FileArray.create(
             self.file_path,

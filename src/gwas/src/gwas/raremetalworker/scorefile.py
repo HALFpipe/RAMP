@@ -274,8 +274,8 @@ class Scorefile:
         nm: NullModelCollection,
         phenotype_name: str | None = None,
     ) -> ScorefileHeader:
-        covariates = vc.covariates.to_numpy()
-        phenotypes = vc.phenotypes.to_numpy()
+        covariates = vc.covariates
+        phenotypes = vc.phenotypes
 
         phenotype_index: int | None = None
         if phenotype_name is not None:

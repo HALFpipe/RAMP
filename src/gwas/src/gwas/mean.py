@@ -89,7 +89,7 @@ def calc_mean(
     _, missing_value_pattern_count = sample_boolean_array.shape
 
     with get_global_lock():
-        name = SharedArray.get_name(sw, "alternate-allele-frequency")
+        name = SharedArray.get_name(sw, prefix="alternate-allele-frequency")
         alternate_allele_frequency_array = sw.alloc(
             name, vcf_variant_count, missing_value_pattern_count
         )
@@ -97,7 +97,7 @@ def calc_mean(
         per_variant_size = np.float64().itemsize * len(base_samples)
         variant_count = sw.unallocated_size // per_variant_size
 
-        name = SharedArray.get_name(sw, "genotypes")
+        name = SharedArray.get_name(sw, prefix="genotypes")
         genotypes_array = sw.alloc(name, len(base_samples), variant_count)
 
     progress_bar = tqdm(

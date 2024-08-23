@@ -115,8 +115,8 @@ def test_pheno(
         missing_value_strategy="listwise_deletion",
     )
     request.addfinalizer(variable_collection0.free)
-    assert_array_equal(variable_collection0.phenotypes.to_numpy(), phenotypes)
-    assert_array_equal(variable_collection0.covariates.to_numpy()[:, 1:], covariates)
+    assert_array_equal(variable_collection0.phenotypes, phenotypes)
+    assert_array_equal(variable_collection0.covariates[:, 1:], covariates)
 
     truncated_samples = samples[1:]
     variable_collection1 = VariableCollection.from_txt(
@@ -127,28 +127,21 @@ def test_pheno(
         missing_value_strategy="listwise_deletion",
     )
     request.addfinalizer(variable_collection1.free)
-    assert_array_equal(variable_collection1.phenotypes.to_numpy(), phenotypes[1:, :])
-    assert_array_equal(
-        variable_collection1.covariates.to_numpy()[:, 1:], covariates[1:, :]
-    )
+    assert_array_equal(variable_collection1.phenotypes, phenotypes[1:, :])
+    assert_array_equal(variable_collection1.covariates[:, 1:], covariates[1:, :])
 
     truncated_phenotypes = phenotype_names[1:]
     variable_collection2 = variable_collection0.copy(
         samples=truncated_samples, phenotype_names=truncated_phenotypes
     )
     request.addfinalizer(variable_collection2.free)
-    assert_array_equal(variable_collection2.phenotypes.to_numpy(), phenotypes[1:, 1:])
-    assert_array_equal(
-        variable_collection2.covariates.to_numpy()[:, 1:], covariates[1:, :]
-    )
+    assert_array_equal(variable_collection2.phenotypes, phenotypes[1:, 1:])
+    assert_array_equal(variable_collection2.covariates[:, 1:], covariates[1:, :])
 
     new_allocation_names = {
-        variable_collection0.phenotypes.name,
-        variable_collection0.covariates.name,
-        variable_collection1.phenotypes.name,
-        variable_collection1.covariates.name,
-        variable_collection2.phenotypes.name,
-        variable_collection2.covariates.name,
+        variable_collection0.name,
+        variable_collection1.name,
+        variable_collection2.name,
     }
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
 
@@ -180,8 +173,7 @@ def test_pheno_zero_variance(
     ]
 
     new_allocation_names = {
-        variable_collection.phenotypes.name,
-        variable_collection.covariates.name,
+        variable_collection.name,
     }
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
 
@@ -216,8 +208,5 @@ def test_covariance(
         covariance_path, compression_method, num_threads=cpu_count()
     )
 
-    new_allocation_names = {
-        variable_collection.phenotypes.name,
-        variable_collection.covariates.name,
-    }
+    new_allocation_names = {variable_collection.name}
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)

@@ -62,11 +62,11 @@ def calc_score(
     )
     # Allocate the arrays in shared memory.
     with get_global_lock():
-        name = SharedArray.get_name(sw, "genotypes")
+        name = SharedArray.get_name(sw, prefix="genotypes")
         genotypes_array = sw.alloc(name, sample_count, variant_count)
-        name = SharedArray.get_name(sw, "rotated-genotypes")
+        name = SharedArray.get_name(sw, prefix="rotated-genotypes")
         rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
-        name = SharedArray.get_name(sw, "stat")
+        name = SharedArray.get_name(sw, prefix="stat")
         stat_array: SharedArray = sw.alloc(name, variant_count, 2 * phenotype_count)
     # Create the worker processes.
     t = TaskSyncCollection(job_count=job_count)

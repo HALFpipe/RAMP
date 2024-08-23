@@ -62,7 +62,7 @@ class EigendecompositionCollection:
 
             prefix = eig.get_prefix(chromosome=eig.chromosome)
             with get_global_lock():
-                name = SharedArray.get_name(sw, f"expanded-{prefix}")
+                name = SharedArray.get_name(sw, prefix=f"expanded-{prefix}")
                 array = sw.alloc(name, base_sample_count, sample_count)
 
             matrix = array.to_numpy()

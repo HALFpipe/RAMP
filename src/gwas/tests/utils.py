@@ -23,7 +23,10 @@ def regress(
         a = a[indices]
         b = b[indices]
 
-    missing_overlap = scipy.spatial.distance.dice(np.isnan(a), np.isnan(b))
+    missing_overlap = 1.0
+    if np.isnan(a).any() or np.isnan(b).any():
+        missing_overlap = scipy.spatial.distance.dice(np.isnan(a), np.isnan(b))
+
     mask = np.logical_and(np.isfinite(a), np.isfinite(b))
     a = a[mask]
     b = b[mask]

@@ -70,11 +70,11 @@ class VariableCollectionSummary:
             "pending",
             vc.sample_count,
             {
-                name: PhenotypeSummary.from_array(vc.phenotypes.to_numpy()[:, i])
+                name: PhenotypeSummary.from_array(vc.phenotypes[:, i])
                 for i, name in enumerate(vc.phenotype_names)
             },
             {
-                name: CovariateSummary.from_array(vc.covariates.to_numpy()[:, i])
+                name: CovariateSummary.from_array(vc.covariates[:, i])
                 for i, name in enumerate(vc.covariate_names)
             },
         )

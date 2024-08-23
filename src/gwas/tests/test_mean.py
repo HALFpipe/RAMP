@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+
 from gwas.mean import calc_mean, make_sample_boolean_array
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.pheno import VariableCollection
@@ -51,10 +52,8 @@ def test_mean(
             np.random.rand(len(samples), 1),
             sw,
             missing_value_strategy="listwise_deletion",
-            name=f"v-{i}",
         )
-        new_allocation_names.add(vc.phenotypes.name)
-        new_allocation_names.add(vc.covariates.name)
+        new_allocation_names.add(vc.name)
         request.addfinalizer(vc.free)
         variable_collections.append(vc)
 
@@ -91,13 +90,14 @@ def test_mean(
         numpy_alternate_allele_frequency,
     )
 
-    missing_value_pattern = missing_value_patterns[:, 0]
-    numpy_alternate_allele_frequency = (
-        numpy_dosages.mean(axis=1, where=np.logical_not(missing_value_pattern)) / 2
-    )
-    np.testing.assert_allclose(
-        mean_frame["v-0_alternate_allele_frequency"],
-        numpy_alternate_allele_frequency,
-    )
+    for i in range(missing_value_pattern_count):
+        missing_value_pattern = missing_value_patterns[:, i]
+        numpy_alternate_allele_frequency = (
+            numpy_dosages.mean(axis=1, where=np.logical_not(missing_value_pattern)) / 2
+        )
+        np.testing.assert_allclose(
+            mean_frame[f"{variable_collections[i].name}_alternate_allele_frequency"],
+            numpy_alternate_allele_frequency,
+        )
 
-    assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
+        assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)

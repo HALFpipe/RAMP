@@ -22,7 +22,7 @@ from gwas.raremetalworker.score import (
     make_raremetalworker_score_commands,
 )
 from gwas.raremetalworker.scorefile import Scorefile, ScorefileHeader
-from gwas.score.command import GwasCommand
+from gwas.score.command import split_by_missing_values
 from gwas.testing.simulate import SimulationResult
 from gwas.utils import (
     Pool,
@@ -71,22 +71,19 @@ def variable_collections(
     base_variable_collection = simulation.to_variable_collection(
         sw, covariate_count=covariate_count
     )
-    new_allocation_names.add(base_variable_collection.phenotypes.name)
-    new_allocation_names.add(base_variable_collection.covariates.name)
+    new_allocation_names.add(base_variable_collection.name)
     request.addfinalizer(base_variable_collection.free)
 
-    variable_collections = GwasCommand.split_by_missing_values(base_variable_collection)
+    variable_collections = split_by_missing_values(
+        base_variable_collection, "testVariableCollection"
+    )
     for variable_collection in variable_collections:
-        new_allocation_names.add(variable_collection.phenotypes.name)
-        new_allocation_names.add(variable_collection.covariates.name)
+        new_allocation_names.add(variable_collection.name)
         request.addfinalizer(variable_collection.free)
     assert len(variable_collections) == missing_value_pattern_count
 
     should_be_missing = simulation.patterns[:, simulation.pattern_indices]
     assert (np.isnan(simulation.phenotypes) == should_be_missing).all()
-
-    for i, variable_collection in enumerate(variable_collections):
-        variable_collection.name = f"variableCollection-{i + 1:d}"
 
     vc_by_phenotype = {
         phenotype_name: variable_collection
@@ -262,7 +259,7 @@ def genotypes_array(
 
     vcf_file.variant_indices = vcf_file.variant_indices[:variant_count]
     with get_global_lock():
-        name = SharedArray.get_name(sw, "genotypes")
+        name = SharedArray.get_name(sw, prefix="genotypes")
         genotypes_array = sw.alloc(name, sample_count, variant_count)
     request.addfinalizer(genotypes_array.free)
 

@@ -51,7 +51,7 @@ def test_run(
 
     phenotype_frames = [
         pd.DataFrame(
-            variable_collection.phenotypes.to_numpy(),
+            variable_collection.phenotypes,
             columns=variable_collection.phenotype_names,
             index=variable_collection.samples,
         )
@@ -70,7 +70,7 @@ def test_run(
 
     covariate_frames = [
         pd.DataFrame(
-            variable_collection.covariates.to_numpy(),
+            variable_collection.covariates,
             columns=variable_collection.covariate_names,
             index=variable_collection.samples,
         )
@@ -104,7 +104,7 @@ def test_run(
             "DEBUG",
         ]
     )
-    command = GwasCommand(arguments, tmp_path, sw)
+    command = GwasCommand(arguments, tmp_path, sw, variable_collection_prefix="svc")
     request.addfinalizer(command.free)
 
     command_variable_collections = command.setup_variable_collections()
@@ -112,8 +112,7 @@ def test_run(
         assert a.phenotype_names == b.phenotype_names
         assert a.samples == b.samples
 
-        new_allocation_names.add(a.phenotypes.name)
-        new_allocation_names.add(a.covariates.name)
+        new_allocation_names.add(a.name)
 
         request.addfinalizer(a.free)
 

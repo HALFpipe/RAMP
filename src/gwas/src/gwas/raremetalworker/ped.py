@@ -17,8 +17,8 @@ def write_ped_and_dat_files(
     vc: VariableCollection, phenotype_index: int, path: UPath
 ) -> tuple[UPath, UPath]:
     base = vc.phenotype_names[phenotype_index]
-    covariates = vc.covariates.to_numpy()
-    phenotypes = vc.phenotypes.to_numpy()
+    covariates = vc.covariates
+    phenotypes = vc.phenotypes
 
     ped_path = path / f"{base}.ped"
     with ped_path.open("w") as file_handle:

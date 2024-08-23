@@ -48,7 +48,7 @@ def rotated_genotypes_arrays(
     ):
         sample_count = eig.sample_count
         with get_global_lock():
-            name = SharedArray.get_name(sw, "rotated-genotypes")
+            name = SharedArray.get_name(sw, prefix="rotated-genotypes")
             rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
         request.addfinalizer(rotated_genotypes_array.free)
 

@@ -49,7 +49,7 @@ def load_genotypes(
         variant_count += vcf_file.variant_count
 
     with get_global_lock():
-        name = SharedArray.get_name(sw, "genotypes")
+        name = SharedArray.get_name(sw, prefix="genotypes")
         array = sw.alloc(name, variant_count, sample_count)
     a = array.to_numpy()
 

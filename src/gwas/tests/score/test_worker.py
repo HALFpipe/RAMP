@@ -29,9 +29,9 @@ def test_calc_worker(
     phenotype_count = nm.phenotype_count
 
     with get_global_lock():
-        name = SharedArray.get_name(sw, "test-rotated-genotypes")
+        name = SharedArray.get_name(sw, prefix="test-rotated-genotypes")
         test_rotated_genotypes_array = sw.alloc(name, sample_count, variant_count)
-        name = SharedArray.get_name(sw, "test-stat")
+        name = SharedArray.get_name(sw, prefix="test-stat")
         stat_array: SharedArray = sw.alloc(name, variant_count, phenotype_count * 2)
     request.addfinalizer(test_rotated_genotypes_array.free)
     request.addfinalizer(stat_array.free)

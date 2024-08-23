@@ -1,6 +1,16 @@
 from dataclasses import dataclass, fields
 from itertools import pairwise
-from typing import Any, ClassVar, Generic, Literal, Self, Type, TypeVar, overload
+from typing import (
+    Any,
+    ClassVar,
+    Generic,
+    Literal,
+    Self,
+    Sequence,
+    Type,
+    TypeVar,
+    overload,
+)
 
 import numpy as np
 import scipy
@@ -60,7 +70,7 @@ class SharedArray(Generic[ScalarType]):
 
     def to_numpy(
         self,
-        shape: tuple[int, ...] | None = None,
+        shape: Sequence[int] | None = None,
         include_trailing_free_memory: bool = False,
     ) -> npt.NDArray[ScalarType]:
         """to_numpy.
@@ -122,13 +132,22 @@ class SharedArray(Generic[ScalarType]):
 
     @classmethod
     def get_name(
-        cls, sw: SharedWorkspace, prefix: str | None = None, **kwargs: str | int | None
+        cls,
+        sw: SharedWorkspace,
+        *,
+        prefix: str | None = None,
+        name: str | None = None,
+        **kwargs: str | int | None,
     ) -> str:
         if prefix is None:
             prefix = cls.get_prefix(**kwargs)
 
         with get_global_lock():
             allocations = sw.allocations
+            if name is not None:
+                if name in allocations:
+                    raise ValueError(f"Allocation {name} already exists")
+                return name
             i = 0
             while True:
                 name = f"{prefix}-{i}"
@@ -155,6 +174,8 @@ class SharedArray(Generic[ScalarType]):
 
         cls_names = {field.name for field in fields(cls)}
         cls_kwargs = {name: v for name, v in kwargs.items() if name in cls_names}
+        if "name" in cls_kwargs:
+            del cls_kwargs["name"]
         return cls(name, sw, **cls_kwargs)
 
     @classmethod
@@ -206,8 +227,8 @@ class SharedArray(Generic[ScalarType]):
     def free(self) -> None:
         self.sw.free(self.name)
 
-    def compress(self, indices: npt.NDArray[np.uint32]) -> None:
-        """Compress rows
+    def compress(self, indices: npt.NDArray[np.integer], axis: int = 0) -> None:
+        """Compress rows or columns
 
         Parameters
         ----------
@@ -223,13 +244,14 @@ class SharedArray(Generic[ScalarType]):
         """
         a = self.to_numpy()
 
-        (_, m) = a.shape
+        shape = list(a.shape)
+
         (k,) = indices.shape
-        shape = (k, m)
+        shape[axis] = k
 
         compressed = self.to_numpy(shape=shape)
 
-        a.take(indices, axis=0, out=compressed, mode="clip")
+        a.take(indices, axis=axis, out=compressed, mode="clip")
 
         self.resize(*shape)
 

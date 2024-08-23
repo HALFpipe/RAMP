@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from functools import reduce
-from typing import Self
+from typing import Self, override
 
 import numpy as np
 import pandas as pd
@@ -42,16 +42,34 @@ def read_and_combine(
 
 
 @dataclass
-class VariableCollection:
+class VariableCollection(SharedArray[np.float64]):
     samples: list[str]
 
     phenotype_names: list[str]
-    phenotypes: SharedArray
-
     covariate_names: list[str]
-    covariates: SharedArray
 
-    name: str | None = None
+    @override
+    @staticmethod
+    def get_prefix(**kwargs: str | int | None) -> str:
+        return "vc"
+
+    @property
+    def covariate_count(self) -> int:
+        return len(self.covariate_names)
+
+    @property
+    def phenotype_count(self) -> int:
+        return len(self.phenotype_names)
+
+    @property
+    def covariates(self) -> npt.NDArray[np.float64]:
+        a = self.to_numpy()
+        return a[:, : self.covariate_count]
+
+    @property
+    def phenotypes(self) -> npt.NDArray[np.float64]:
+        a = self.to_numpy()
+        return a[:, self.covariate_count :]
 
     @property
     def sample_count(self) -> int:
@@ -63,21 +81,9 @@ class VariableCollection:
         return sample_count
 
     @property
-    def covariate_count(self) -> int:
-        return self.covariates.shape[1]
-
-    @property
-    def phenotype_count(self) -> int:
-        return self.phenotypes.shape[1]
-
-    @property
-    def sw(self) -> SharedWorkspace:
-        return self.phenotypes.sw
-
-    @property
     def covariate_frame(self) -> pd.DataFrame:
         return pd.DataFrame(
-            data=self.covariates.to_numpy(),
+            data=self.covariates,
             copy=False,
             columns=self.covariate_names,
             index=self.samples,
@@ -86,7 +92,7 @@ class VariableCollection:
     @property
     def phenotype_frame(self) -> pd.DataFrame:
         return pd.DataFrame(
-            data=self.phenotypes.to_numpy(),
+            data=self.phenotypes,
             copy=False,
             columns=self.phenotype_names,
             index=self.samples,
@@ -98,49 +104,40 @@ class VariableCollection:
 
     @property
     def is_finite(self) -> bool:
-        return bool(
-            np.isfinite(self.phenotypes.to_numpy()).all()
-            and np.isfinite(self.covariates.to_numpy()).all()
-        )
+        return bool(np.isfinite(self.to_numpy()).all())
 
     def __post_init__(self) -> None:
         self.remove_zero_variance_covariates()
 
     def copy(
-        self, phenotype_names: list[str] | None = None, samples: list[str] | None = None
+        self,
+        phenotype_names: list[str] | None = None,
+        samples: list[str] | None = None,
+        **kwargs,
     ) -> Self:
-        phenotypes = self.phenotypes.to_numpy()
-        covariates = self.covariates.to_numpy()
+        column_indices: list[int] = list(range(self.covariate_count))
 
-        if phenotype_names is not None:
-            phenotypes = self.subset_phenotypes_array(
-                phenotypes, self.phenotype_names, phenotype_names
-            )
-        else:
+        if phenotype_names is None:
             phenotype_names = self.phenotype_names.copy()
-
-        if samples is not None:
-            phenotypes, covariates = self.subset_samples_array(
-                self.samples, samples, phenotypes, covariates
+        for name in phenotype_names:
+            column_indices.append(
+                self.covariate_count + self.phenotype_names.index(name)
             )
-        else:
+
+        if samples is None:
             samples = self.samples.copy()
+        row_indices = [self.samples.index(sample) for sample in samples]
 
-        vc = self.from_arrays(
-            samples,
-            phenotype_names,
-            phenotypes,
-            self.covariate_names.copy(),
-            covariates,
+        array = self.to_numpy()
+        vc = self.from_numpy(
+            array[np.ix_(row_indices, column_indices)],
             self.sw,
-            missing_value_strategy="listwise_deletion",  # No need to remove any samples
+            samples=samples,
+            phenotype_names=phenotype_names,
+            covariate_names=self.covariate_names,
+            **kwargs,
         )
-        vc.name = self.name
         return vc
-
-    def free(self) -> None:
-        self.phenotypes.free()
-        self.covariates.free()
 
     @staticmethod
     def subset_phenotypes_array(
@@ -153,86 +150,37 @@ class VariableCollection:
         ]
         return phenotypes[:, phenotype_indices]
 
-    def subset_phenotypes(self, subset_phenotype_names: list[str]) -> None:
-        if subset_phenotype_names == self.phenotype_names:
-            # Nothing to do.
-            return
-        self.phenotype_names = subset_phenotype_names
-        new_phenotypes = self.subset_phenotypes_array(
-            self.phenotypes.to_numpy(), self.phenotype_names, subset_phenotype_names
-        )
-        self.phenotypes.free()
-        self.phenotypes = SharedArray.from_numpy(
-            new_phenotypes, self.phenotypes.sw, prefix="phenotypes"
-        )
-        logger.debug(
-            f"Subsetting variable collection to have {self.phenotype_count} phenotypes"
-        )
-
     def remove_zero_variance_covariates(self) -> None:
-        sw = self.covariates.sw
+        mask: npt.NDArray[np.bool_] = np.isclose(self.covariates.var(axis=0), 0)
+        mask[0] = False  # Do not remove intercept
 
-        old_covariates = self.covariates
+        if not np.any(mask):
+            return
 
-        new_covariates = old_covariates.to_numpy()
-        zero_variance: npt.NDArray[np.bool_] = np.isclose(new_covariates.var(axis=0), 0)
-        zero_variance[0] = False  # Do not remove intercept
+        (covariate_indices,) = np.where(np.logical_not(mask))
 
-        if np.any(zero_variance):
-            removed_covariates = [
-                name
-                for name, zero in zip(self.covariate_names, zero_variance, strict=True)
-                if zero
-            ]
-            logger.debug(
-                f"Removing covariates {removed_covariates} because they have zero "
-                "variance"
-            )
-            self.covariate_names = [
-                name
-                for name, zero in zip(self.covariate_names, zero_variance, strict=True)
-                if not zero
-            ]
-            new_covariates = new_covariates[:, ~zero_variance]
+        removed_covariates = [
+            name
+            for i, name in enumerate(self.covariate_names)
+            if i not in covariate_indices
+        ]
+        logger.debug(
+            f"Removing covariates {removed_covariates} because they have zero variance"
+        )
 
-            self.covariates = SharedArray.from_numpy(
-                new_covariates, sw, prefix="covariates"
-            )
-            old_covariates.free()
+        self.covariate_names = [self.covariate_names[i] for i in covariate_indices]
 
-    @staticmethod
-    def subset_samples_array(
-        samples: list[str],
-        subset_samples: list[str],
-        phenotypes: npt.NDArray[np.float64],
-        covariates: npt.NDArray[np.float64],
-    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        sample_indices = [samples.index(sample) for sample in subset_samples]
-        new_phenotypes = phenotypes[sample_indices, :]
-        new_covariates = covariates[sample_indices, :]
-        return new_phenotypes, new_covariates
+        phenotype_indices = np.arange(self.covariate_count, self.shape[1])
+        keep = np.concatenate([covariate_indices, phenotype_indices], axis=0)
+        self.compress(keep, axis=1)
 
     def subset_samples(self, samples: list[str]) -> None:
         if samples == self.samples:
             # Nothing to do.
             return
 
-        sw = self.phenotypes.sw
-
-        old_phenotypes = self.phenotypes
-        old_covariates = self.covariates
-
-        new_phenotypes, new_covariates = self.subset_samples_array(
-            self.samples, samples, old_phenotypes.to_numpy(), old_covariates.to_numpy()
-        )
-
-        self.samples = samples
-
-        self.phenotypes = SharedArray.from_numpy(new_phenotypes, sw, prefix="phenotypes")
-        old_phenotypes.free()
-
-        self.covariates = SharedArray.from_numpy(new_covariates, sw, prefix="covariates")
-        old_covariates.free()
+        sample_indices = [self.samples.index(sample) for sample in samples]
+        self.compress(np.asarray(sample_indices), axis=0)
         self.remove_zero_variance_covariates()
 
         logger.info(
@@ -276,17 +224,19 @@ class VariableCollection:
         phenotypes = phenotypes[criterion, :]
         covariates = covariates[criterion, :]
 
+        array = np.concatenate([covariates, phenotypes], axis=1)
+
         logger.debug(
             f"Creating variable collection with {len(samples)} samples, "
             f"{covariates.shape[1]} covariates, and {phenotypes.shape[1]} phenotypes."
         )
 
-        return cls(
-            samples,
-            phenotype_names,
-            SharedArray.from_numpy(phenotypes, sw, prefix="phenotypes"),
-            covariate_names,
-            SharedArray.from_numpy(covariates, sw, prefix="covariates"),
+        return cls.from_numpy(
+            array,
+            sw,
+            samples=samples,
+            phenotype_names=phenotype_names,
+            covariate_names=covariate_names,
             **kwargs,
         )
 
@@ -333,9 +283,6 @@ class VariableCollection:
 
         samples = [sample for sample in samples if sample in phenotype_samples]
 
-        if samples is None:
-            raise RuntimeError
-
         return cls.from_arrays(
             samples,
             phenotype_names,
@@ -354,10 +301,7 @@ class VariableCollection:
             logger.debug("Skip writing covariance matrix because it already exists")
             return path
 
-        phenotype_array = self.phenotypes.to_numpy()
-        covariate_array = self.covariates.to_numpy()
-
-        array = np.hstack((phenotype_array, covariate_array))
+        array = self.to_numpy()
         names = [*self.phenotype_names, *self.covariate_names]
 
         logger.debug("Calculating covariance matrix")
