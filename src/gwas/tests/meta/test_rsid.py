@@ -1,5 +1,4 @@
 # flake8: noqa: E501
-# codespell-ignore-file
 from pathlib import Path
 
 import pandas as pd
