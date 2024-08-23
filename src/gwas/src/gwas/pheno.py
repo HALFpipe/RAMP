@@ -10,6 +10,7 @@ from upath import UPath
 from .compression.arr.base import (
     CompressionMethod,
     FileArray,
+    FileArrayWriter,
 )
 from .log import logger
 from .mem.arr import SharedArray
@@ -362,20 +363,24 @@ class VariableCollection:
         data_frame = pd.DataFrame(array, index=self.samples, columns=names)
 
         logger.debug("Calculating covariance matrix")
-        covariance = data_frame.cov().to_numpy(dtype=np.float64)
+        covariance: npt.NDArray[np.float64] = np.asfortranarray(
+            data_frame.cov().to_numpy(dtype=np.float64)
+        )
 
-        file_array = FileArray.create(
+        writer: FileArrayWriter[np.float64] = FileArray.create(
             path,
             covariance.shape,
-            covariance.dtype,
+            covariance.dtype.type,
             compression_method,
             num_threads=num_threads,
         )
+
         data_frame = pd.DataFrame(dict(variable=names))
-        with file_array:
-            file_array.set_axis_metadata(0, data_frame)
-            file_array.set_axis_metadata(1, names)
-            file_array[:, :] = covariance
+        writer.set_axis_metadata(0, data_frame)
+        writer.set_axis_metadata(1, names)
+
+        with writer:
+            writer[:, :] = covariance
 
 
 @dataclass
