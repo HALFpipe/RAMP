@@ -1,7 +1,9 @@
-import pandas as pd
-from gwas.meta.rsid_matching import match_ids
 from pathlib import Path
+
+import pandas as pd
+
 from gwas.compression.pipe import CompressedTextWriter
+from gwas.meta.rsid_matching import match_ids
 
 dbsnp_file_contents = """##fileformat=VCFv4.0
 ##FILTER=<ID=PASS,Description="All filters passed">
@@ -115,16 +117,15 @@ dbsnp_file_contents = """##fileformat=VCFv4.0
 3\t60322\trs566180130\tG\tA\t.\t.\tRS=566180130;RSPOS=60322;dbSNPBuildID=142;SSR=0;SAO=0;VP=0x050000000005000000000100;WGT=1;VC=SNV;ASP
 """
 test_var_chr1 = [
-    [1, 10100, 'A', 'G'],  # Not in dbSNP
-    [1, 10139, 'A', 'T'], # rs368469931
-    [1, 10250, 'A', 'C'], # rs199706086
-    [1, 10259, 'C', 'A'], # rs200940095
-    
+    [1, 10100, "A", "G"],  # Not in dbSNP
+    [1, 10139, "A", "T"],  # rs368469931
+    [1, 10250, "A", "C"],  # rs199706086
+    [1, 10259, "C", "A"],  # rs200940095
 ]
 test_var_chr3 = [
-    [3, 60069, 'A', 'T'], # ref mismatch
-    [3, 60079, 'AG', 'A'], # ref mismatch
-    [3, 60322, 'G','A'], # rs566180130
+    [3, 60069, "A", "T"],  # ref mismatch
+    [3, 60079, "AG", "A"],  # ref mismatch
+    [3, 60322, "G", "A"],  # rs566180130
 ]
 
 
@@ -135,13 +136,22 @@ def test_match_ids(tmp_path):
     with compressed_writer as file_handle:
         file_handle.write(dbsnp_file_contents)
 
-    columns = ['CHROM', 'POS', 'REF', 'ALT']
+    columns = ["CHROM", "POS", "REF", "ALT"]
     df1 = pd.DataFrame(test_var_chr1, columns=columns)
     df3 = pd.DataFrame(test_var_chr3, columns=columns)
 
     dfs = [df1, df3]
     result = match_ids(dfs, dbsnp_path)
 
-    assert len(result) == len(test_var_chr3) + len(test_var_chr1), "Number of results doesn't match number of input variants"
-    assert result == ['1:10100:A:G', 'rs368469931', 'rs199706086', 'rs200940095', '3:60069:A:T', '3:60079:AG:A', 'rs566180130']
-    
+    assert len(result) == len(test_var_chr3) + len(
+        test_var_chr1
+    ), "Number of results doesn't match number of input variants"
+    assert result == [
+        "1:10100:A:G",
+        "rs368469931",
+        "rs199706086",
+        "rs200940095",
+        "3:60069:A:T",
+        "3:60079:AG:A",
+        "rs566180130",
+    ]
