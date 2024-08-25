@@ -276,9 +276,11 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
 
     @property
     def allocations(self) -> dict[str, Allocation]:
-        a = pickle.loads(self.buf)
-        assert isinstance(a, dict)
-        return a
+        with get_global_lock():
+            allocations = pickle.loads(self.buf)
+            if not isinstance(allocations, dict):
+                raise ValueError(f"Expected a dictionary, got {allocations}")
+            return allocations
 
     @allocations.setter
     def allocations(self, allocations: dict[str, Allocation]) -> None:

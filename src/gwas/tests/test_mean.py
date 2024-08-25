@@ -71,7 +71,8 @@ def test_mean(
     )
 
     # Test calc_mean
-    calc_mean(vcf_file, variable_collections, num_threads=cpu_count())
+    vcf_file.clear_allele_frequency_columns()
+    assert calc_mean(vcf_file, variable_collections, num_threads=cpu_count())
     for column in vcf_file.shared_vcf_variants.columns:
         if column.name in vcf_file.allele_frequency_columns:
             new_allocation_names.update(column.allocation_names)

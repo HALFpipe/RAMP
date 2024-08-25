@@ -123,17 +123,30 @@ def plot_q_q(
 class PlotGenerator:
     chromosome_array: SharedArray[np.int64]
     position_array: SharedArray[np.int64]
-    p_value_array: SharedArray
+    p_value_array: SharedArray[np.float64]
     mask_array: SharedArray[np.bool_]
 
     output_directory: UPath
 
     def __post_init__(self) -> None:
-        assert self.p_value_array.shape[0] // 2 == self.mask_array.shape[0]
         (variant_count,) = self.chromosome_array.shape
-        assert self.position_array.shape == (variant_count,)
-        assert self.p_value_array.shape[1] == variant_count
-        assert self.mask_array.shape[1] == variant_count
+
+        expected_shape: tuple[int, ...] = (self.mask_array.shape[0] * 2, variant_count)
+        if self.p_value_array.shape != expected_shape:
+            raise ValueError(
+                f"Expected shape {expected_shape} for p-value array "
+                f"but got {self.p_value_array.shape}"
+            )
+
+        expected_shape = (variant_count,)
+        if self.position_array.shape != expected_shape:
+            raise ValueError(
+                f"Expected shape {expected_shape} for position array "
+                f"but got {self.position_array.shape}"
+            )
+
+        if self.mask_array.shape[1] != variant_count:
+            raise ValueError
 
     def plot(self, job: PlotJob) -> None:
         chromosome_int = self.chromosome_array.to_numpy()

@@ -1,6 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import field
+from typing import Self, override
 
 import numpy as np
+from chex import dataclass
 from jax import hessian
 from jax import numpy as jnp
 from jaxtyping import Array, Float
@@ -17,43 +19,50 @@ from .pml import terms_count as terms_count
 
 @dataclass(frozen=True, eq=True)
 class MaximumLikelihood(ProfileMaximumLikelihood):
-    def get_initial_terms(self, o: OptimizeInput) -> list[float]:
+    pml: ProfileMaximumLikelihood = field()
+
+    @override
+    @classmethod
+    def create(cls, sample_count: int, covariate_count: int, **kwargs) -> Self:
+        pml = ProfileMaximumLikelihood.create(sample_count, covariate_count, **kwargs)
+        return super().create(sample_count, covariate_count, pml=pml, **kwargs)
+
+    @override
+    @classmethod
+    def get_initial_terms(cls, o: OptimizeInput) -> list[float]:
         terms = super().get_initial_terms(o)
-        r = super().get_regression_weights(
-            self.terms_to_tensor(terms),
-            o,
-        )
+        r = super().get_regression_weights(cls.terms_to_tensor(terms), o)
         regression_weights = list(np.asarray(r.regression_weights).ravel())
         return terms + regression_weights
 
+    @override
     def grid_search(self, o: OptimizeInput) -> npt.NDArray[np.float64]:
-        pml = ProfileMaximumLikelihood(**vars(self))
+        pml = self.pml
+
         terms = pml.grid_search(o)
-        r = pml.get_regression_weights(
-            self.terms_to_tensor(terms),
-            o,
-        )
+        r = pml.get_regression_weights(self.terms_to_tensor(terms), o)
         regression_weights = np.asarray(r.regression_weights).ravel()
         return np.hstack([terms, regression_weights])
 
+    @override
     def bounds(self, o: OptimizeInput) -> list[tuple[float, float]]:
-        return super().bounds(o) + [(-np.inf, np.inf)] * self.covariate_count
+        _, rotated_covariates, _ = o
+        _, covariate_count = rotated_covariates.shape
+        return super().bounds(o) + [(-np.inf, np.inf)] * covariate_count
 
+    @override
     @staticmethod
     def get_regression_weights(
         terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> RegressionWeights:
-        terms = jnp.where(
-            jnp.isfinite(terms),
-            terms,
-            0,
-        )
+        eigenvalues, rotated_covariates, rotated_phenotype = o
+        terms = jnp.where(jnp.isfinite(terms), terms, 0)
 
-        variance = terms[1] * o.eigenvalues + terms[0]
+        variance = terms[1] * eigenvalues + terms[0]
         inverse_variance = jnp.pow(variance, -0.5)[:, jnp.newaxis]
 
-        scaled_covariates = o.rotated_covariates * inverse_variance
-        scaled_phenotype = o.rotated_phenotype * inverse_variance
+        scaled_covariates = rotated_covariates * inverse_variance
+        scaled_phenotype = rotated_phenotype * inverse_variance
 
         regression_weights = terms[2:]
         regression_weights = jnp.reshape(regression_weights, (-1, 1))
@@ -67,6 +76,7 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
             scaled_phenotype=scaled_phenotype,
         )
 
+    @override
     @classmethod
     def get_standard_errors(
         cls, terms: Float[Array, " terms_count"], o: OptimizeInput

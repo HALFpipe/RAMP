@@ -118,6 +118,12 @@ def test_pheno(
         missing_value_strategy="listwise_deletion",
     )
     request.addfinalizer(variable_collection0.free)
+    assert variable_collection0.samples == samples
+    assert variable_collection0.sample_count == sample_count
+    assert variable_collection0.covariate_names[1:] == covariate_names
+    assert variable_collection0.covariate_count == covariate_count + 1
+    assert variable_collection0.phenotype_names == phenotype_names
+    assert variable_collection0.phenotype_count == phenotype_count
     assert_array_equal(variable_collection0.phenotypes, phenotypes)
     assert_array_equal(variable_collection0.covariates[:, 1:], covariates)
 
@@ -130,6 +136,12 @@ def test_pheno(
         missing_value_strategy="listwise_deletion",
     )
     request.addfinalizer(variable_collection1.free)
+    assert variable_collection1.samples == truncated_samples
+    assert variable_collection1.sample_count == sample_count - 1
+    assert variable_collection1.covariate_names[1:] == covariate_names
+    assert variable_collection1.covariate_count == covariate_count + 1
+    assert variable_collection1.phenotype_names == phenotype_names
+    assert variable_collection1.phenotype_count == phenotype_count
     assert_array_equal(variable_collection1.phenotypes, phenotypes[1:, :])
     assert_array_equal(variable_collection1.covariates[:, 1:], covariates[1:, :])
 
@@ -138,6 +150,12 @@ def test_pheno(
         samples=truncated_samples, phenotype_names=truncated_phenotypes
     )
     request.addfinalizer(variable_collection2.free)
+    assert variable_collection1.samples == truncated_samples
+    assert variable_collection2.sample_count == sample_count - 1
+    assert variable_collection1.covariate_names[1:] == covariate_names
+    assert variable_collection1.covariate_count == covariate_count + 1
+    assert variable_collection2.phenotype_names == truncated_phenotypes
+    assert variable_collection2.phenotype_count == phenotype_count - 1
     assert_array_equal(variable_collection2.phenotypes, phenotypes[1:, 1:])
     assert_array_equal(variable_collection2.covariates[:, 1:], covariates[1:, :])
 

@@ -1,39 +1,30 @@
-from dataclasses import dataclass, field
-from functools import cache, cached_property, partial
-from itertools import chain
-from typing import Any, Callable, NamedTuple, Self, TypeVar
+from functools import cached_property
+from typing import Any, Callable, NamedTuple, Self, TypeAlias, TypeVar
 
+import jax
 import numpy as np
 import scipy
-from jax import hessian, jit, value_and_grad, vmap
+from chex import dataclass
 from jax import numpy as jnp
+from jax.export import deserialize, export
 from jax.lax import select
-from jax.tree_util import Partial
 from jaxtyping import Array, Float, Integer
 from numpy import typing as npt
-from tqdm.auto import tqdm
 
 from ..eig.base import Eigendecomposition
 from ..log import logger
 from ..pheno import VariableCollection
-from ..utils.multiprocessing import IterationOrder, make_pool_or_null_context
-from .base import NullModelCollection, NullModelResult
+from .base import NullModelResult
 
+sample_count = TypeVar("sample_count")
+covariate_count = TypeVar("covariate_count")
 terms_count = TypeVar("terms_count")
 
-
-class OptimizeInput(NamedTuple):
-    eigenvalues: Float[Array, " sample_count"]
-    rotated_covariates: Float[Array, " sample_count covariate_count"]
-    rotated_phenotype: Float[Array, " sample_count 1"]
-
-
-@dataclass
-class OptimizeJob:
-    indices: tuple[int, int | None]
-
-    eig: Eigendecomposition
-    vc: VariableCollection
+OptimizeInput: TypeAlias = tuple[
+    Float[Array, " sample_count"],  # eigenvalues
+    Float[Array, " sample_count covariate_count"],  # rotated_covariates
+    Float[Array, " sample_count 1"],  # rotated_phenotype
+]
 
 
 class OptimizeResult(NamedTuple):
@@ -67,8 +58,10 @@ class StandardErrors(NamedTuple):
 
 @dataclass(frozen=True, eq=True)
 class ProfileMaximumLikelihood:
-    sample_count: int
-    covariate_count: int
+    serialized_func: bytearray | None
+    serialized_vec_func: bytearray | None
+    serialized_func_with_grad: bytearray | None
+    serialized_hessian: bytearray | None
 
     minimum_variance: float = 1e-4
     maximum_variance_multiplier: float = 2.0
@@ -76,46 +69,86 @@ class ProfileMaximumLikelihood:
     grid_search_size: int = 100
 
     enable_softplus_penalty: bool = True
-    softplus_beta: Float[Array, ""] = field(default_factory=partial(jnp.asarray, 10000))
+    softplus_beta: float = 10000.0
 
-    @classmethod
-    @cache
-    def create(cls, sample_count: int, covariate_count: int) -> Self:
-        return cls(sample_count, covariate_count)
+    @staticmethod
+    def terms_to_tensor(
+        numpy_terms: list[float] | npt.NDArray[np.float64],
+    ) -> Float[Array, " terms_count"]:
+        terms = jnp.asarray(numpy_terms)
+        terms = jnp.where(jnp.isfinite(terms), terms, 0.0)
+        return terms
 
-    def get_initial_terms(self, o: OptimizeInput) -> list[float]:
-        variance: float = o.rotated_phenotype.var().item()
+    @staticmethod
+    def get_initial_terms(o: OptimizeInput) -> list[float]:
+        _, _, rotated_phenotype = o
+        variance: float = rotated_phenotype.var().item()
         return [variance / 2] * 2
 
-    def grid_search(self, o: OptimizeInput) -> npt.NDArray[np.float64]:
-        variance: Float[Array, ""] = o.rotated_phenotype.var()
-
-        variance_ratios = jnp.linspace(0.01, 0.99, self.grid_search_size)
-        variances = np.linspace(
-            self.minimum_variance,
-            variance * self.maximum_variance_multiplier,
-            self.grid_search_size,
+    @classmethod
+    def create(cls, sample_count: int, covariate_count: int, **kwargs) -> Self:
+        base = cls(
+            serialized_func=None,
+            serialized_vec_func=None,
+            serialized_func_with_grad=None,
+            serialized_hessian=None,
+            **kwargs,
         )
-        grid = jnp.meshgrid(variance_ratios, variances)
 
-        combinations = jnp.vstack([m.ravel() for m in grid]).transpose()
-        genetic_variance = (1 - combinations[:, 0]) * combinations[:, 1]
-        error_variance = combinations[:, 0] * combinations[:, 1]
+        o: OptimizeInput = (
+            jnp.zeros((sample_count,)),
+            jnp.zeros((sample_count, covariate_count)),
+            jnp.zeros((sample_count, 1)),
+        )
+        terms = base.terms_to_tensor(base.get_initial_terms(o))
+        vec_terms = jnp.zeros((base.grid_search_size**2, *terms.shape))
 
-        terms_grid = jnp.vstack([error_variance, genetic_variance]).transpose()
-        wrapper = vmap(Partial(self.minus_two_log_likelihood, o=o))
+        logger.debug(f"Compiling for {sample_count=} {covariate_count=} {terms.shape=}")
 
-        minus_two_log_likelihoods = wrapper(jnp.asarray(terms_grid))
-        i = jnp.argmin(minus_two_log_likelihoods)
+        minus_two_log_likelihood = base.minus_two_log_likelihood.__func__  # type: ignore
 
-        return np.asarray(terms_grid[i, :])
+        func = jax.jit(minus_two_log_likelihood, static_argnums=0)
+        exported_func = export(func)(base, terms, o)
 
-    def bounds(self, o: OptimizeInput) -> list[tuple[float, float]]:
-        variance: float = o.rotated_phenotype.var().item()
-        return [
-            (self.minimum_variance, variance * self.maximum_variance_multiplier),
-            (0, variance * self.maximum_variance_multiplier),
-        ]
+        vmap_func = jax.vmap(minus_two_log_likelihood, in_axes=[None, 0, None])
+        vec_func = jax.jit(vmap_func, static_argnums=0)
+        exported_vec_func = export(vec_func)(base, vec_terms, o)
+
+        value_and_grad = jax.value_and_grad(minus_two_log_likelihood, argnums=1)
+        func_with_grad = jax.jit(value_and_grad, static_argnums=0)
+        exported_func_with_grad = export(func_with_grad)(base, terms, o)
+
+        hessian = jax.jit(
+            jax.hessian(minus_two_log_likelihood, argnums=1), static_argnums=0
+        )
+        exported_hessian = export(hessian)(base, terms, o)
+
+        return cls(
+            serialized_func=exported_func.serialize(),
+            serialized_vec_func=exported_vec_func.serialize(),
+            serialized_func_with_grad=exported_func_with_grad.serialize(),
+            serialized_hessian=exported_hessian.serialize(),
+            **kwargs,
+        )
+
+    @cached_property
+    def func(
+        self,
+    ) -> Callable[[Float[Array, " terms_count"], OptimizeInput], Float[Array, ""]]:
+        if self.serialized_func is None:
+            raise RuntimeError("Model not compiled")
+        return deserialize(self.serialized_func).call
+
+    @cached_property
+    def vec_func(
+        self,
+    ) -> Callable[
+        [Float[Array, " grid_search_size terms_count"], OptimizeInput],
+        Float[Array, " grid_search_size"],
+    ]:
+        if self.serialized_vec_func is None:
+            raise RuntimeError("Model not compiled")
+        return deserialize(self.serialized_vec_func).call
 
     @cached_property
     def func_with_grad(
@@ -124,7 +157,9 @@ class ProfileMaximumLikelihood:
         [Float[Array, " terms_count"], OptimizeInput],
         tuple[Float[Array, ""], Float[Array, " terms_count"]],
     ]:
-        return jit(value_and_grad(self.minus_two_log_likelihood))
+        if self.serialized_func_with_grad is None:
+            raise RuntimeError("Model not compiled")
+        return deserialize(self.serialized_func_with_grad).call
 
     @cached_property
     def hessian(
@@ -133,20 +168,56 @@ class ProfileMaximumLikelihood:
         [Float[Array, " terms_count"], OptimizeInput],
         tuple[Float[Array, " terms_count terms_count"]],
     ]:
-        func = hessian(self.minus_two_log_likelihood)
-        return jit(func)
+        if self.serialized_hessian is None:
+            raise RuntimeError("Model not compiled")
+        return deserialize(self.serialized_hessian).call
+
+    def grid_search(self, o: OptimizeInput) -> npt.NDArray[np.float64]:
+        _, _, rotated_phenotype = o
+        variance: Float[Array, ""] = rotated_phenotype.var()
+
+        variance_ratios = jnp.linspace(0.01, 0.99, self.grid_search_size)
+        variances = np.linspace(
+            self.minimum_variance,
+            variance * self.maximum_variance_multiplier,
+            self.grid_search_size,
+        )
+        grid = jnp.meshgrid(variance_ratios, variances)
+        grid_variance_ratios, grid_variances = map(jnp.ravel, grid)
+
+        genetic_variance = (1 - grid_variance_ratios) * grid_variances
+        error_variance = grid_variance_ratios * grid_variances
+
+        vec_terms: Float[Array, " grid_search_size 2"] = jnp.vstack(
+            [error_variance, genetic_variance]
+        ).transpose()
+
+        minus_two_log_likelihoods = self.vec_func(vec_terms, o)
+        i = jnp.argmin(minus_two_log_likelihoods)
+
+        return np.asarray(vec_terms[i, :])
+
+    def bounds(self, o: OptimizeInput) -> list[tuple[float, float]]:
+        _, _, rotated_phenotype = o
+        variance: float = rotated_phenotype.var().item()
+        return [
+            (self.minimum_variance, variance * self.maximum_variance_multiplier),
+            (0, variance * self.maximum_variance_multiplier),
+        ]
 
     @staticmethod
     def get_regression_weights(
         terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> RegressionWeights:
+        eigenvalues, rotated_covariates, rotated_phenotype = o
+
         genetic_variance = terms[1]
         error_variance = terms[0]
-        variance = (genetic_variance * o.eigenvalues + error_variance)[:, jnp.newaxis]
+        variance = (genetic_variance * eigenvalues + error_variance)[:, jnp.newaxis]
         inverse_variance = jnp.pow(variance, -0.5)
 
-        scaled_covariates = o.rotated_covariates * inverse_variance
-        scaled_phenotype = o.rotated_phenotype * inverse_variance
+        scaled_covariates = rotated_covariates * inverse_variance
+        scaled_phenotype = rotated_phenotype * inverse_variance
 
         regression_weights, _, _, _ = jnp.linalg.lstsq(
             scaled_covariates, scaled_phenotype, rcond=None
@@ -183,14 +254,6 @@ class ProfileMaximumLikelihood:
             scaled_residuals=r.scaled_residuals,
             variance=r.variance,
         )
-
-    @classmethod
-    def terms_to_tensor(
-        cls, numpy_terms: list[float] | npt.NDArray[np.float64]
-    ) -> Float[Array, " terms_count"]:
-        terms = jnp.asarray(numpy_terms)
-        terms = jnp.where(jnp.isfinite(terms), terms, 0.0)
-        return terms
 
     def wrapper_with_grad(
         self, numpy_terms: npt.NDArray[np.float64], o: OptimizeInput
@@ -249,9 +312,8 @@ class ProfileMaximumLikelihood:
 
         return OptimizeResult(x=optimize_result.x, fun=optimize_result.fun)
 
-    @classmethod
-    def inner(
-        cls, vc: VariableCollection, phenotype_index: int, eig: Eigendecomposition
+    def get_null_model_result(
+        self, vc: VariableCollection, phenotype_index: int, eig: Eigendecomposition
     ) -> NullModelResult:
         eigenvectors = eig.eigenvectors
         covariates = vc.covariates.copy()
@@ -265,24 +327,18 @@ class ProfileMaximumLikelihood:
         rotated_covariates = jnp.asarray(eigenvectors.transpose() @ covariates)
         rotated_phenotype = jnp.asarray(eigenvectors.transpose() @ phenotype)
 
-        o = OptimizeInput(
-            eigenvalues,
-            rotated_covariates,
-            rotated_phenotype,
-        )
-
-        ml = cls.create(vc.sample_count, vc.covariate_count)
+        o: OptimizeInput = (eigenvalues, rotated_covariates, rotated_phenotype)
 
         try:
-            optimize_result = ml.optimize(o)
+            optimize_result = self.optimize(o)
             if optimize_result.x.dtype != np.float64:
                 raise RuntimeError("Dtype needs to be float64")
             terms = jnp.asarray(optimize_result.x)
-            se = ml.get_standard_errors(terms, o)
+            se = self.get_standard_errors(terms, o)
             minus_two_log_likelihood = float(optimize_result.fun)
             null_model_result = NullModelResult(
                 -0.5 * minus_two_log_likelihood,
-                *ml.get_heritability(terms),
+                *self.get_heritability(terms),
                 np.asarray(se.regression_weights),
                 np.asarray(se.standard_errors),
                 np.asarray(se.scaled_residuals),
@@ -298,90 +354,16 @@ class ProfileMaximumLikelihood:
             )
         return null_model_result
 
-    @classmethod
-    def apply(
-        cls, optimize_job: OptimizeJob
-    ) -> list[tuple[tuple[int, int], NullModelResult]]:
-        (variable_collection_index, phenotype_index) = optimize_job.indices
-        eig = optimize_job.eig
-        vc = optimize_job.vc
-
-        o: list[tuple[tuple[int, int], NullModelResult]] = list()
-        if phenotype_index is not None:
-            indices = (variable_collection_index, phenotype_index)
-            o.append((indices, cls.inner(vc, phenotype_index, eig)))
-        else:
-            for phenotype_index in range(vc.phenotype_count):
-                indices = (variable_collection_index, phenotype_index)
-                o.append((indices, cls.inner(vc, phenotype_index, eig)))
-
-        return o
-
-    @classmethod
-    def fit(
-        cls,
-        eigendecompositions: list[Eigendecomposition],
-        variable_collections: list[VariableCollection],
-        null_model_collections: list[NullModelCollection],
-        num_threads: int,
-    ) -> None:
-        if len(variable_collections) < num_threads:
-            logger.debug("Running one job for each phenotype")
-            optimize_jobs = [
-                OptimizeJob((collection_index, phenotype_index), eig, vc)
-                for collection_index, (eig, vc) in enumerate(
-                    zip(
-                        eigendecompositions,
-                        variable_collections,
-                        strict=True,
-                    )
-                )
-                for phenotype_index in range(vc.phenotype_count)
-            ]
-        else:
-            logger.debug("Running one job for each variable collection")
-            optimize_jobs = [
-                OptimizeJob((collection_index, None), eig, vc)
-                for collection_index, (eig, vc) in enumerate(
-                    zip(
-                        eigendecompositions,
-                        variable_collections,
-                        strict=True,
-                    )
-                )
-            ]
-
-        pool, iterator = make_pool_or_null_context(
-            optimize_jobs,
-            cls.apply,
-            num_threads=num_threads,
-            iteration_order=IterationOrder.UNORDERED,
-        )
-        with pool:
-            for indices, null_model_result in tqdm(
-                chain.from_iterable(iterator),
-                desc="fitting null models",
-                unit="phenotypes",
-                total=len(optimize_jobs),
-            ):
-                collection_index, phenotype_index = indices
-                nm = null_model_collections[collection_index]
-                nm.put(phenotype_index, null_model_result)
-
     def softplus_penalty(
         self, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> Float[Array, "..."]:
-        maximum_variance = o.rotated_phenotype.var() * jnp.asarray(
+        _, _, rotated_phenotype = o
+        maximum_variance = rotated_phenotype.var() * jnp.asarray(
             self.maximum_variance_multiplier
         )
-        upper_penalty = softplus(
-            terms[:2] - maximum_variance,
-            beta=self.softplus_beta,
-        )
-        lower_penalty = softplus(
-            -terms[:2],
-            beta=self.softplus_beta,
-        )
+        beta = jnp.asarray(self.softplus_beta)
+        upper_penalty = softplus(terms[:2] - maximum_variance, beta=beta)
+        lower_penalty = softplus(-terms[:2], beta=beta)
         penalty = jnp.asarray(self.softplus_beta) * (
             lower_penalty.sum() + upper_penalty.sum()
         )
@@ -390,7 +372,8 @@ class ProfileMaximumLikelihood:
     def get_minus_two_log_likelihood_terms(
         self, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> MinusTwoLogLikelihoodTerms:
-        sample_count = jnp.asarray(self.sample_count)
+        _, _, rotated_phenotype = o
+        sample_count = jnp.asarray(rotated_phenotype.size)
         genetic_variance = terms[1]
         r = self.get_regression_weights(terms, o)
 
@@ -425,7 +408,7 @@ class ProfileMaximumLikelihood:
 threshold = jnp.asarray(20.0)
 
 
-def softplus(x: Float[Array, ""], beta: Float[Array, ""]) -> Float[Array, ""]:
+def softplus(x: Float[Array, ""], beta: Float[Array, ""] | None) -> Float[Array, ""]:
     if beta is None:
         beta = jnp.asarray(1.0)
     # Taken from https://github.com/google/jax/issues/18443 and
@@ -450,7 +433,5 @@ def logdet(a: Float[Array, " n n"]) -> Float[Array, ""]:
         _type_: _description_
     """
     sign, logabsdet = jnp.linalg.slogdet(a)
-    assert isinstance(sign, jnp.ndarray)
-    assert isinstance(logabsdet, jnp.ndarray)
     logdet = jnp.where(sign == -1.0, jnp.inf, logabsdet)
     return logdet

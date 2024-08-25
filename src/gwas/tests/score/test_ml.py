@@ -22,12 +22,12 @@ def test_fastlmm(
     rmw_debug: RmwDebug,
 ) -> None:
     sample_count, covariate_count = rmw_debug.x.shape
-    ml = FaSTLMM(sample_count, covariate_count, enable_softplus_penalty=False)
+    ml = FaSTLMM.create(sample_count, covariate_count, enable_softplus_penalty=False)
 
-    optimize_input = OptimizeInput(
-        eigenvalues=jnp.asarray(rmw_debug.d),
-        rotated_covariates=jnp.asarray(rmw_debug.trans_u_x),
-        rotated_phenotype=jnp.asarray(rmw_debug.trans_u_y[:, np.newaxis]),
+    optimize_input: OptimizeInput = (
+        jnp.asarray(rmw_debug.d),
+        jnp.asarray(rmw_debug.trans_u_x),
+        jnp.asarray(rmw_debug.trans_u_y[:, np.newaxis]),
     )
 
     # Test for intermediate values
@@ -109,12 +109,12 @@ def test_optimize(
     ml_class: Type[ProfileMaximumLikelihood],
 ) -> None:
     sample_count, covariate_count = rmw_debug.x.shape
-    ml = ml_class(sample_count=sample_count, covariate_count=covariate_count)
+    ml = ml_class.create(sample_count, covariate_count)
 
-    optimize_input = OptimizeInput(
-        eigenvalues=jnp.asarray(rmw_debug.d),
-        rotated_covariates=jnp.asarray(rmw_debug.trans_u_x),
-        rotated_phenotype=jnp.asarray(rmw_debug.trans_u_y[:, np.newaxis]),
+    optimize_input: OptimizeInput = (
+        jnp.asarray(rmw_debug.d),
+        jnp.asarray(rmw_debug.trans_u_x),
+        jnp.asarray(rmw_debug.trans_u_y[:, np.newaxis]),
     )
 
     optimize_result = ml.optimize(optimize_input)

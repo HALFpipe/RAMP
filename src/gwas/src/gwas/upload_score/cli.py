@@ -1,7 +1,6 @@
 import logging
 import sys
 from argparse import ArgumentParser, Namespace
-from multiprocessing import cpu_count
 from subprocess import call
 from tempfile import TemporaryDirectory
 from typing import Iterable, Literal
@@ -10,6 +9,7 @@ from upath import UPath
 
 from ..log import logger, setup_logging
 from ..utils.shutil import unwrap_which
+from ..utils.threads import cpu_count
 
 path_patterns: list[str] = [
     "chr*.metadata.yaml.gz",

@@ -183,6 +183,22 @@ class VCFFile(AbstractContextManager):
     def save_to_cache(self, cache_path: UPath, num_threads: int) -> None:
         save_to_cache(cache_path, self.cache_key(self.file_path), self, num_threads)
 
+    def clear_allele_frequency_columns(self) -> None:
+        allele_frequency_columns = self.allele_frequency_columns
+
+        # Keep the alternate_allele_frequency column
+        if "alternate_allele_frequency" in allele_frequency_columns:
+            allele_frequency_columns.remove("alternate_allele_frequency")
+
+        for column in self.shared_vcf_variants.columns:
+            if column.name in self.allele_frequency_columns:
+                column.free()
+        self.shared_vcf_variants.columns = [
+            column
+            for column in self.shared_vcf_variants.columns
+            if column.name not in self.allele_frequency_columns
+        ]
+
     def free(self) -> None:
         self.shared_vcf_variants.free()
 

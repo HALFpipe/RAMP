@@ -13,6 +13,7 @@ dependencies = [
   "jax",
   "jaxtyping",
   "chex",
+  "flatbuffers",
   "psutil",
   "threadpoolctl",
   "tqdm",
@@ -64,12 +65,6 @@ ignore = [
   "F722",  # Syntax error in forward annotation
   "PD008", # Use .loc instead of .at. If speed is important, use NumPy.
 ]
-
-[tool.pytest.ini_options]
-markers = ["slow: marks tests that run much longer than most"]
-log_cli = true
-log_cli_level = "DEBUG"
-log_cli_format = "%(asctime)s [%(name)16s] [%(levelname)8s] [%(processName)20s] %(funcName)s: %(message)s (%(filename)s:%(lineno)s)"
 
 [tool.setuptools_scm]
 version_scheme = "no-guess-dev"

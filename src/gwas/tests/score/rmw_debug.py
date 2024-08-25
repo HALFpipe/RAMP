@@ -91,7 +91,7 @@ def read_matrix(
     return np.loadtxt(lines, dtype=np.float64)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def rmw_debug(
     phenotype_index: int,
     raremetalworker_score_commands: list[RaremetalworkerScoreCommand],

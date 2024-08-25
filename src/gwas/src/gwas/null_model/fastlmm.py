@@ -1,18 +1,12 @@
-from dataclasses import dataclass
-from functools import cached_property
-from typing import Callable, TypeVar
-
 import numpy as np
 import scipy
-from jax import jit
+from chex import dataclass
 from jax import numpy as jnp
 from jaxtyping import Array, Float
 from numpy import typing as npt
 
 from ..log import logger
 from .pml import OptimizeInput, OptimizeResult, ProfileMaximumLikelihood
-
-terms_count = TypeVar("terms_count")
 
 
 @dataclass(frozen=True, eq=True)
@@ -45,15 +39,9 @@ class FaSTLMM(ProfileMaximumLikelihood):
             jnp.inf,
         )
 
-    @cached_property
-    def func(
-        self,
-    ) -> Callable[[Float[Array, " terms_count"], OptimizeInput], Float[Array, ""]]:
-        return jit(self.minus_two_log_likelihood)
-
     def wrapper(self, numpy_terms: npt.NDArray[np.float64], o: OptimizeInput) -> float:
         variance_ratio = np.power(10, numpy_terms)
-        terms = jnp.asarray([variance_ratio, 1])
+        terms: Float[Array, " 2"] = jnp.asarray([variance_ratio, 1])
         return float(np.asarray(self.func(terms, o)))
 
     def optimize(
@@ -63,9 +51,8 @@ class FaSTLMM(ProfileMaximumLikelihood):
         enable_hessian: bool = False,
         disp: bool = False,
     ) -> OptimizeResult:
-        func = self.wrapper
-
-        upper_bound = float(np.log10(o.rotated_phenotype.var()))
+        _, _, rotated_phenotype = o
+        upper_bound = float(np.log10(rotated_phenotype.var()))
         lower_bound = float(np.log10(self.minimum_variance) - upper_bound)
         logger.debug(
             f"FaSTLMM will optimize between {lower_bound} to {upper_bound} "
@@ -80,7 +67,7 @@ class FaSTLMM(ProfileMaximumLikelihood):
             for bounds in zip(xa, xa + self.step, strict=True):
                 try:
                     optimize_result = scipy.optimize.minimize_scalar(
-                        func,
+                        self.wrapper,
                         args=(o,),
                         bounds=bounds,
                         options=dict(disp=disp, xatol=1e-15),
@@ -110,39 +97,4 @@ class FaSTLMM(ProfileMaximumLikelihood):
         return OptimizeResult(
             x=np.asarray(terms),
             fun=float(fmin),
-        )
-
-
-@dataclass(frozen=True, eq=True)
-class PenalizedFaSTLMM(FaSTLMM):
-    def __post_init__(self) -> None:
-        logger.warning("PenalizedFaSTLMM doesn't work")
-
-    def minus_two_log_likelihood(
-        self, terms: Float[Array, " 2"], o: OptimizeInput
-    ) -> Float[Array, ""]:
-        t = self.get_minus_two_log_likelihood_terms(terms, o)
-
-        variance_ratio = terms[0]
-        genetic_variance = t.deviation / (t.sample_count - 4)
-        error_variance = variance_ratio * genetic_variance
-
-        penalty = -2 * jnp.log(variance_ratio)
-
-        minus_two_log_likelihood = (
-            (t.sample_count - 4)
-            + t.logarithmic_determinant
-            + t.sample_count * jnp.log(genetic_variance)
-            + penalty
-        )
-
-        if self.enable_softplus_penalty:
-            minus_two_log_likelihood += self.softplus_penalty(
-                jnp.stack((error_variance, genetic_variance)), o
-            )
-
-        return jnp.where(
-            jnp.isfinite(minus_two_log_likelihood),
-            minus_two_log_likelihood,
-            jnp.inf,
         )

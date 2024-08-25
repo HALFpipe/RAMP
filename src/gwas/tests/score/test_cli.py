@@ -3,9 +3,15 @@ from typing import Mapping
 
 import numpy as np
 import pandas as pd
+import pytest
 from pytest import FixtureRequest
 from upath import UPath
 
+from gwas.compression.arr.base import (
+    FileArray,
+    compression_methods,
+    default_compression_method_name,
+)
 from gwas.compression.cache import cache_suffix
 from gwas.eig.base import Eigendecomposition
 from gwas.mem.wkspace import SharedWorkspace
@@ -14,14 +20,26 @@ from gwas.pheno import VariableCollection, combine
 from gwas.score.cli import parse_arguments
 from gwas.score.command import GwasCommand
 from gwas.score.job import SummaryCollection
+from gwas.utils.threads import cpu_count
 from gwas.vcf.base import VCFFile
 
-from ..conftest import chromosomes
+from ..conftest import chromosomes, sample_sizes
 from ..utils import assert_both_close, check_bias
 from .conftest import RmwScore
 
 
-def test_run(
+@pytest.mark.parametrize(
+    "sample_size_label, chromosome, compression_method_name",
+    [
+        *(("small", 22, c) for c in compression_methods.keys()),
+        ("medium", 22, default_compression_method_name),
+        ("large", 22, default_compression_method_name),
+        *((s, "X", default_compression_method_name) for s in sample_sizes.keys()),
+    ],
+    indirect=["sample_size_label", "chromosome"],
+    scope="session",
+)
+def test_smoke(
     tmp_path: UPath,
     sw: SharedWorkspace,
     vcf_paths_by_chromosome: Mapping[int | str, UPath],
@@ -31,6 +49,7 @@ def test_run(
     eigendecompositions: list[Eigendecomposition],
     null_model_collections: list[NullModelCollection],
     chromosome: int | str,
+    compression_method_name: str,
     rmw_score: RmwScore,
     request: FixtureRequest,
 ) -> None:
@@ -99,9 +118,11 @@ def test_run(
             "--chromosome",
             str(chromosome),
             "--compression-method",
-            "zstd_text",
+            compression_method_name,
             "--log-level",
             "DEBUG",
+            "--num-threads",
+            str(cpu_count()),
         ]
     )
     command = GwasCommand(arguments, tmp_path, sw, variable_collection_prefix="svc")
@@ -168,8 +189,15 @@ def test_run(
                 np.var(phenotype_frame[phenotype_name], ddof=1),
             )
 
-    score_path = tmp_path / f"chr{chromosome}.score.txt.zst"
-    data_frame = pd.read_table(score_path, skiprows=1, compression="zstd")
+    suffix = compression_methods[compression_method_name].suffix
+    score_path = tmp_path / f"chr{chromosome}.score{suffix}"
+    reader = FileArray.from_file(score_path, np.float64, cpu_count())
+    with reader:
+        row_metadata, column_names = reader.row_metadata, reader.column_names
+        data_frame = pd.concat(
+            [row_metadata, pd.DataFrame(reader[:, :], columns=column_names)],
+            axis="columns",
+        )
 
     u_stat_columns = [f"{name}_stat-u" for name in phenotype_names]
     u_stat = data_frame[u_stat_columns].to_numpy()

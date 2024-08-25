@@ -40,38 +40,28 @@ class JobCollection:
     def __post_init__(self) -> None:
         if len(self.variable_collection_chunks) == 0:
             raise ValueError("No phenotypes to analyze")
+
         self.sw = next(chain.from_iterable(self.variable_collection_chunks)).sw
-        # Create an array proxy
-        self.stat_file_array = FileArray.create(
-            self.file_path,
-            (self.vcf_file.variant_count, self.phenotype_count * 2),
-            np.float64,
-            compression_method=self.compression_method,
-            num_threads=self.num_threads,
-        )
-        # Set column names
-        phenotype_names = [
+
+        # Create a file array to store the results
+        column_names = [
             f"{phenotype_name}_stat-{stat}"
             for variable_collections in self.variable_collection_chunks
             for vc in variable_collections
             for phenotype_name in vc.phenotype_names
             for stat in ["u", "v"]
         ]
-        self.stat_file_array.set_axis_metadata(1, phenotype_names)
-        # Try to load an existing summary collection.
-        chunks_path = self.file_path.with_suffix(".yaml.gz")
-        if chunks_path.is_file():
-            try:
-                summary_collection = SummaryCollection.from_file(chunks_path)
-                summary_collection.validate(self.variable_collection_chunks)
-                self.summary_collection = summary_collection
-                return
-            except ValueError as e:
-                logger.warning(
-                    f'Failed to load summary collection from "{chunks_path}"',
-                    exc_info=e,
-                )
-        # Create a new summary collection.
+        column_count = len(column_names)
+        self.stat_file_array = FileArray.create(
+            self.file_path,
+            (self.vcf_file.variant_count, column_count),
+            np.float64,
+            compression_method=self.compression_method,
+            num_threads=self.num_threads,
+            column_names=column_names,
+        )
+
+        # Create a new summary collection
         self.summary_collection = SummaryCollection.from_variable_collection_chunks(
             self.variable_collection_chunks
         )
@@ -161,13 +151,6 @@ class JobCollection:
     @property
     def chromosome(self) -> int | str:
         return self.vcf_file.chromosome
-
-    @property
-    def phenotype_count(self) -> int:
-        return sum(
-            vc.phenotype_count
-            for vc in chain.from_iterable(self.variable_collection_chunks)
-        )
 
     @property
     def file_path(self) -> UPath:

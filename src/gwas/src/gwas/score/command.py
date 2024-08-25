@@ -8,7 +8,11 @@ from threadpoolctl import threadpool_limits
 from tqdm.auto import tqdm
 from upath import UPath
 
-from ..compression.arr.base import TextCompressionMethod, compression_methods
+from ..compression.arr.base import (
+    ParquetCompressionMethod,
+    TextCompressionMethod,
+    compression_methods,
+)
 from ..covar import calc_covariance
 from ..log import logger
 from ..mean import calc_mean
@@ -275,11 +279,15 @@ class GwasCommand:
 
         compression_method = compression_methods[self.arguments.compression_method]
 
-        if len(chunks) > 1 and isinstance(compression_method, TextCompressionMethod):
-            raise ValueError(
-                "Cannot use text compression method for multiple chunks. "
-                "Please use a different compression method"
-            )
+        if isinstance(
+            compression_method, (TextCompressionMethod, ParquetCompressionMethod)
+        ):
+            if len(chunks) > 1:
+                raise ValueError(
+                    "Cannot use text compression method for multiple chunks. "
+                    "Please use a different compression method or increase "
+                    "available memory"
+                )
 
         self.job_collection = JobCollection(
             vcf_file,

@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 import pytest
 from numpy import typing as npt
+from tqdm.auto import tqdm
 from upath import UPath
 
 from gwas.eig.base import Eigendecomposition
@@ -25,7 +26,11 @@ from gwas.raremetalworker.scorefile import Scorefile, ScorefileHeader
 from gwas.score.command import split_by_missing_values
 from gwas.testing.simulate import SimulationResult
 from gwas.utils.genetics import chromosome_to_int, chromosomes_set
-from gwas.utils.multiprocessing import Pool, get_global_lock
+from gwas.utils.multiprocessing import (
+    IterationOrder,
+    get_global_lock,
+    make_pool_or_null_context,
+)
 from gwas.utils.threads import cpu_count
 from gwas.vcf.base import VCFFile
 
@@ -201,8 +206,20 @@ def raremetalworker_scorefile_paths(
         if not scorefile_path.is_file():
             commands.append(command)
 
-    with Pool() as pool:
-        pool.map(check_call, commands)
+    pool, iterator = make_pool_or_null_context(
+        commands,
+        check_call,
+        num_threads=cpu_count(),
+    )
+
+    with pool:
+        for _ in tqdm(
+            iterator,
+            desc="running raremetalworker",
+            unit="commands",
+            total=len(commands),
+        ):
+            pass
 
     for path in scorefile_paths:
         assert path.is_file()
@@ -228,8 +245,21 @@ def rmw_score(
 ) -> RmwScore:
     headers = list()
     arrays = list()
-    with Pool() as pool:
-        for header, array in pool.imap(read_scorefile, raremetalworker_scorefile_paths):
+
+    pool, iterator = make_pool_or_null_context(
+        raremetalworker_scorefile_paths,
+        read_scorefile,
+        num_threads=cpu_count(),
+        iteration_order=IterationOrder.ORDERED,
+    )
+
+    with pool:
+        for header, array in tqdm(
+            iterator,
+            desc="reading raremetalworker outputs",
+            unit="files",
+            total=len(raremetalworker_scorefile_paths),
+        ):
             headers.append(header)
             arrays.append(array)
 

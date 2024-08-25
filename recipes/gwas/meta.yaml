@@ -37,6 +37,7 @@ requirements:
     - jax
     - jaxtyping
     - chex
+    - "python-flatbuffers"
     - psutil
     - threadpoolctl
     - tqdm

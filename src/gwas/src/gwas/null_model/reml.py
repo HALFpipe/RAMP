@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-
+from chex import dataclass
 from jax import numpy as jnp
 from jaxtyping import Array, Float
 

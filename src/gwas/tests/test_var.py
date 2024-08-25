@@ -16,9 +16,10 @@ from gwas.null_model.reml import RestrictedMaximumLikelihood
 
 
 @pytest.mark.parametrize(
-    "driver", [MaximumLikelihood, ProfileMaximumLikelihood, RestrictedMaximumLikelihood]
+    "ml_class",
+    [MaximumLikelihood, ProfileMaximumLikelihood, RestrictedMaximumLikelihood],
 )
-def test_var(driver: Type[ProfileMaximumLikelihood]) -> None:
+def test_var(ml_class: Type[ProfileMaximumLikelihood]) -> None:
     seed(0xABC)
 
     # simulate data
@@ -50,16 +51,9 @@ def test_var(driver: Type[ProfileMaximumLikelihood]) -> None:
     rotated_covariates = jnp.asarray(eigenvectors.transpose() @ covariates)
     rotated_phenotype = jnp.asarray(eigenvectors.transpose() @ phenotype)
 
-    o: OptimizeInput = OptimizeInput(
-        eigenvalues,
-        rotated_covariates,
-        rotated_phenotype,
-    )
+    o: OptimizeInput = (eigenvalues, rotated_covariates, rotated_phenotype)
 
-    ml = driver(
-        sample_count,
-        covariate_count,
-    )
+    ml = ml_class.create(sample_count, covariate_count)
     optimize_result = ml.optimize(o)
     terms = optimize_result.x
 

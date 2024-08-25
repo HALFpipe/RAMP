@@ -119,16 +119,16 @@ def read_header(
                 "Column names must be provided if `metadata_column_indices` is present"
             )
 
-        column_names = [
-            c for i, c in enumerate(column_names) if i not in metadata_column_indices
-        ]
-        column_count = len(column_names)
-
-        row_metadata_columns = column_names = [
+        row_metadata_columns = [
             c for i, c in enumerate(column_names) if i in metadata_column_indices
         ]
         row_metadata = pd.DataFrame(metadata_tuples, columns=row_metadata_columns)
         row_count, _ = row_metadata.shape
+
+        column_names = [
+            c for i, c in enumerate(column_names) if i not in metadata_column_indices
+        ]
+        column_count = len(column_names)
 
     if column_count is None:
         column_count = file_column_count
@@ -261,17 +261,17 @@ def unpack_key(
     if row_start != row_index:
         raise ValueError(
             "Can only write file sequentially, row start must be "
-            f"{row_index} (got {row_start}): {key}"
+            f"{row_index} (got {row_start}): {key=} {shape=}"
         )
     if col_start != 0:
         raise ValueError(
             "Can only write file sequentially, column start must be 0 "
-            f"(got {col_start}): {key}"
+            f"(got {col_start}): {key=} {shape=}"
         )
     if col_stop != shape[1]:
         raise ValueError(
             "Can only write file sequentially, column stop must be "
-            f"{shape[1]} (got {col_start}): {key}"
+            f"{shape[1]} (got {col_start}): {key=} {shape=}"
         )
 
     # Validate key

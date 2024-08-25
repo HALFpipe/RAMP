@@ -118,7 +118,7 @@ class ParquetFileArrayWriter(FileArrayWriter[ScalarType]):
 
 @dataclass(kw_only=True)
 class ParquetFileArrayReader(FileArrayReader[ScalarType]):
-    column_metadata: pd.Series = field()
+    column_names: list[str] = field()
     num_threads: int = field()
     parquet_file: pq.ParquetFile = field()
 
@@ -143,7 +143,7 @@ class ParquetFileArrayReader(FileArrayReader[ScalarType]):
         use_threads = self.num_threads > 1
 
         columns = [
-            c for i, c in enumerate(self.column_metadata) if np.isin(i, column_indices)
+            c for i, c in enumerate(self.column_names) if np.isin(i, column_indices)
         ]
 
         row_count, _ = self.shape
@@ -198,16 +198,14 @@ class ParquetFileArrayReader(FileArrayReader[ScalarType]):
                 columns=row_metadata_columns, use_threads=use_threads
             ).to_pandas()
 
-        data_columns = [
+        column_names: list[str] = [
             field.name
             for i, field in enumerate(fields)
             if i not in metadata_column_indices
         ]
-        column_count = len(data_columns)
+        column_count = len(column_names)
         row_count = parquet_file.metadata.num_rows
         shape = (row_count, column_count)
-
-        column_metadata = pd.Series(data_columns)
 
         extra_metadata: dict[str, Any] = {
             key.decode(): json.loads(value.decode()) for key, value in metadata.items()
@@ -219,7 +217,7 @@ class ParquetFileArrayReader(FileArrayReader[ScalarType]):
             shape=shape,
             compression_method=ParquetCompressionMethod(),
             row_metadata=row_metadata,
-            column_metadata=column_metadata,
+            column_names=column_names,
             extra_metadata=extra_metadata,
             num_threads=num_threads,
             parquet_file=parquet_file,

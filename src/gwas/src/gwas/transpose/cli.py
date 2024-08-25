@@ -2,13 +2,13 @@ import logging
 import sys
 from argparse import ArgumentParser, Namespace
 from contextlib import ExitStack
-from multiprocessing import cpu_count
 
 from tqdm.auto import tqdm
 from upath import UPath
 
 from ..compression.pipe import CompressedBytesReader, CompressedBytesWriter
 from ..log import logger, setup_logging
+from ..utils.threads import cpu_count
 
 
 def transpose(arguments: Namespace, output_directory: UPath) -> None:

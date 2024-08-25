@@ -1,19 +1,28 @@
+from dataclasses import dataclass
+from itertools import chain
+from pprint import pformat
+from typing import Sequence, Type
+
+from more_itertools import chunked
+from tqdm.auto import tqdm
+
 from ..eig.base import Eigendecomposition
+from ..log import logger
 from ..pheno import VariableCollection
-from .base import NullModelCollection
-from .fastlmm import FaSTLMM, PenalizedFaSTLMM
+from ..utils.multiprocessing import IterationOrder, make_pool_or_null_context
+from .base import NullModelCollection, NullModelResult
+from .fastlmm import FaSTLMM
 from .ml import MaximumLikelihood
 from .mpl import MaximumPenalizedLikelihood
 from .pml import ProfileMaximumLikelihood
 from .reml import RestrictedMaximumLikelihood
 
-funcs = {
-    "fastlmm": FaSTLMM.fit,
-    "pfastlmm": PenalizedFaSTLMM.fit,
-    "pml": ProfileMaximumLikelihood.fit,
-    "mpl": MaximumPenalizedLikelihood.fit,
-    "reml": RestrictedMaximumLikelihood.fit,
-    "ml": MaximumLikelihood.fit,
+ml_classes = {
+    "fastlmm": FaSTLMM,
+    "pml": ProfileMaximumLikelihood,
+    "mpl": MaximumPenalizedLikelihood,
+    "reml": RestrictedMaximumLikelihood,
+    "ml": MaximumLikelihood,
 }
 
 
@@ -28,10 +37,96 @@ def calc_null_model_collections(
         for eig, vc in zip(eigendecompositions, variable_collections, strict=True)
     ]
     if method is not None:
-        funcs[method](
+        fit(
+            ml_classes[method],
             eigendecompositions,
             variable_collections,
             null_model_collections,
             num_threads=num_threads,
         )
     return null_model_collections
+
+
+@dataclass
+class OptimizeJob:
+    indices: tuple[int, Sequence[int]]
+
+    eig: Eigendecomposition
+    vc: VariableCollection
+
+    ml: "ProfileMaximumLikelihood"
+
+
+def apply(optimize_job: OptimizeJob) -> list[tuple[tuple[int, int], NullModelResult]]:
+    (variable_collection_index, phenotype_indices) = optimize_job.indices
+    eig = optimize_job.eig
+    vc = optimize_job.vc
+    ml = optimize_job.ml
+
+    o: list[tuple[tuple[int, int], NullModelResult]] = list()
+    for phenotype_index in phenotype_indices:
+        indices = (variable_collection_index, phenotype_index)
+        o.append((indices, ml.get_null_model_result(vc, phenotype_index, eig)))
+
+    return o
+
+
+def fit(
+    ml_class: Type[ProfileMaximumLikelihood],
+    eigendecompositions: list[Eigendecomposition],
+    variable_collections: list[VariableCollection],
+    null_model_collections: list[NullModelCollection],
+    num_threads: int,
+    **kwargs,
+) -> None:
+    ml_args: set[tuple[int, int]] = {
+        (vc.sample_count, vc.covariate_count) for vc in variable_collections
+    }
+    logger.debug(f"Will compile {len(ml_args)} null models: {pformat(ml_args)}")
+    mls: dict[tuple[int, int], "ProfileMaximumLikelihood"] = {
+        args: ml_class.create(*args, **kwargs) for args in ml_args
+    }
+
+    phenotype_count = sum(vc.phenotype_count for vc in variable_collections)
+    chunksize, remainder = divmod(phenotype_count, num_threads * 4)
+    if remainder:
+        chunksize += 1
+
+    optimize_jobs = [
+        OptimizeJob(
+            (collection_index, phenotype_indices),
+            eig,
+            vc,
+            mls[(vc.sample_count, vc.covariate_count)],
+        )
+        for collection_index, (eig, vc) in enumerate(
+            zip(
+                eigendecompositions,
+                variable_collections,
+                strict=True,
+            )
+        )
+        for phenotype_indices in chunked(range(vc.phenotype_count), chunksize)
+    ]
+    logger.debug(
+        f"Running {len(optimize_jobs)} optimize jobs "
+        f"for {phenotype_count} phenotypes"
+    )
+    unit = "jobs"
+
+    pool, iterator = make_pool_or_null_context(
+        optimize_jobs,
+        apply,
+        num_threads=num_threads,
+        iteration_order=IterationOrder.UNORDERED,
+    )
+    with pool:
+        for indices, null_model_result in tqdm(
+            chain.from_iterable(iterator),
+            desc="fitting null models",
+            unit=unit,
+            total=len(optimize_jobs),
+        ):
+            collection_index, phenotype_index = indices
+            nm = null_model_collections[collection_index]
+            nm.put(phenotype_index, null_model_result)

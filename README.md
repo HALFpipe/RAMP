@@ -83,7 +83,7 @@ micromamba create --name "gwas-protocol" \
   "python-blosc2" "pyarrow" \
   "numpy" "scipy" "pandas" "threadpoolctl" "universal_pathlib" \
   "matplotlib" "seaborn" \
-  "jax" "jaxlib=*=cpu*" "jaxtyping" "chex" \
+  "jax" "jaxlib=*=cpu*" "jaxtyping" "chex" "etils" "python-flatbuffers" \
   "mkl-include" "mkl" "c-blosc2" \
   "mypy" "pandas-stubs" "types-psutil" "types-pyyaml" "types-seaborn" "types-setuptools" "types-tqdm" \
   "pytest-benchmark" "pytest-cov" \

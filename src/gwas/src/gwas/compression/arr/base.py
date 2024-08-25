@@ -2,6 +2,7 @@ from abc import abstractmethod
 from contextlib import AbstractContextManager
 from dataclasses import KW_ONLY, dataclass, field
 from math import prod
+from pprint import pformat
 from typing import (
     Any,
     ClassVar,
@@ -17,6 +18,8 @@ import numpy as np
 import pandas as pd
 from numpy import typing as npt
 from upath import UPath
+
+from ...log import logger
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -47,7 +50,6 @@ class ZstdTextCompressionMethod(TextCompressionMethod):
 
 
 zstd_high_text = ZstdTextCompressionMethod(suffix=".txt.zst", level=19)
-default_compression_method: CompressionMethod = zstd_high_text
 compression_methods: Mapping[str, CompressionMethod] = dict(
     zstd_text=ZstdTextCompressionMethod(suffix=".txt.zst", level=11),
     zstd_high_text=zstd_high_text,
@@ -60,6 +62,10 @@ compression_methods: Mapping[str, CompressionMethod] = dict(
     blosc2=Blosc2CompressionMethod(),
     parquet=ParquetCompressionMethod(),
 )
+default_compression_method_name: str = "zstd_high_text"
+default_compression_method: CompressionMethod = compression_methods[
+    default_compression_method_name
+]
 
 
 def compression_method_from_file(file_path: UPath) -> CompressionMethod:
@@ -131,6 +137,7 @@ class FileArray(Generic[ScalarType]):
             num_threads=num_threads,
             **kwargs,
         )
+        logger.debug(f"Creating file array writer with {pformat(kwargs)}")
         if isinstance(compression_method, TextCompressionMethod):
             from .text import TextFileArrayWriter
 
@@ -178,10 +185,22 @@ class FileArrayWriter(
     @overload
     def set_axis_metadata(self, axis: Literal[1], metadata: list[str]) -> None: ...
     def set_axis_metadata(self, axis, metadata):
+        row_count, column_count = self.shape
         if axis == 0:
             self.row_metadata = metadata
+            metadata_row_count, _ = metadata.shape
+            if metadata_row_count != row_count:
+                raise ValueError(
+                    "Row metadata does not match shape: "
+                    f"{metadata_row_count} != {row_count}"
+                )
         elif axis == 1:
             self.column_names = metadata
+            if len(metadata) != column_count:
+                raise ValueError(
+                    "Column names do not match shape: "
+                    f"{len(metadata)} != {column_count}"
+                )
 
     @abstractmethod
     def __setitem__(

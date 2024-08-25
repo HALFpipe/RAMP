@@ -102,6 +102,11 @@ class VariableCollection(SharedArray[np.float64]):
         return bool(np.isfinite(self.to_numpy()).all())
 
     def __post_init__(self) -> None:
+        if self.shape[1] != self.covariate_count + self.phenotype_count:
+            raise ValueError(
+                f"Expected {self.covariate_count} covariates and "
+                f"{self.phenotype_count} phenotypes, but got {self.shape[1]} columns"
+            )
         self.remove_zero_variance_covariates()
 
     def copy(
@@ -134,17 +139,6 @@ class VariableCollection(SharedArray[np.float64]):
         )
         return vc
 
-    @staticmethod
-    def subset_phenotypes_array(
-        phenotypes: npt.NDArray[np.float64],
-        phenotype_names: list[str],
-        subset_phenotype_names: list[str],
-    ) -> npt.NDArray[np.float64]:
-        phenotype_indices = [
-            phenotype_names.index(name) for name in subset_phenotype_names
-        ]
-        return phenotypes[:, phenotype_indices]
-
     def remove_zero_variance_covariates(self) -> None:
         mask: npt.NDArray[np.bool_] = np.isclose(self.covariates.var(axis=0), 0)
         mask[0] = False  # Do not remove intercept
@@ -176,6 +170,8 @@ class VariableCollection(SharedArray[np.float64]):
 
         sample_indices = [self.samples.index(sample) for sample in samples]
         self.compress(np.asarray(sample_indices), axis=0)
+        self.samples = samples
+
         self.remove_zero_variance_covariates()
 
         logger.info(

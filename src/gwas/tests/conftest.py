@@ -148,6 +148,7 @@ def vcf_files_by_size_and_chromosome(
             sw=sw,
         )
         for vcf_file in vcf_files:
+            vcf_file.clear_allele_frequency_columns()
             request.addfinalizer(vcf_file.free)
             vcf_files_by_size_and_chromosome[sample_size_label][vcf_file.chromosome] = (
                 vcf_file

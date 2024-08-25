@@ -26,18 +26,20 @@ def apply_num_threads(num_threads: int | None) -> None:
     faulthandler.register(signal.SIGUSR1, all_threads=True)
     # Write a traceback to standard out every six hours
     faulthandler.dump_traceback_later(60 * 60 * 6, repeat=True)
+    if not faulthandler.is_enabled():
+        raise RuntimeError("Could not enable faulthandler")
 
     xla_flags = f'{os.getenv("XLA_FLAGS", "")} --xla_cpu_enable_fast_math=false'
     if num_threads is not None:
         threadpool_limits(limits=num_threads)
         for variable in num_threads_variables:
             os.environ[variable] = str(num_threads)
-        xla_flags = (
-            f"--xla_cpu_multi_thread_eigen={str(num_threads > 1).lower()} "
-            f"intra_op_parallelism_threads={num_threads} "
-            f"inter_op_parallelism_threads={num_threads} "
-            f"{xla_flags}"
-        )
+        # xla_flags = (
+        #     f"--xla_cpu_multi_thread_eigen={str(num_threads > 1).lower()} "
+        #     f"intra_op_parallelism_threads={num_threads} "
+        #     f"inter_op_parallelism_threads={num_threads} "
+        #     f"{xla_flags}"
+        # )
     os.environ["MKL_DYNAMIC"] = "FALSE"
     os.environ["XLA_FLAGS"] = xla_flags
 
@@ -47,7 +49,7 @@ def apply_num_threads(num_threads: int | None) -> None:
 
     jax.config.update("jax_enable_x64", True)
     jax.config.update("jax_platform_name", "cpu")
-    # jax.config.update("jax_traceback_filtering", "off")
+    jax.config.update("jax_traceback_filtering", "off")
 
     from ..log import logger
 

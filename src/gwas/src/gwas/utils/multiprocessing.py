@@ -60,6 +60,8 @@ def get_initargs(num_threads: int | None = None) -> InitArgs:
     if hasattr(os, "sched_getaffinity"):
         sched_affinity = os.sched_getaffinity(0)
 
+    if num_threads is not None:
+        num_threads = max(1, num_threads)
     initargs = InitArgs(
         sched_affinity,
         num_threads,
@@ -274,7 +276,10 @@ def make_pool_or_null_context(
 
 
 def get_lock_name(lock: RLock) -> str:
-    assert hasattr(lock, "_semlock")
+    if not hasattr(lock, "_semlock"):
+        raise ValueError(
+            f"Cannot get name of lock {lock}, as it does not have a semlock attribute"
+        )
     return lock._semlock.name
 
 
