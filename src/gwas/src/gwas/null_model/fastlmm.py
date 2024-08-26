@@ -1,3 +1,5 @@
+from typing import override
+
 import numpy as np
 import scipy
 from chex import dataclass
@@ -6,13 +8,15 @@ from jaxtyping import Array, Float
 from numpy import typing as npt
 
 from ..log import logger
-from .pml import OptimizeInput, OptimizeResult, ProfileMaximumLikelihood
+from .mlb import OptimizeInput, OptimizeResult
+from .pml import ProfileMaximumLikelihood
 
 
 @dataclass(frozen=True, eq=True)
 class FaSTLMM(ProfileMaximumLikelihood):
     step: float = 0.2
 
+    @override
     def minus_two_log_likelihood(
         self, terms: Float[Array, " 2"], o: OptimizeInput
     ) -> Float[Array, ""]:
@@ -39,11 +43,7 @@ class FaSTLMM(ProfileMaximumLikelihood):
             jnp.inf,
         )
 
-    def wrapper(self, numpy_terms: npt.NDArray[np.float64], o: OptimizeInput) -> float:
-        variance_ratio = np.power(10, numpy_terms)
-        terms: Float[Array, " 2"] = jnp.asarray([variance_ratio, 1])
-        return float(np.asarray(self.func(terms, o)))
-
+    @override
     def optimize(
         self,
         o: OptimizeInput,
@@ -61,13 +61,22 @@ class FaSTLMM(ProfileMaximumLikelihood):
         xa = np.arange(lower_bound, upper_bound, step=self.step, dtype=np.float64)
         logger.debug(f"FaSTLMM will optimize in {xa.size} steps")
 
+        if self.func is None:
+            raise RuntimeError("func is not compiled")
+        func = self.func
+
+        def wrapper(numpy_terms: npt.NDArray[np.float64], o: OptimizeInput) -> float:
+            variance_ratio = np.power(10, numpy_terms)
+            terms: Float[Array, " 2"] = jnp.asarray([variance_ratio, 1])
+            return float(np.asarray(func(terms, o)))
+
         fmin: float = np.inf
         best_optimize_result: OptimizeResult | None = None
         with np.errstate(all="ignore"):
             for bounds in zip(xa, xa + self.step, strict=True):
                 try:
                     optimize_result = scipy.optimize.minimize_scalar(
-                        self.wrapper,
+                        wrapper,
                         args=(o,),
                         bounds=bounds,
                         options=dict(disp=disp, xatol=1e-15),

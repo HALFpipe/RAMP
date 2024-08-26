@@ -8,18 +8,18 @@ from jax import numpy as jnp
 from jaxtyping import Array, Float
 from numpy import typing as npt
 
-from .pml import (
+from .mlb import (
     OptimizeInput,
-    ProfileMaximumLikelihood,
     RegressionWeights,
     StandardErrors,
 )
-from .pml import terms_count as terms_count
+from .mlb import terms_count as terms_count
+from .pml import ProfileMaximumLikelihood
 
 
 @dataclass(frozen=True, eq=True)
 class MaximumLikelihood(ProfileMaximumLikelihood):
-    pml: ProfileMaximumLikelihood = field()
+    pml: ProfileMaximumLikelihood = field(kw_only=True)
 
     @override
     @classmethod

@@ -1,9 +1,12 @@
+from typing import override
+
 from chex import dataclass
 from jax import numpy as jnp
 from jaxtyping import Array, Float
 
-from .pml import OptimizeInput, ProfileMaximumLikelihood
-from .pml import terms_count as terms_count
+from .mlb import OptimizeInput
+from .mlb import terms_count as terms_count
+from .pml import ProfileMaximumLikelihood
 
 
 @dataclass(frozen=True, eq=True)
@@ -21,6 +24,7 @@ class MaximumPenalizedLikelihood(ProfileMaximumLikelihood):
       priors.
     """
 
+    @override
     def minus_two_log_likelihood(
         self, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> Float[Array, "..."]:

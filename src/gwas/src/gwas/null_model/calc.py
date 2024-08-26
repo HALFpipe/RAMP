@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from itertools import chain
-from pprint import pformat
-from typing import Sequence, Type
+from typing import Mapping, Sequence, Type
 
 from more_itertools import chunked
 from tqdm.auto import tqdm
@@ -17,7 +16,7 @@ from .mpl import MaximumPenalizedLikelihood
 from .pml import ProfileMaximumLikelihood
 from .reml import RestrictedMaximumLikelihood
 
-ml_classes = {
+ml_classes: Mapping[str, Type[ProfileMaximumLikelihood]] = {
     "fastlmm": FaSTLMM,
     "pml": ProfileMaximumLikelihood,
     "mpl": MaximumPenalizedLikelihood,
@@ -54,14 +53,14 @@ class OptimizeJob:
     eig: Eigendecomposition
     vc: VariableCollection
 
-    ml: "ProfileMaximumLikelihood"
+    ml_class: Type[ProfileMaximumLikelihood]
 
 
 def apply(optimize_job: OptimizeJob) -> list[tuple[tuple[int, int], NullModelResult]]:
     (variable_collection_index, phenotype_indices) = optimize_job.indices
     eig = optimize_job.eig
     vc = optimize_job.vc
-    ml = optimize_job.ml
+    ml = optimize_job.ml_class.create(vc.sample_count, vc.covariate_count)
 
     o: list[tuple[tuple[int, int], NullModelResult]] = list()
     for phenotype_index in phenotype_indices:
@@ -79,14 +78,6 @@ def fit(
     num_threads: int,
     **kwargs,
 ) -> None:
-    ml_args: set[tuple[int, int]] = {
-        (vc.sample_count, vc.covariate_count) for vc in variable_collections
-    }
-    logger.debug(f"Will compile {len(ml_args)} null models: {pformat(ml_args)}")
-    mls: dict[tuple[int, int], "ProfileMaximumLikelihood"] = {
-        args: ml_class.create(*args, **kwargs) for args in ml_args
-    }
-
     phenotype_count = sum(vc.phenotype_count for vc in variable_collections)
     chunksize, remainder = divmod(phenotype_count, num_threads * 4)
     if remainder:
@@ -97,7 +88,7 @@ def fit(
             (collection_index, phenotype_indices),
             eig,
             vc,
-            mls[(vc.sample_count, vc.covariate_count)],
+            ml_class,
         )
         for collection_index, (eig, vc) in enumerate(
             zip(

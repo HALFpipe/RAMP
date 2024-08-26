@@ -8,10 +8,10 @@ from jax import numpy as jnp
 
 from gwas.log import logger
 from gwas.null_model.ml import MaximumLikelihood
-from gwas.null_model.pml import (
+from gwas.null_model.mlb import (
     OptimizeInput,
-    ProfileMaximumLikelihood,
 )
+from gwas.null_model.pml import ProfileMaximumLikelihood
 from gwas.null_model.reml import RestrictedMaximumLikelihood
 
 
