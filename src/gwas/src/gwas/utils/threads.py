@@ -7,8 +7,6 @@ from pprint import pformat
 from subprocess import check_output
 from typing import Sequence
 
-import jax
-
 num_threads_variables: Sequence[str] = [
     "OMP_NUM_THREADS",
     "OPENBLAS_NUM_THREADS",
@@ -42,14 +40,6 @@ def apply_num_threads(num_threads: int | None) -> None:
         )
     os.environ["MKL_DYNAMIC"] = "FALSE"
     os.environ["XLA_FLAGS"] = xla_flags
-
-    from chex import set_n_cpu_devices
-
-    set_n_cpu_devices(1)
-
-    jax.config.update("jax_enable_x64", True)
-    jax.config.update("jax_platform_name", "cpu")
-    jax.config.update("jax_traceback_filtering", "off")
 
     from ..log import logger
 

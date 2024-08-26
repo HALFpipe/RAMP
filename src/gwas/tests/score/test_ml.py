@@ -7,15 +7,18 @@ from jax import numpy as jnp
 from gwas.log import logger
 from gwas.null_model.fastlmm import FaSTLMM
 from gwas.null_model.ml import MaximumLikelihood
-from gwas.null_model.mlb import (
-    OptimizeInput,
-)
+from gwas.null_model.mlb import OptimizeInput, setup_jax
 from gwas.null_model.mpl import MaximumPenalizedLikelihood
 from gwas.null_model.pml import ProfileMaximumLikelihood
 from gwas.null_model.reml import RestrictedMaximumLikelihood
 
 from ..utils import assert_both_close, check_bias, check_types
 from .rmw_debug import RmwDebug
+
+
+@pytest.fixture(autouse=True, scope="module")
+def setup() -> None:
+    setup_jax()
 
 
 def test_fastlmm(

@@ -10,19 +10,6 @@ from ..log import logger
 from ..pheno import VariableCollection
 from ..utils.multiprocessing import IterationOrder, make_pool_or_null_context
 from .base import NullModelCollection, NullModelResult
-from .fastlmm import FaSTLMM
-from .ml import MaximumLikelihood
-from .mpl import MaximumPenalizedLikelihood
-from .pml import ProfileMaximumLikelihood
-from .reml import RestrictedMaximumLikelihood
-
-ml_classes: Mapping[str, Type[ProfileMaximumLikelihood]] = {
-    "fastlmm": FaSTLMM,
-    "pml": ProfileMaximumLikelihood,
-    "mpl": MaximumPenalizedLikelihood,
-    "reml": RestrictedMaximumLikelihood,
-    "ml": MaximumLikelihood,
-}
 
 
 def calc_null_model_collections(
@@ -37,7 +24,7 @@ def calc_null_model_collections(
     ]
     if method is not None:
         fit(
-            ml_classes[method],
+            method,
             eigendecompositions,
             variable_collections,
             null_model_collections,
@@ -53,14 +40,36 @@ class OptimizeJob:
     eig: Eigendecomposition
     vc: VariableCollection
 
-    ml_class: Type[ProfileMaximumLikelihood]
+    method: str | None
 
 
 def apply(optimize_job: OptimizeJob) -> list[tuple[tuple[int, int], NullModelResult]]:
+    from .mlb import setup_jax
+
+    setup_jax()
+
+    from .fastlmm import FaSTLMM
+    from .ml import MaximumLikelihood
+    from .mpl import MaximumPenalizedLikelihood
+    from .pml import ProfileMaximumLikelihood
+    from .reml import RestrictedMaximumLikelihood
+
+    ml_classes: Mapping[str, Type[ProfileMaximumLikelihood]] = {
+        "fastlmm": FaSTLMM,
+        "pml": ProfileMaximumLikelihood,
+        "mpl": MaximumPenalizedLikelihood,
+        "reml": RestrictedMaximumLikelihood,
+        "ml": MaximumLikelihood,
+    }
+
+    if optimize_job.method is None:
+        optimize_job.method = "fastlmm"
+    ml_class = ml_classes[optimize_job.method]
+
     (variable_collection_index, phenotype_indices) = optimize_job.indices
     eig = optimize_job.eig
     vc = optimize_job.vc
-    ml = optimize_job.ml_class.create(vc.sample_count, vc.covariate_count)
+    ml = ml_class.create(vc.sample_count, vc.covariate_count)
 
     o: list[tuple[tuple[int, int], NullModelResult]] = list()
     for phenotype_index in phenotype_indices:
@@ -71,7 +80,7 @@ def apply(optimize_job: OptimizeJob) -> list[tuple[tuple[int, int], NullModelRes
 
 
 def fit(
-    ml_class: Type[ProfileMaximumLikelihood],
+    method: str | None,
     eigendecompositions: list[Eigendecomposition],
     variable_collections: list[VariableCollection],
     null_model_collections: list[NullModelCollection],
@@ -88,7 +97,7 @@ def fit(
             (collection_index, phenotype_indices),
             eig,
             vc,
-            ml_class,
+            method,
         )
         for collection_index, (eig, vc) in enumerate(
             zip(
@@ -103,7 +112,6 @@ def fit(
         f"Running {len(optimize_jobs)} optimize jobs "
         f"for {phenotype_count} phenotypes"
     )
-    unit = "jobs"
 
     pool, iterator = make_pool_or_null_context(
         optimize_jobs,
@@ -115,8 +123,8 @@ def fit(
         for indices, null_model_result in tqdm(
             chain.from_iterable(iterator),
             desc="fitting null models",
-            unit=unit,
-            total=len(optimize_jobs),
+            unit="phenotypes",
+            total=phenotype_count,
         ):
             collection_index, phenotype_index = indices
             nm = null_model_collections[collection_index]

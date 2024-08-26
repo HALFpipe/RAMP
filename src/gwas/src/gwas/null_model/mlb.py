@@ -1,9 +1,10 @@
-from abc import ABC, abstractmethod
-from typing import Callable, NamedTuple, Self, TypeAlias, TypeVar
+from abc import abstractmethod
+from dataclasses import dataclass
+from typing import Any, Callable, NamedTuple, Self, TypeAlias, TypeVar
 
 import jax
 import numpy as np
-from chex import dataclass
+from chex import set_n_cpu_devices
 from jax import numpy as jnp
 from jaxtyping import Array, Float, Integer
 from numpy import typing as npt
@@ -23,6 +24,13 @@ OptimizeInput: TypeAlias = tuple[
     Float[Array, " sample_count covariate_count"],  # rotated_covariates
     Float[Array, " sample_count 1"],  # rotated_phenotype
 ]
+
+
+def setup_jax() -> None:
+    set_n_cpu_devices(1)
+    jax.config.update("jax_enable_x64", True)
+    jax.config.update("jax_platform_name", "cpu")
+    jax.config.update("jax_traceback_filtering", "off")
 
 
 class OptimizeResult(NamedTuple):
@@ -55,7 +63,7 @@ class StandardErrors(NamedTuple):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class MaximumLikelihoodBase(ABC):
+class MaximumLikelihoodBase:
     func: (
         Callable[[Float[Array, " terms_count"], OptimizeInput], Float[Array, ""]] | None
     ) = None
@@ -104,7 +112,7 @@ class MaximumLikelihoodBase(ABC):
         return [variance / 2] * 2
 
     @classmethod
-    def create(cls, sample_count: int, covariate_count: int, **kwargs) -> Self:
+    def create(cls, sample_count: int, covariate_count: int, **kwargs: Any) -> Self:
         base = cls(**kwargs)
 
         o: OptimizeInput = (

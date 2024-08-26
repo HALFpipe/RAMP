@@ -1,8 +1,9 @@
+from dataclasses import dataclass
 from typing import override
 
 import numpy as np
 import scipy
-from chex import dataclass
+from chex import register_dataclass_type_with_jax_tree_util
 from jax import numpy as jnp
 from jaxtyping import Array, Float
 from numpy import typing as npt
@@ -54,13 +55,11 @@ class FaSTLMM(ProfileMaximumLikelihood):
         _, _, rotated_phenotype = o
         upper_bound = float(np.log10(rotated_phenotype.var()))
         lower_bound = float(np.log10(self.minimum_variance) - upper_bound)
+        xa = np.arange(lower_bound, upper_bound, step=self.step, dtype=np.float64)
         logger.debug(
             f"FaSTLMM will optimize between {lower_bound} to {upper_bound} "
-            f"in steps of size {self.step}"
+            f"in {xa.size} steps of size {self.step}"
         )
-        xa = np.arange(lower_bound, upper_bound, step=self.step, dtype=np.float64)
-        logger.debug(f"FaSTLMM will optimize in {xa.size} steps")
-
         if self.func is None:
             raise RuntimeError("func is not compiled")
         func = self.func
@@ -107,3 +106,6 @@ class FaSTLMM(ProfileMaximumLikelihood):
             x=np.asarray(terms),
             fun=float(fmin),
         )
+
+
+register_dataclass_type_with_jax_tree_util(FaSTLMM)

@@ -1,8 +1,8 @@
-from dataclasses import field
+from dataclasses import dataclass, field
 from typing import Self, override
 
 import numpy as np
-from chex import dataclass
+from chex import register_dataclass_type_with_jax_tree_util
 from jax import hessian
 from jax import numpy as jnp
 from jaxtyping import Array, Float
@@ -48,7 +48,7 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
     def bounds(self, o: OptimizeInput) -> list[tuple[float, float]]:
         _, rotated_covariates, _ = o
         _, covariate_count = rotated_covariates.shape
-        return super().bounds(o) + [(-np.inf, np.inf)] * covariate_count
+        return self.pml.bounds(o) + [(-np.inf, np.inf)] * covariate_count
 
     @override
     @staticmethod
@@ -95,3 +95,6 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
             scaled_residuals=r.scaled_residuals,
             variance=r.variance,
         )
+
+
+register_dataclass_type_with_jax_tree_util(MaximumLikelihood)

@@ -1,6 +1,7 @@
+from dataclasses import dataclass
 from typing import override
 
-from chex import dataclass
+from chex import register_dataclass_type_with_jax_tree_util
 from jax import numpy as jnp
 from jaxtyping import Array, Float
 
@@ -28,5 +29,9 @@ class MaximumPenalizedLikelihood(ProfileMaximumLikelihood):
     def minus_two_log_likelihood(
         self, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> Float[Array, "..."]:
+        base = super().minus_two_log_likelihood
         penalty = -2 * jnp.log(terms).sum()
-        return super().minus_two_log_likelihood(terms, o) + penalty
+        return base(terms, o) + penalty
+
+
+register_dataclass_type_with_jax_tree_util(MaximumPenalizedLikelihood)

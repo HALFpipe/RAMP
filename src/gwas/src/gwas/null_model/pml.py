@@ -1,8 +1,9 @@
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import scipy
-from chex import dataclass
+from chex import register_dataclass_type_with_jax_tree_util
 from jax import numpy as jnp
 from jax.lax import select
 from jaxtyping import Array, Float
@@ -174,3 +175,6 @@ class ProfileMaximumLikelihood(MaximumLikelihoodBase):
             minus_two_log_likelihood,
             jnp.inf,
         )
+
+
+register_dataclass_type_with_jax_tree_util(ProfileMaximumLikelihood)
