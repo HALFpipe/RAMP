@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from functools import partial
 from typing import override
 
+import jax
 import numpy as np
 import scipy
 from chex import register_dataclass_type_with_jax_tree_util
@@ -18,6 +20,7 @@ class FaSTLMM(ProfileMaximumLikelihood):
     step: float = 0.2
 
     @override
+    @partial(jax.jit, static_argnums=0)
     def minus_two_log_likelihood(
         self, terms: Float[Array, " 2"], o: OptimizeInput
     ) -> Float[Array, ""]:

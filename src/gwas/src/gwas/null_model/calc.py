@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 from itertools import chain
+from multiprocessing import current_process
 from typing import Mapping, Sequence, Type
 
 from more_itertools import chunked
 from tqdm.auto import tqdm
+from upath import UPath
 
 from ..eig.base import Eigendecomposition
 from ..log import logger
@@ -69,12 +71,18 @@ def apply(optimize_job: OptimizeJob) -> list[tuple[tuple[int, int], NullModelRes
     (variable_collection_index, phenotype_indices) = optimize_job.indices
     eig = optimize_job.eig
     vc = optimize_job.vc
-    ml = ml_class.create(vc.sample_count, vc.covariate_count)
+    ml = ml_class.create()
 
-    o: list[tuple[tuple[int, int], NullModelResult]] = list()
-    for phenotype_index in phenotype_indices:
-        indices = (variable_collection_index, phenotype_index)
-        o.append((indices, ml.get_null_model_result(vc, phenotype_index, eig)))
+    import jax
+
+    name = current_process().name
+    with jax.profiler.trace(
+        UPath.home() / "jax-trace" / name, create_perfetto_trace=True
+    ):
+        o: list[tuple[tuple[int, int], NullModelResult]] = list()
+        for phenotype_index in phenotype_indices:
+            indices = (variable_collection_index, phenotype_index)
+            o.append((indices, ml.get_null_model_result(vc, phenotype_index, eig)))
 
     return o
 

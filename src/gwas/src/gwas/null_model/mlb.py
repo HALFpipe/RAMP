@@ -1,10 +1,10 @@
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Any, Callable, NamedTuple, Self, TypeAlias, TypeVar
+from functools import partial
+from typing import Any, NamedTuple, Self, TypeAlias, TypeVar
 
 import jax
 import numpy as np
-from chex import set_n_cpu_devices
 from jax import numpy as jnp
 from jaxtyping import Array, Float, Integer
 from numpy import typing as npt
@@ -27,10 +27,8 @@ OptimizeInput: TypeAlias = tuple[
 
 
 def setup_jax() -> None:
-    set_n_cpu_devices(1)
     jax.config.update("jax_enable_x64", True)
-    jax.config.update("jax_platform_name", "cpu")
-    jax.config.update("jax_traceback_filtering", "off")
+    jax.config.update("jax_platforms", "cpu")
 
 
 class OptimizeResult(NamedTuple):
@@ -64,31 +62,6 @@ class StandardErrors(NamedTuple):
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class MaximumLikelihoodBase:
-    func: (
-        Callable[[Float[Array, " terms_count"], OptimizeInput], Float[Array, ""]] | None
-    ) = None
-    vec_func: (
-        Callable[
-            [Float[Array, " grid_search_size terms_count"], OptimizeInput],
-            Float[Array, " grid_search_size"],
-        ]
-        | None
-    ) = None
-    func_with_grad: (
-        Callable[
-            [Float[Array, " terms_count"], OptimizeInput],
-            tuple[Float[Array, ""], Float[Array, " terms_count"]],
-        ]
-        | None
-    ) = None
-    hessian: (
-        Callable[
-            [Float[Array, " terms_count"], OptimizeInput],
-            tuple[Float[Array, " terms_count terms_count"]],
-        ]
-        | None
-    ) = None
-
     minimum_variance: float = 1e-4
     maximum_variance_multiplier: float = 2.0
 
@@ -96,6 +69,10 @@ class MaximumLikelihoodBase:
 
     enable_softplus_penalty: bool = True
     softplus_beta: float = 10000.0
+
+    @classmethod
+    def create(cls, **kwargs: Any) -> Self:
+        return cls(**kwargs)
 
     @staticmethod
     def terms_to_tensor(
@@ -111,42 +88,34 @@ class MaximumLikelihoodBase:
         variance: float = rotated_phenotype.var().item()
         return [variance / 2] * 2
 
-    @classmethod
-    def create(cls, sample_count: int, covariate_count: int, **kwargs: Any) -> Self:
-        base = cls(**kwargs)
+    @abstractmethod
+    def minus_two_log_likelihood(
+        self, terms: Float[Array, " terms_count"], o: OptimizeInput
+    ) -> Float[Array, ""]: ...
 
-        o: OptimizeInput = (
-            jnp.zeros((sample_count,)),
-            jnp.zeros((sample_count, covariate_count)),
-            jnp.zeros((sample_count, 1)),
-        )
-        terms = base.terms_to_tensor(base.get_initial_terms(o))
-        vec_terms = jnp.zeros((base.grid_search_size**2, *terms.shape))
+    @partial(jax.jit, static_argnums=0)
+    def func(
+        self, terms: Float[Array, " terms_count"], o: OptimizeInput
+    ) -> Float[Array, ""]:
+        return self.minus_two_log_likelihood(terms, o)
 
-        logger.debug(f"Compiling for {sample_count=} {covariate_count=} {terms.shape=}")
+    @partial(jax.jit, static_argnums=0)
+    def vec_func(
+        self, terms: Float[Array, " grid_search_size terms_count"], o: OptimizeInput
+    ) -> Float[Array, " grid_search_size"]:
+        return jax.vmap(self.minus_two_log_likelihood, in_axes=[0, None])(terms, o)
 
-        minus_two_log_likelihood = base.minus_two_log_likelihood.__func__  # type: ignore
+    @partial(jax.jit, static_argnums=0)
+    def func_with_grad(
+        self, terms: Float[Array, " terms_count"], o: OptimizeInput
+    ) -> tuple[Float[Array, ""], Float[Array, " terms_count"]]:
+        return jax.value_and_grad(self.minus_two_log_likelihood)(terms, o)
 
-        jit_func = jax.jit(minus_two_log_likelihood, static_argnums=0)
-        func = jit_func.lower(base, terms, o).compile()
-
-        vmap_func = jax.vmap(minus_two_log_likelihood, in_axes=[None, 0, None])
-        jit_vec_func = jax.jit(vmap_func, static_argnums=0)
-        vec_func = jit_vec_func.lower(base, vec_terms, o).compile()
-
-        value_and_grad = jax.value_and_grad(minus_two_log_likelihood, argnums=1)
-        jit_func_with_grad = jax.jit(value_and_grad, static_argnums=0)
-        func_with_grad = jit_func_with_grad.lower(base, terms, o).compile()
-
-        jit_hessian = jax.jit(
-            jax.hessian(minus_two_log_likelihood, argnums=1), static_argnums=0
-        )
-        hessian = jit_hessian.lower(base, terms, o).compile()
-
-        kwargs.update(
-            func=func, vec_func=vec_func, func_with_grad=func_with_grad, hessian=hessian
-        )
-        return cls(**kwargs)
+    @partial(jax.jit, static_argnums=0)
+    def hessian(
+        self, terms: Float[Array, " terms_count"], o: OptimizeInput
+    ) -> Float[Array, " terms_count terms_count"]:
+        return jax.hessian(self.minus_two_log_likelihood)(terms, o)
 
     @abstractmethod
     def optimize(
@@ -209,6 +178,7 @@ class MaximumLikelihoodBase:
         return heritability, genetic_variance, error_variance
 
     @staticmethod
+    @jax.jit
     def get_regression_weights(
         terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> RegressionWeights:
@@ -237,6 +207,7 @@ class MaximumLikelihoodBase:
         )
 
     @classmethod
+    @partial(jax.jit, static_argnums=0)
     def get_standard_errors(
         cls, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> StandardErrors:

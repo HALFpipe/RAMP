@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
+import jax
 import numpy as np
 import scipy
 from chex import register_dataclass_type_with_jax_tree_util
@@ -36,12 +38,13 @@ def softplus(x: Float[Array, ""], beta: Float[Array, ""] | None) -> Float[Array,
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class ProfileMaximumLikelihood(MaximumLikelihoodBase):
-    def grid_search(self, o: OptimizeInput) -> npt.NDArray[np.float64]:
+    @partial(jax.jit, static_argnums=0)
+    def grid_search(self, o: OptimizeInput) -> Float[Array, "..."]:
         _, _, rotated_phenotype = o
         variance: Float[Array, ""] = rotated_phenotype.var()
 
         variance_ratios = jnp.linspace(0.01, 0.99, self.grid_search_size)
-        variances = np.linspace(
+        variances = jnp.linspace(
             self.minimum_variance,
             variance * self.maximum_variance_multiplier,
             self.grid_search_size,
@@ -61,7 +64,7 @@ class ProfileMaximumLikelihood(MaximumLikelihoodBase):
         minus_two_log_likelihoods = self.vec_func(vec_terms, o)
         i = jnp.argmin(minus_two_log_likelihoods)
 
-        return np.asarray(vec_terms[i, :])
+        return vec_terms[i, :]
 
     def bounds(self, o: OptimizeInput) -> list[tuple[float, float]]:
         _, _, rotated_phenotype = o
@@ -126,6 +129,7 @@ class ProfileMaximumLikelihood(MaximumLikelihoodBase):
 
         return OptimizeResult(x=optimize_result.x, fun=optimize_result.fun)
 
+    @partial(jax.jit, static_argnums=0)
     def softplus_penalty(
         self, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> Float[Array, "..."]:
@@ -141,6 +145,7 @@ class ProfileMaximumLikelihood(MaximumLikelihoodBase):
         )
         return penalty
 
+    @partial(jax.jit, static_argnums=0)
     def get_minus_two_log_likelihood_terms(
         self, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> MinusTwoLogLikelihoodTerms:
@@ -160,6 +165,7 @@ class ProfileMaximumLikelihood(MaximumLikelihoodBase):
             r=r,
         )
 
+    @partial(jax.jit, static_argnums=0)
     def minus_two_log_likelihood(
         self, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> Float[Array, ""]:

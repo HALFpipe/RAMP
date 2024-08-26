@@ -1,12 +1,12 @@
 from dataclasses import dataclass, field
-from typing import Self, override
+from functools import partial
+from typing import Any, Self, override
 
+import jax
 import numpy as np
 from chex import register_dataclass_type_with_jax_tree_util
-from jax import hessian
 from jax import numpy as jnp
 from jaxtyping import Array, Float
-from numpy import typing as npt
 
 from .mlb import (
     OptimizeInput,
@@ -23,9 +23,9 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
 
     @override
     @classmethod
-    def create(cls, sample_count: int, covariate_count: int, **kwargs) -> Self:
-        pml = ProfileMaximumLikelihood.create(sample_count, covariate_count, **kwargs)
-        return super().create(sample_count, covariate_count, pml=pml, **kwargs)
+    def create(cls, **kwargs: Any) -> Self:
+        pml = ProfileMaximumLikelihood(**kwargs)
+        return super().create(pml=pml, **kwargs)
 
     @override
     @classmethod
@@ -36,13 +36,12 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
         return terms + regression_weights
 
     @override
-    def grid_search(self, o: OptimizeInput) -> npt.NDArray[np.float64]:
+    @partial(jax.jit, static_argnums=0)
+    def grid_search(self, o: OptimizeInput) -> Float[Array, "..."]:
         pml = self.pml
-
         terms = pml.grid_search(o)
-        r = pml.get_regression_weights(self.terms_to_tensor(terms), o)
-        regression_weights = np.asarray(r.regression_weights).ravel()
-        return np.hstack([terms, regression_weights])
+        r = pml.get_regression_weights(terms, o)
+        return jnp.hstack([terms, r.regression_weights.ravel()])
 
     @override
     def bounds(self, o: OptimizeInput) -> list[tuple[float, float]]:
@@ -52,6 +51,7 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
 
     @override
     @staticmethod
+    @jax.jit
     def get_regression_weights(
         terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> RegressionWeights:
@@ -77,13 +77,13 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
         )
 
     @override
-    @classmethod
+    @partial(jax.jit, static_argnums=0)
     def get_standard_errors(
-        cls, terms: Float[Array, " terms_count"], o: OptimizeInput
+        self, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> StandardErrors:
-        r = cls.get_regression_weights(terms, o)
+        r = self.get_regression_weights(terms, o)
 
-        covariance = hessian(cls.minus_two_log_likelihood)(terms, o)
+        covariance = self.hessian(terms, o)
         inverse_covariance = jnp.linalg.inv(covariance)
         standard_errors = jnp.sqrt(jnp.diagonal(inverse_covariance))
         standard_errors = standard_errors[2:]

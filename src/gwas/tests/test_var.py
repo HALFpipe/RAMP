@@ -53,7 +53,7 @@ def test_var(ml_class: Type[ProfileMaximumLikelihood]) -> None:
 
     o: OptimizeInput = (eigenvalues, rotated_covariates, rotated_phenotype)
 
-    ml = ml_class.create(sample_count, covariate_count)
+    ml = ml_class.create()
     optimize_result = ml.optimize(o)
     terms = optimize_result.x
 

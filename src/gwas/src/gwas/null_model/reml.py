@@ -1,5 +1,7 @@
+from functools import partial
 from typing import override
 
+import jax
 from chex import dataclass
 from jax import numpy as jnp
 from jaxtyping import Array, Float
@@ -27,6 +29,7 @@ def logdet(a: Float[Array, " n n"]) -> Float[Array, ""]:
 @dataclass(frozen=True, eq=True)
 class RestrictedMaximumLikelihood(ProfileMaximumLikelihood):
     @override
+    @partial(jax.jit, static_argnums=0)
     def minus_two_log_likelihood(
         self, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> Float[Array, "..."]:

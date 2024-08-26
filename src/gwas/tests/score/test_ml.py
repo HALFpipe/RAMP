@@ -24,8 +24,7 @@ def setup() -> None:
 def test_fastlmm(
     rmw_debug: RmwDebug,
 ) -> None:
-    sample_count, covariate_count = rmw_debug.x.shape
-    ml = FaSTLMM.create(sample_count, covariate_count, enable_softplus_penalty=False)
+    ml = FaSTLMM.create(enable_softplus_penalty=False)
 
     optimize_input: OptimizeInput = (
         jnp.asarray(rmw_debug.d),
@@ -111,8 +110,7 @@ def test_optimize(
     rmw_debug: RmwDebug,
     ml_class: Type[ProfileMaximumLikelihood],
 ) -> None:
-    sample_count, covariate_count = rmw_debug.x.shape
-    ml = ml_class.create(sample_count, covariate_count)
+    ml = ml_class.create()
 
     optimize_input: OptimizeInput = (
         jnp.asarray(rmw_debug.d),

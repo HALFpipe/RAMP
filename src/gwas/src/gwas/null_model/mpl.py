@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from functools import partial
 from typing import override
 
+import jax
 from chex import register_dataclass_type_with_jax_tree_util
 from jax import numpy as jnp
 from jaxtyping import Array, Float
@@ -26,6 +28,7 @@ class MaximumPenalizedLikelihood(ProfileMaximumLikelihood):
     """
 
     @override
+    @partial(jax.jit, static_argnums=0)
     def minus_two_log_likelihood(
         self, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> Float[Array, "..."]:
