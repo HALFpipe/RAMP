@@ -6,7 +6,7 @@ from chex import dataclass
 from jax import numpy as jnp
 from jaxtyping import Array, Float
 
-from .mlb import OptimizeInput
+from .mlb import MinusTwoLogLikelihoodTerms, OptimizeInput
 from .mlb import terms_count as terms_count
 from .pml import ProfileMaximumLikelihood
 
@@ -33,9 +33,9 @@ class RestrictedMaximumLikelihood(ProfileMaximumLikelihood):
     def minus_two_log_likelihood(
         self, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> Float[Array, "..."]:
-        t = self.get_minus_two_log_likelihood_terms(terms, o)
+        t: MinusTwoLogLikelihoodTerms = self.get_minus_two_log_likelihood_terms(terms, o)
         penalty = logdet(t.r.scaled_covariates.transpose() @ t.r.scaled_covariates)
-        deviation = (t.r.scaled_phenotype * t.r.scaled_residuals).sum()
+        deviation = (t.r.scaled_phenotype * t.r.halfway_scaled_residuals).sum()
         minus_two_log_likelihood = t.logarithmic_determinant + deviation + penalty
 
         if self.enable_softplus_penalty:

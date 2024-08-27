@@ -1,7 +1,8 @@
+from contextlib import nullcontext
 from dataclasses import dataclass
 from itertools import chain
 from multiprocessing import current_process
-from typing import Mapping, Sequence, Type
+from typing import ContextManager, Iterable, Mapping, Sequence, Type
 
 from more_itertools import chunked
 from tqdm.auto import tqdm
@@ -19,6 +20,7 @@ def calc_null_model_collections(
     variable_collections: list[VariableCollection],
     method: str | None = "fastlmm",
     num_threads: int = 1,
+    jax_trace_dir: UPath | None = None,
 ) -> list[NullModelCollection]:
     null_model_collections = [
         NullModelCollection.empty(eig, vc, method)
@@ -31,6 +33,7 @@ def calc_null_model_collections(
             variable_collections,
             null_model_collections,
             num_threads=num_threads,
+            jax_trace_dir=jax_trace_dir,
         )
     return null_model_collections
 
@@ -43,18 +46,21 @@ class OptimizeJob:
     vc: VariableCollection
 
     method: str | None
+    jax_trace_dir: UPath | None
 
 
-def apply(optimize_job: OptimizeJob) -> list[tuple[tuple[int, int], NullModelResult]]:
-    from .mlb import setup_jax
-
-    setup_jax()
+def apply(optimize_job: OptimizeJob) -> Iterable[NullModelResult]:
+    import jax
+    from jax import numpy as jnp
 
     from .fastlmm import FaSTLMM
     from .ml import MaximumLikelihood
+    from .mlb import OptimizeInput, setup_jax
     from .mpl import MaximumPenalizedLikelihood
     from .pml import ProfileMaximumLikelihood
     from .reml import RestrictedMaximumLikelihood
+
+    setup_jax()
 
     ml_classes: Mapping[str, Type[ProfileMaximumLikelihood]] = {
         "fastlmm": FaSTLMM,
@@ -73,18 +79,34 @@ def apply(optimize_job: OptimizeJob) -> list[tuple[tuple[int, int], NullModelRes
     vc = optimize_job.vc
     ml = ml_class.create()
 
-    import jax
+    covariates = vc.covariates.copy()
+    phenotypes = vc.phenotypes[:, phenotype_indices]
 
-    name = current_process().name
-    with jax.profiler.trace(
-        UPath.home() / "jax-trace" / name, create_perfetto_trace=True
-    ):
-        o: list[tuple[tuple[int, int], NullModelResult]] = list()
+    # Subtract column mean from covariates (except intercept)
+    covariates[:, 1:] -= covariates[:, 1:].mean(axis=0)
+
+    # Rotate covariates and phenotypes
+    eigenvalues = jnp.asarray(eig.eigenvalues.copy())
+    rotated_covariates = jnp.asarray(eig.eigenvectors.transpose() @ covariates)
+    rotated_phenotypes = jnp.asarray(eig.eigenvectors.transpose() @ phenotypes)
+
+    context: ContextManager = nullcontext()
+    if optimize_job.jax_trace_dir is not None:
+        name = current_process().name
+        context = jax.profiler.trace(
+            optimize_job.jax_trace_dir / name, create_perfetto_trace=True
+        )
+
+    null_model_results: list[NullModelResult] = list()
+    with context:
         for phenotype_index in phenotype_indices:
-            indices = (variable_collection_index, phenotype_index)
-            o.append((indices, ml.get_null_model_result(vc, phenotype_index, eig)))
+            rotated_phenotype = rotated_phenotypes[:, phenotype_index, jnp.newaxis]
+            o: OptimizeInput = (eigenvalues, rotated_covariates, rotated_phenotype)
 
-    return o
+            indices = (variable_collection_index, phenotype_index)
+            null_model_results.append(ml.get_null_model_result(indices, o))
+
+    return null_model_results
 
 
 def fit(
@@ -93,6 +115,7 @@ def fit(
     variable_collections: list[VariableCollection],
     null_model_collections: list[NullModelCollection],
     num_threads: int,
+    jax_trace_dir: UPath | None = None,
     **kwargs,
 ) -> None:
     phenotype_count = sum(vc.phenotype_count for vc in variable_collections)
@@ -106,6 +129,7 @@ def fit(
             eig,
             vc,
             method,
+            jax_trace_dir,
         )
         for collection_index, (eig, vc) in enumerate(
             zip(
@@ -128,12 +152,12 @@ def fit(
         iteration_order=IterationOrder.UNORDERED,
     )
     with pool:
-        for indices, null_model_result in tqdm(
+        for null_model_result in tqdm(
             chain.from_iterable(iterator),
             desc="fitting null models",
             unit="phenotypes",
             total=phenotype_count,
         ):
-            collection_index, phenotype_index = indices
+            collection_index, phenotype_index = null_model_result.indices
             nm = null_model_collections[collection_index]
             nm.put(phenotype_index, null_model_result)

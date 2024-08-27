@@ -90,6 +90,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
         "--log-level", choices=logging.getLevelNamesMapping().keys(), default="INFO"
     )
     argument_parser.add_argument("--debug", action="store_true", default=False)
+    argument_parser.add_argument("--jax-trace", action="store_true", default=False)
     argument_parser.add_argument("--mem-gb", type=float)
     argument_parser.add_argument("--num-threads", type=int, default=cpu_count())
     argument_parser.add_argument(

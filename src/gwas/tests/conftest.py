@@ -14,6 +14,7 @@ from gwas.compression.convert import to_bgzip
 from gwas.compression.pipe import CompressedTextReader
 from gwas.log import add_handler, setup_logging_queue, teardown_logging
 from gwas.mem.wkspace import SharedWorkspace
+from gwas.null_model.mlb import setup_jax
 from gwas.tri.calc import calc_tri
 from gwas.utils.genetics import chromosome_to_int, chromosomes_set
 from gwas.utils.threads import apply_num_threads, cpu_count
@@ -30,6 +31,7 @@ sample_sizes: Mapping[SampleSizeLabel, int] = dict(small=100, medium=500, large=
 @pytest.fixture(scope="session", autouse=True)
 def num_threads() -> None:
     apply_num_threads(cpu_count())
+    setup_jax()
 
 
 @pytest.fixture(scope="session", autouse=True)

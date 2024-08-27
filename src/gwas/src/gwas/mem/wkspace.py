@@ -8,6 +8,7 @@ from mmap import MAP_SHARED, mmap
 from multiprocessing import reduction as mp_reduction
 from operator import attrgetter
 from pprint import pformat
+from time import sleep
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Self, TypeVar, overload
 
@@ -276,11 +277,21 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
 
     @property
     def allocations(self) -> dict[str, Allocation]:
-        with get_global_lock():
-            allocations = pickle.loads(self.buf)
-            if not isinstance(allocations, dict):
-                raise ValueError(f"Expected a dictionary, got {allocations}")
-            return allocations
+        exception: Exception | None = None
+        for _ in range(10):
+            try:
+                allocations = pickle.loads(self.buf)
+                if not isinstance(allocations, dict):
+                    raise ValueError(f"Expected a dictionary, got {allocations}")
+            except Exception as exc:
+                exception = exc
+                sleep(0.1)
+            else:
+                break
+        else:
+            if exception is not None:
+                raise exception
+        return allocations
 
     @allocations.setter
     def allocations(self, allocations: dict[str, Allocation]) -> None:

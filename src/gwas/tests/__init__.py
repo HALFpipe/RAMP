@@ -4,3 +4,7 @@ except ImportError:
     pass
 else:
     cleanup_on_sigterm()
+
+import os
+
+os.environ["JAX_PLATFORMS"] = "cpu"

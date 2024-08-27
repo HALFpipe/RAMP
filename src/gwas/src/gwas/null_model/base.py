@@ -11,8 +11,10 @@ from ..pheno import VariableCollection
 from ..utils.multiprocessing import get_global_lock
 
 
-@dataclass
+@dataclass(kw_only=True)
 class NullModelResult:
+    indices: tuple[int, int]
+
     log_likelihood: float
     heritability: float
     genetic_variance: float
@@ -21,12 +23,22 @@ class NullModelResult:
     regression_weights: float | npt.NDArray[np.float64]
     standard_errors: float | npt.NDArray[np.float64]
 
-    half_scaled_residuals: float | npt.NDArray[np.float64]
+    halfway_scaled_residuals: float | npt.NDArray[np.float64]
     variance: float | npt.NDArray[np.float64]
 
     @classmethod
-    def null(cls) -> Self:
-        return cls(np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan)
+    def null(cls, indices: tuple[int, int]) -> Self:
+        return cls(
+            indices=indices,
+            log_likelihood=np.nan,
+            heritability=np.nan,
+            genetic_variance=np.nan,
+            error_variance=np.nan,
+            regression_weights=np.nan,
+            standard_errors=np.nan,
+            halfway_scaled_residuals=np.nan,
+            variance=np.nan,
+        )
 
 
 @dataclass
@@ -40,10 +52,10 @@ class NullModelCollection:
 
     regression_weights: SharedArray
     standard_errors: SharedArray
-    half_scaled_residuals: SharedArray
+    halfway_scaled_residuals: SharedArray
     variance: SharedArray
 
-    methods: ClassVar[list[str]] = ["fastlmm", "pfastlmm", "pml", "mpl", "reml", "ml"]
+    methods: ClassVar[list[str]] = ["fastlmm", "pml", "mpl", "reml", "ml"]
 
     @property
     def phenotype_count(self) -> int:
@@ -51,7 +63,7 @@ class NullModelCollection:
 
     @property
     def sample_count(self) -> int:
-        return self.half_scaled_residuals.shape[1]
+        return self.halfway_scaled_residuals.shape[1]
 
     @property
     def sw(self) -> SharedWorkspace:
@@ -65,19 +77,19 @@ class NullModelCollection:
 
         weights = self.regression_weights.to_numpy()
         errors = self.standard_errors.to_numpy()
-        residuals = self.half_scaled_residuals.to_numpy()
+        residuals = self.halfway_scaled_residuals.to_numpy()
         variance = self.variance.to_numpy()
 
         weights[phenotype_index, :] = np.ravel(r.regression_weights)
         errors[phenotype_index, :] = np.ravel(r.standard_errors)
 
-        residuals[:, phenotype_index] = np.ravel(r.half_scaled_residuals)
+        residuals[:, phenotype_index] = np.ravel(r.halfway_scaled_residuals)
         variance[:, phenotype_index] = np.ravel(r.variance)
 
     def get_arrays_for_score_calc(self) -> tuple[SharedArray, SharedArray]:
         variance = self.variance.to_numpy()
         (sample_count, phenotype_count) = variance.shape
-        half_scaled_residuals = self.half_scaled_residuals.to_numpy()
+        halfway_scaled_residuals = self.halfway_scaled_residuals.to_numpy()
 
         with get_global_lock():
             inverse_variance_array = self.sw.alloc(
@@ -97,7 +109,7 @@ class NullModelCollection:
         np.reciprocal(variance, out=inverse_variance_matrix)
         # Pre-compute the inverse variance scaled residuals
         np.true_divide(
-            half_scaled_residuals,
+            halfway_scaled_residuals,
             np.sqrt(variance),
             out=scaled_residuals_matrix,
         )
@@ -106,7 +118,7 @@ class NullModelCollection:
     def free(self) -> None:
         self.regression_weights.free()
         self.standard_errors.free()
-        self.half_scaled_residuals.free()
+        self.halfway_scaled_residuals.free()
         self.variance.free()
 
     @classmethod

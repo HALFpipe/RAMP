@@ -7,18 +7,13 @@ from jax import numpy as jnp
 from gwas.log import logger
 from gwas.null_model.fastlmm import FaSTLMM
 from gwas.null_model.ml import MaximumLikelihood
-from gwas.null_model.mlb import OptimizeInput, setup_jax
+from gwas.null_model.mlb import OptimizeInput, RegressionWeights, StandardErrors
 from gwas.null_model.mpl import MaximumPenalizedLikelihood
 from gwas.null_model.pml import ProfileMaximumLikelihood
 from gwas.null_model.reml import RestrictedMaximumLikelihood
 
 from ..utils import assert_both_close, check_bias, check_types
 from .rmw_debug import RmwDebug
-
-
-@pytest.fixture(autouse=True, scope="module")
-def setup() -> None:
-    setup_jax()
 
 
 def test_fastlmm(
@@ -51,22 +46,26 @@ def test_fastlmm(
     ):
         terms = jnp.asarray([variance_ratio, 1])
 
-        r = check_types(ml.get_regression_weights)(terms, optimize_input)
+        r: RegressionWeights = check_types(ml.get_regression_weights)(
+            terms, optimize_input
+        )
 
         constant = float(jnp.log(r.variance).sum())
         assert np.isclose(constant, rmw_constant, atol=1e-3, rtol=1e-3)
 
-        sigma = float(jnp.square(r.scaled_residuals).mean())
+        sigma = float(jnp.square(r.halfway_scaled_residuals).mean())
         assert np.isclose(sigma, rmw_sigma, atol=1e-3)
 
-        se = check_types(ml.get_standard_errors)(terms, optimize_input)
+        se: StandardErrors = check_types(ml.get_standard_errors)(terms, optimize_input)
         # Sanity check as these values should just be passed through
         assert np.allclose(se.regression_weights, r.regression_weights, atol=1e-3)
-        assert np.allclose(se.scaled_residuals, r.scaled_residuals, atol=1e-3)
+        assert np.allclose(
+            se.halfway_scaled_residuals, r.halfway_scaled_residuals, atol=1e-3
+        )
 
         # Compare to raremetalworker
         assert np.allclose(se.regression_weights.ravel(), rmw_beta, atol=1e-3)
-        factor = np.asarray(se.scaled_residuals * np.sqrt(se.variance)).ravel()
+        factor = np.asarray(se.halfway_scaled_residuals * np.sqrt(se.variance)).ravel()
         assert check_bias(factor, rmw_factor)
 
         log_likelihood = -0.5 * check_types(ml.minus_two_log_likelihood)(
@@ -78,7 +77,7 @@ def test_fastlmm(
     # Test for final values
     terms = jnp.asarray([rmw_debug.delta_hat, 1])
     se = ml.get_standard_errors(terms, optimize_input)
-    genetic_variance = float(np.square(se.scaled_residuals).mean())
+    genetic_variance = float(np.square(se.halfway_scaled_residuals).mean())
     terms *= genetic_variance
     (_, genetic_variance, error_variance) = ml.get_heritability(terms)
 
@@ -88,7 +87,7 @@ def test_fastlmm(
     se = ml.get_standard_errors(terms, optimize_input)
     assert np.allclose(se.regression_weights.ravel(), rmw_debug.beta_hat, atol=1e-3)
     assert np.allclose(
-        (se.scaled_residuals * np.sqrt(se.variance)).ravel(),
+        (se.halfway_scaled_residuals * np.sqrt(se.variance)).ravel(),
         rmw_debug.residuals,
         atol=1e-3,
         rtol=1e-3,

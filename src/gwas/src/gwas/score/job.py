@@ -30,6 +30,7 @@ class JobCollection:
     output_directory: UPath
     compression_method: CompressionMethod
     num_threads: int
+    jax_trace: bool
 
     variable_collection_chunks: list[list[VariableCollection]]
     summary_collection: SummaryCollection = field(init=False)
@@ -104,11 +105,16 @@ class JobCollection:
             inverse_variance_arrays: list[SharedArray] = list()
             scaled_residuals_arrays: list[SharedArray] = list()
 
+            jax_trace_dir: UPath | None = None
+            if self.jax_trace:
+                jax_trace_dir = self.output_directory / "jax-trace"
+
             null_model_collections = calc_null_model_collections(
                 eigendecompositions,
                 variable_collections,
                 method=self.null_model_method,
                 num_threads=self.num_threads,
+                jax_trace_dir=jax_trace_dir,
             )
             for nm, summary in zip(
                 null_model_collections,

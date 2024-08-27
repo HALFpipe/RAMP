@@ -11,7 +11,12 @@ from jaxtyping import Array, Float
 from numpy import typing as npt
 
 from ..log import logger
-from .mlb import OptimizeInput, OptimizeResult
+from .mlb import (
+    MinusTwoLogLikelihoodTerms,
+    OptimizeInput,
+    OptimizeResult,
+    StandardErrors,
+)
 from .pml import ProfileMaximumLikelihood
 
 
@@ -24,7 +29,7 @@ class FaSTLMM(ProfileMaximumLikelihood):
     def minus_two_log_likelihood(
         self, terms: Float[Array, " 2"], o: OptimizeInput
     ) -> Float[Array, ""]:
-        t = self.get_minus_two_log_likelihood_terms(terms, o)
+        t: MinusTwoLogLikelihoodTerms = self.get_minus_two_log_likelihood_terms(terms, o)
 
         variance_ratio = terms[0]
         genetic_variance = t.deviation / t.sample_count
@@ -47,6 +52,11 @@ class FaSTLMM(ProfileMaximumLikelihood):
             jnp.inf,
         )
 
+    def wrapper(self, numpy_terms: npt.NDArray[np.float64], o: OptimizeInput) -> float:
+        variance_ratio = np.power(10, numpy_terms)
+        terms: Float[Array, " 2"] = jnp.asarray([variance_ratio, 1])
+        return float(np.asarray(self.minus_two_log_likelihood(terms, o)))
+
     @override
     def optimize(
         self,
@@ -63,22 +73,14 @@ class FaSTLMM(ProfileMaximumLikelihood):
             f"FaSTLMM will optimize between {lower_bound} to {upper_bound} "
             f"in {xa.size} steps of size {self.step}"
         )
-        if self.func is None:
-            raise RuntimeError("func is not compiled")
-        func = self.func
-
-        def wrapper(numpy_terms: npt.NDArray[np.float64], o: OptimizeInput) -> float:
-            variance_ratio = np.power(10, numpy_terms)
-            terms: Float[Array, " 2"] = jnp.asarray([variance_ratio, 1])
-            return float(np.asarray(func(terms, o)))
 
         fmin: float = np.inf
         best_optimize_result: OptimizeResult | None = None
         with np.errstate(all="ignore"):
             for bounds in zip(xa, xa + self.step, strict=True):
                 try:
-                    optimize_result = scipy.optimize.minimize_scalar(
-                        wrapper,
+                    optimize_result: OptimizeResult = scipy.optimize.minimize_scalar(
+                        self.wrapper,
                         args=(o,),
                         bounds=bounds,
                         options=dict(disp=disp, xatol=1e-15),
@@ -100,8 +102,8 @@ class FaSTLMM(ProfileMaximumLikelihood):
 
         # Scale by genetic variance
         terms = jnp.asarray([variance_ratio, 1])
-        se = self.get_standard_errors(terms, o)
-        genetic_variance = float(np.square(se.scaled_residuals).mean())
+        se: StandardErrors = self.get_standard_errors(terms, o)
+        genetic_variance = float(np.square(se.halfway_scaled_residuals).mean())
         terms *= genetic_variance
 
         logger.debug(f"Found FaSTLMM minimum at {fmin}")

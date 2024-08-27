@@ -9,9 +9,7 @@ from jax import numpy as jnp
 from jaxtyping import Array, Float, Integer
 from numpy import typing as npt
 
-from ..eig.base import Eigendecomposition
 from ..log import logger
-from ..pheno import VariableCollection
 from .base import NullModelResult
 
 sample_count = TypeVar("sample_count")
@@ -38,7 +36,7 @@ class OptimizeResult(NamedTuple):
 
 class RegressionWeights(NamedTuple):
     regression_weights: Float[Array, " covariate_count 1"]
-    scaled_residuals: Float[Array, " sample_count 1"]
+    halfway_scaled_residuals: Float[Array, " sample_count 1"]
     variance: Float[Array, " sample_count 1"]
     inverse_variance: Float[Array, " sample_count 1"]
     scaled_covariates: Float[Array, " sample_count covariate_count"]
@@ -56,7 +54,7 @@ class MinusTwoLogLikelihoodTerms(NamedTuple):
 class StandardErrors(NamedTuple):
     regression_weights: Float[Array, " covariate_count 1"]
     standard_errors: Float[Array, " covariate_count 1"]
-    scaled_residuals: Float[Array, " sample_count 1"]
+    halfway_scaled_residuals: Float[Array, " sample_count 1"]
     variance: Float[Array, " sample_count 1"]
 
 
@@ -93,30 +91,6 @@ class MaximumLikelihoodBase:
         self, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> Float[Array, ""]: ...
 
-    @partial(jax.jit, static_argnums=0)
-    def func(
-        self, terms: Float[Array, " terms_count"], o: OptimizeInput
-    ) -> Float[Array, ""]:
-        return self.minus_two_log_likelihood(terms, o)
-
-    @partial(jax.jit, static_argnums=0)
-    def vec_func(
-        self, terms: Float[Array, " grid_search_size terms_count"], o: OptimizeInput
-    ) -> Float[Array, " grid_search_size"]:
-        return jax.vmap(self.minus_two_log_likelihood, in_axes=[0, None])(terms, o)
-
-    @partial(jax.jit, static_argnums=0)
-    def func_with_grad(
-        self, terms: Float[Array, " terms_count"], o: OptimizeInput
-    ) -> tuple[Float[Array, ""], Float[Array, " terms_count"]]:
-        return jax.value_and_grad(self.minus_two_log_likelihood)(terms, o)
-
-    @partial(jax.jit, static_argnums=0)
-    def hessian(
-        self, terms: Float[Array, " terms_count"], o: OptimizeInput
-    ) -> Float[Array, " terms_count terms_count"]:
-        return jax.hessian(self.minus_two_log_likelihood)(terms, o)
-
     @abstractmethod
     def optimize(
         self,
@@ -127,45 +101,33 @@ class MaximumLikelihoodBase:
     ) -> OptimizeResult: ...
 
     def get_null_model_result(
-        self, vc: VariableCollection, phenotype_index: int, eig: Eigendecomposition
+        self, indices: tuple[int, int], o: OptimizeInput
     ) -> NullModelResult:
-        eigenvectors = eig.eigenvectors
-        covariates = vc.covariates.copy()
-        phenotype = vc.phenotypes[:, phenotype_index, np.newaxis]
-
-        # Subtract column mean from covariates (except intercept).
-        covariates[:, 1:] -= covariates[:, 1:].mean(axis=0)
-
-        # Rotate covariates and phenotypes.
-        eigenvalues = jnp.asarray(eig.eigenvalues)
-        rotated_covariates = jnp.asarray(eigenvectors.transpose() @ covariates)
-        rotated_phenotype = jnp.asarray(eigenvectors.transpose() @ phenotype)
-
-        o: OptimizeInput = (eigenvalues, rotated_covariates, rotated_phenotype)
-
         try:
             optimize_result = self.optimize(o)
             if optimize_result.x.dtype != np.float64:
                 raise RuntimeError("Dtype needs to be float64")
             terms = jnp.asarray(optimize_result.x)
-            se = self.get_standard_errors(terms, o)
+            se: StandardErrors = self.get_standard_errors(terms, o)
             minus_two_log_likelihood = float(optimize_result.fun)
+            heritability, genetic_variance, error_variance = self.get_heritability(terms)
             null_model_result = NullModelResult(
-                -0.5 * minus_two_log_likelihood,
-                *self.get_heritability(terms),
-                np.asarray(se.regression_weights),
-                np.asarray(se.standard_errors),
-                np.asarray(se.scaled_residuals),
-                np.asarray(se.variance),
+                indices=indices,
+                log_likelihood=-0.5 * minus_two_log_likelihood,
+                heritability=heritability,
+                genetic_variance=genetic_variance,
+                error_variance=error_variance,
+                regression_weights=np.asarray(se.regression_weights),
+                standard_errors=np.asarray(se.standard_errors),
+                halfway_scaled_residuals=np.asarray(se.halfway_scaled_residuals),
+                variance=np.asarray(se.variance),
             )
         except Exception as e:
             logger.error(
-                "Failed to fit null model for phenotype at index " f"{phenotype_index}",
+                "Failed to fit null model for phenotype at indices " f"{indices}",
                 exc_info=e,
             )
-            null_model_result = NullModelResult(
-                np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
-            )
+            null_model_result = NullModelResult.null(indices)
         return null_model_result
 
     @staticmethod
@@ -195,11 +157,13 @@ class MaximumLikelihoodBase:
         regression_weights, _, _, _ = jnp.linalg.lstsq(
             scaled_covariates, scaled_phenotype, rcond=None
         )
-        scaled_residuals = scaled_phenotype - scaled_covariates @ regression_weights
+        halfway_scaled_residuals = (
+            scaled_phenotype - scaled_covariates @ regression_weights
+        )
 
         return RegressionWeights(
             regression_weights=regression_weights,
-            scaled_residuals=scaled_residuals,
+            halfway_scaled_residuals=halfway_scaled_residuals,
             variance=variance,
             inverse_variance=inverse_variance,
             scaled_covariates=scaled_covariates,
@@ -211,10 +175,11 @@ class MaximumLikelihoodBase:
     def get_standard_errors(
         cls, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> StandardErrors:
-        r = cls.get_regression_weights(terms, o)
+        r: RegressionWeights = cls.get_regression_weights(terms, o)
 
         degrees_of_freedom = r.scaled_covariates.shape[0] - r.scaled_covariates.shape[1]
-        residual_variance = jnp.square(r.scaled_residuals).sum() / degrees_of_freedom
+        deviation = jnp.square(r.halfway_scaled_residuals).sum()
+        residual_variance = deviation / degrees_of_freedom
 
         inverse_covariance = jnp.linalg.inv(
             r.scaled_covariates.transpose() @ r.scaled_covariates
@@ -225,6 +190,6 @@ class MaximumLikelihoodBase:
         return StandardErrors(
             regression_weights=r.regression_weights,
             standard_errors=standard_errors,
-            scaled_residuals=r.scaled_residuals,
+            halfway_scaled_residuals=r.halfway_scaled_residuals,
             variance=r.variance,
         )

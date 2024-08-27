@@ -16,7 +16,9 @@ from .mlb import (
     MinusTwoLogLikelihoodTerms,
     OptimizeInput,
     OptimizeResult,
+    RegressionWeights,
 )
+from .mlb import grid_search_size as grid_search_size
 from .mlb import terms_count as terms_count
 
 threshold = jnp.asarray(20.0)
@@ -74,6 +76,24 @@ class ProfileMaximumLikelihood(MaximumLikelihoodBase):
             (0, variance * self.maximum_variance_multiplier),
         ]
 
+    @partial(jax.jit, static_argnums=0)
+    def vec_func(
+        self, terms: Float[Array, " grid_search_size terms_count"], o: OptimizeInput
+    ) -> Float[Array, " grid_search_size"]:
+        return jax.vmap(self.minus_two_log_likelihood, in_axes=[0, None])(terms, o)
+
+    @partial(jax.jit, static_argnums=0)
+    def func_with_grad(
+        self, terms: Float[Array, " terms_count"], o: OptimizeInput
+    ) -> tuple[Float[Array, ""], Float[Array, " terms_count"]]:
+        return jax.value_and_grad(self.minus_two_log_likelihood)(terms, o)
+
+    @partial(jax.jit, static_argnums=0)
+    def hessian(
+        self, terms: Float[Array, " terms_count"], o: OptimizeInput
+    ) -> Float[Array, " terms_count terms_count"]:
+        return jax.hessian(self.minus_two_log_likelihood)(terms, o)
+
     def hessian_wrapper(
         self, numpy_terms: npt.NDArray[np.float64], o: OptimizeInput
     ) -> npt.NDArray[np.float64]:
@@ -82,6 +102,16 @@ class ProfileMaximumLikelihood(MaximumLikelihoodBase):
         terms = self.terms_to_tensor(numpy_terms)
         hess = self.hessian(terms, o)
         return np.asarray(hess)
+
+    def wrapper_with_grad(
+        self, numpy_terms: npt.NDArray[np.float64], o: OptimizeInput
+    ) -> tuple[float, npt.NDArray[np.float64]]:
+        try:
+            terms = self.terms_to_tensor(numpy_terms)
+            value, grad = self.func_with_grad(terms, o)
+            return value.item(), np.asarray(grad)
+        except RuntimeError:
+            return np.nan, np.full_like(numpy_terms, np.nan)
 
     def optimize(
         self,
@@ -103,22 +133,8 @@ class ProfileMaximumLikelihood(MaximumLikelihoodBase):
         if enable_hessian:
             minimizer_kwargs.update(dict(hess=self.hessian_wrapper))
 
-        if self.func_with_grad is None:
-            raise RuntimeError("func_with_grad is not compiled")
-        func_with_grad = self.func_with_grad
-
-        def wrapper_with_grad(
-            numpy_terms: npt.NDArray[np.float64], o: OptimizeInput
-        ) -> tuple[float, npt.NDArray[np.float64]]:
-            try:
-                terms = self.terms_to_tensor(numpy_terms)
-                value, grad = func_with_grad(terms, o)
-                return value.item(), np.asarray(grad)
-            except RuntimeError:
-                return np.nan, np.full_like(numpy_terms, np.nan)
-
         optimize_result = scipy.optimize.basinhopping(
-            wrapper_with_grad,
+            self.wrapper_with_grad,
             init,
             minimizer_kwargs=minimizer_kwargs,
             stepsize=float(init.mean()) / 8,
@@ -152,10 +168,10 @@ class ProfileMaximumLikelihood(MaximumLikelihoodBase):
         _, _, rotated_phenotype = o
         sample_count = jnp.asarray(rotated_phenotype.size)
         genetic_variance = terms[1]
-        r = self.get_regression_weights(terms, o)
+        r: RegressionWeights = self.get_regression_weights(terms, o)
 
         logarithmic_determinant = jnp.log(r.variance).sum()
-        deviation = jnp.square(r.scaled_residuals).sum()
+        deviation = jnp.square(r.halfway_scaled_residuals).sum()
 
         return MinusTwoLogLikelihoodTerms(
             sample_count=sample_count,
@@ -169,7 +185,7 @@ class ProfileMaximumLikelihood(MaximumLikelihoodBase):
     def minus_two_log_likelihood(
         self, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> Float[Array, ""]:
-        t = self.get_minus_two_log_likelihood_terms(terms, o)
+        t: MinusTwoLogLikelihoodTerms = self.get_minus_two_log_likelihood_terms(terms, o)
 
         minus_two_log_likelihood = t.logarithmic_determinant + t.deviation
 

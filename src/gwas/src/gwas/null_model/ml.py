@@ -31,7 +31,9 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
     @classmethod
     def get_initial_terms(cls, o: OptimizeInput) -> list[float]:
         terms = super().get_initial_terms(o)
-        r = super().get_regression_weights(cls.terms_to_tensor(terms), o)
+        r: RegressionWeights = super().get_regression_weights(
+            cls.terms_to_tensor(terms), o
+        )
         regression_weights = list(np.asarray(r.regression_weights).ravel())
         return terms + regression_weights
 
@@ -40,7 +42,7 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
     def grid_search(self, o: OptimizeInput) -> Float[Array, "..."]:
         pml = self.pml
         terms = pml.grid_search(o)
-        r = pml.get_regression_weights(terms, o)
+        r: RegressionWeights = pml.get_regression_weights(terms, o)
         return jnp.hstack([terms, r.regression_weights.ravel()])
 
     @override
@@ -66,10 +68,12 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
 
         regression_weights = terms[2:]
         regression_weights = jnp.reshape(regression_weights, (-1, 1))
-        scaled_residuals = scaled_phenotype - scaled_covariates @ regression_weights
+        halfway_scaled_residuals = (
+            scaled_phenotype - scaled_covariates @ regression_weights
+        )
         return RegressionWeights(
             regression_weights=regression_weights,
-            scaled_residuals=scaled_residuals,
+            halfway_scaled_residuals=halfway_scaled_residuals,
             variance=variance,
             inverse_variance=inverse_variance,
             scaled_covariates=scaled_covariates,
@@ -81,7 +85,7 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
     def get_standard_errors(
         self, terms: Float[Array, " terms_count"], o: OptimizeInput
     ) -> StandardErrors:
-        r = self.get_regression_weights(terms, o)
+        r: RegressionWeights = self.get_regression_weights(terms, o)
 
         covariance = self.hessian(terms, o)
         inverse_covariance = jnp.linalg.inv(covariance)
@@ -92,7 +96,7 @@ class MaximumLikelihood(ProfileMaximumLikelihood):
         return StandardErrors(
             regression_weights=r.regression_weights,
             standard_errors=standard_errors,
-            scaled_residuals=r.scaled_residuals,
+            halfway_scaled_residuals=r.halfway_scaled_residuals,
             variance=r.variance,
         )
 

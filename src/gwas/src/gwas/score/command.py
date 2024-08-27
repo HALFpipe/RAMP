@@ -290,14 +290,15 @@ class GwasCommand:
                 )
 
         self.job_collection = JobCollection(
-            vcf_file,
-            self.chromosomes,
-            self.tri_paths_by_chromosome,
-            self.arguments.null_model_method,
-            self.output_directory,
-            compression_method,
-            self.arguments.num_threads,
-            chunks,
+            vcf_file=vcf_file,
+            chromosomes=self.chromosomes,
+            tri_paths_by_chromosome=self.tri_paths_by_chromosome,
+            null_model_method=self.arguments.null_model_method,
+            output_directory=self.output_directory,
+            compression_method=compression_method,
+            num_threads=self.arguments.num_threads,
+            jax_trace=self.arguments.jax_trace,
+            variable_collection_chunks=chunks,
         )
         self.job_collection.dump()
         self.job_collection.run()

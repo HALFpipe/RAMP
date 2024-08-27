@@ -40,6 +40,7 @@ def apply_num_threads(num_threads: int | None) -> None:
         )
     os.environ["MKL_DYNAMIC"] = "FALSE"
     os.environ["XLA_FLAGS"] = xla_flags
+    os.environ["JAX_PLATFORMS"] = "cpu"
 
     from ..log import logger
 

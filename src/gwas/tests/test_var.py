@@ -8,7 +8,7 @@ from jax import numpy as jnp
 
 from gwas.log import logger
 from gwas.null_model.ml import MaximumLikelihood
-from gwas.null_model.mlb import OptimizeInput, setup_jax
+from gwas.null_model.mlb import OptimizeInput
 from gwas.null_model.pml import ProfileMaximumLikelihood
 from gwas.null_model.reml import RestrictedMaximumLikelihood
 
@@ -44,8 +44,6 @@ def test_var(ml_class: Type[ProfileMaximumLikelihood]) -> None:
     phenotype += scipy.stats.norm().rvs(size=(sample_count, 1))
 
     eigenvalues, eigenvectors = np.linalg.eigh(kinship)
-
-    setup_jax()
 
     eigenvalues = jnp.asarray(eigenvalues)
     rotated_covariates = jnp.asarray(eigenvectors.transpose() @ covariates)
