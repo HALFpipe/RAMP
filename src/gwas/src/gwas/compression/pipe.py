@@ -1,3 +1,4 @@
+from collections import deque
 from contextlib import AbstractContextManager
 from subprocess import PIPE, Popen
 from types import TracebackType
@@ -79,9 +80,11 @@ class CompressedReader(AbstractContextManager[IO[T]]):
         value: BaseException | None = None,
         traceback: TracebackType | None = None,
     ) -> None:
-        if self.output_file_handle is not None:
-            while self.output_file_handle.read(1):
-                pass
+        output_file_handle = self.output_file_handle
+        if output_file_handle is not None:
+            # Read until EOF
+            # Taken from https://stackoverflow.com/a/50938015
+            deque(output_file_handle, maxlen=0)
         if self.process_handle is not None:
             stderr = self.process_handle.stderr
             if stderr is None:

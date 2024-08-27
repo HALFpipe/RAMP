@@ -69,7 +69,7 @@ class ParquetFileArrayWriter(FileArrayWriter[ScalarType]):
             schema=self.schema,
             use_dictionary=False,
             compression="zstd",
-            compression_level=19,
+            compression_level=9,
         )
         return self
 

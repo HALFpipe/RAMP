@@ -4,6 +4,7 @@ from typing import Mapping, Sequence
 
 import numpy as np
 import yaml
+from tqdm.auto import tqdm
 from upath import UPath
 
 from ..compression.arr.base import CompressionMethod, FileArray, FileArrayWriter
@@ -116,10 +117,15 @@ class JobCollection:
                 num_threads=self.num_threads,
                 jax_trace_dir=jax_trace_dir,
             )
-            for nm, summary in zip(
-                null_model_collections,
-                summaries.values(),
-                strict=True,
+            for nm, summary in tqdm(
+                zip(
+                    null_model_collections,
+                    summaries.values(),
+                    strict=True,
+                ),
+                total=len(null_model_collections),
+                desc="summarizing null model results",
+                unit="collections",
             ):
                 summary.put_null_model_collection(nm)
                 # Extract the matrices we actually need from the null model
