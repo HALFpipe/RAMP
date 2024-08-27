@@ -11,16 +11,7 @@ from gwas.tri.tsqr import scale
 from gwas.utils.threads import cpu_count
 from gwas.vcf.base import VCFFile
 
-sample_size_label = "large"
-chromosome = 22
-minor_allele_frequency_cutoff = 0.05
-
-
-@pytest.fixture(scope="module")
-def vcf_file(
-    vcf_files_by_size_and_chromosome: dict[str, dict[int | str, VCFFile]],
-) -> VCFFile:
-    return vcf_files_by_size_and_chromosome[sample_size_label][chromosome]
+minor_allele_frequency_cutoff: float = 0.05
 
 
 @pytest.fixture(scope="module")
@@ -54,6 +45,8 @@ def numpy_tri(genotypes_array: npt.NDArray[np.float64]) -> npt.NDArray[np.float6
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize("sample_size_label", ["large"], indirect=True)
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
 def test_tri(
     vcf_file: VCFFile,
     genotypes_array: npt.NDArray[np.float64],
@@ -94,6 +87,8 @@ def test_tri(
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize("sample_size_label", ["large"], indirect=True)
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
 def test_tri_file(
     tmp_path: UPath,
     numpy_tri: npt.NDArray[np.float64],
@@ -135,6 +130,24 @@ def test_tri_file(
         b.minor_allele_frequency_cutoff,
         tri.minor_allele_frequency_cutoff,
     )
+
+    size = tri_path.stat().st_size
+    trunc_path = tmp_path / f"truncated-{tri_path.name}"
+    with tri_path.open("rb") as src, trunc_path.open("wb") as dst:
+        dst.write(src.read(size // 2))
+
+    with pytest.raises(ValueError):
+        _ = Triangular.from_file(trunc_path, sw, np.float64)
+
+    corrupted_path = tmp_path / f"corrupted-{tri_path.name}"
+    with tri_path.open("rb") as src, corrupted_path.open("wb") as dst:
+        data = bytearray(src.read())
+        for i in range(18, len(data), 4):
+            data[i] = 0
+        dst.write(data)
+
+    with pytest.raises(ValueError):
+        _ = Triangular.from_file(corrupted_path, sw, np.float64)
 
     new_allocation_names = {b.name, tri.name}
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)

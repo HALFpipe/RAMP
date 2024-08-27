@@ -198,10 +198,15 @@ class SharedArray(Generic[ScalarType]):
             array = cls(name, sw, **kwargs)
             a = array.to_numpy()
 
-        s = slice(None)
-        with reader:
-            reader.read((s, s), a)
-        return array
+        try:
+            s = slice(None)
+            with reader:
+                reader.read((s, s), a)
+        except Exception:
+            array.free()
+            raise
+        else:
+            return array
 
     def to_file(self, file_path: UPath, num_threads: int = 1) -> UPath:
         if file_path.is_dir():

@@ -1,8 +1,7 @@
 from contextlib import AbstractContextManager
 from subprocess import PIPE, Popen
-from threading import Thread
 from types import TracebackType
-from typing import IO, Generic, Mapping, Type, TypeVar
+from typing import IO, Mapping, Type, TypeVar
 
 from upath import UPath
 
@@ -23,23 +22,6 @@ decompress_commands: Mapping[str, list[str]] = {
     ".lz4": ["lz4", "-c", "-d"],
 }
 T = TypeVar("T", bytes, str)
-
-
-class StderrThread(Generic[T], Thread):
-    def __init__(self, process_handle: Popen[T]) -> None:
-        super().__init__(daemon=True)
-        self.process_handle: Popen[T] = process_handle
-
-    def run(self) -> None:
-        stderr = self.process_handle.stderr
-        if stderr is None:
-            raise IOError
-        data: str | bytes = stderr.read()
-        stderr.close()
-        if isinstance(data, bytes):
-            data = data.decode("utf-8", errors="replace")
-        if data:
-            logger.warning(data)
 
 
 class CompressedReader(AbstractContextManager[IO[T]]):
@@ -80,9 +62,6 @@ class CompressedReader(AbstractContextManager[IO[T]]):
         if self.process_handle.stdout is None:
             raise IOError
 
-        stderr_thread = StderrThread(self.process_handle)
-        stderr_thread.start()
-
         self.output_file_handle = self.process_handle.stdout
         return self.output_file_handle
 
@@ -101,9 +80,27 @@ class CompressedReader(AbstractContextManager[IO[T]]):
         traceback: TracebackType | None = None,
     ) -> None:
         if self.output_file_handle is not None:
-            self.output_file_handle.close()
+            while self.output_file_handle.read(1):
+                pass
         if self.process_handle is not None:
+            stderr = self.process_handle.stderr
+            if stderr is None:
+                raise IOError
+            data: str | bytes = stderr.read()
+            stderr.close()
+            if isinstance(data, bytes):
+                data = data.decode("utf-8", errors="replace")
+
             self.process_handle.__exit__(exc_type, value, traceback)
+            returncode = self.process_handle.returncode
+
+            if returncode:
+                raise ValueError(
+                    f'Decompression failed with code {returncode} and message "{data}"'
+                )
+            elif data:
+                logger.warning(f'Decompression received stderr: "{data}"')
+
         self.process_handle = None
         self.input_file_handle = None
         self.output_file_handle = None
@@ -208,9 +205,6 @@ class CompressedWriter(AbstractContextManager[IO[T]]):
         if self.process_handle.stdin is None:
             raise IOError
 
-        stderr_thread = StderrThread(self.process_handle)
-        stderr_thread.start()
-
         self.input_file_handle = self.process_handle.stdin
         return self.input_file_handle
 
@@ -230,8 +224,28 @@ class CompressedWriter(AbstractContextManager[IO[T]]):
     ) -> None:
         if self.input_file_handle is not None:
             self.input_file_handle.close()
+
         if self.process_handle is not None:
+            stderr = self.process_handle.stderr
+            if stderr is None:
+                raise IOError
+            data: str | bytes = stderr.read()
+            stderr.close()
+            if isinstance(data, bytes):
+                data = data.decode("utf-8", errors="replace")
+
             self.process_handle.__exit__(exc_type, value, traceback)
+            returncode = self.process_handle.returncode
+            if returncode:
+                raise ValueError(
+                    f'Compression failed with code {returncode} and message "{data}"'
+                )
+            elif data:
+                logger.warning(f'Compression received stderr: "{data}"')
+
+        if self.output_file_handle is not None:
+            self.output_file_handle.close()
+
         self.process_handle = None
         self.input_file_handle = None
         self.output_file_handle = None
