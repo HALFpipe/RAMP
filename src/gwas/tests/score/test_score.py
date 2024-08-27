@@ -272,9 +272,9 @@ def test_score(
     u_stat = np.empty((variant_count, phenotype_count))
     v_stat = np.empty((variant_count, phenotype_count))
 
-    halfway_scaled_residuals = null_model_collection.halfway_scaled_residuals.to_numpy()
+    halfway_scaled_residuals = null_model_collection.halfway_scaled_residuals
     halfway_scaled_residuals = halfway_scaled_residuals[:, inner_index, np.newaxis]
-    variance = null_model_collection.variance.to_numpy()
+    variance = null_model_collection.variance
     variance = variance[:, inner_index, np.newaxis]
 
     inverse_variance = np.reciprocal(variance)

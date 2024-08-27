@@ -304,8 +304,8 @@ class Scorefile:
             (analyzed_trait,) = trait_summaries.values()
         covariate_summaries = make_summaries(vc.covariate_names[1:], covariates[:, 1:])
 
-        weights = nm.regression_weights.to_numpy()
-        errors = nm.standard_errors.to_numpy()
+        weights = nm.regression_weights
+        errors = nm.standard_errors
 
         if phenotype_index is not None:
             weights = weights[phenotype_index, :]

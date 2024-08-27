@@ -5,6 +5,7 @@ from typing import Self, override
 import numpy as np
 import pandas as pd
 from numpy import typing as npt
+from tqdm.auto import tqdm
 from upath import UPath
 
 from .log import logger
@@ -17,12 +18,12 @@ def combine(data_frames: list[pd.DataFrame]) -> pd.DataFrame:
 
 
 def read_and_combine(
-    paths: list[UPath],
+    paths: list[UPath], noun: str = "files"
 ) -> tuple[list[str], list[str], npt.NDArray[np.float64]]:
     import pandas as pd
 
     data_frames: list[pd.DataFrame] = list()
-    for path in paths:
+    for path in tqdm(paths, desc=f"reading {noun}", unit="files"):
         data_frame = pd.read_table(path, sep="\t", header=0, index_col=False, dtype=str)
         data_frame = data_frame.set_index(data_frame.columns[0])
         data_frames.append(data_frame)
@@ -68,9 +69,7 @@ class VariableCollection(SharedArray[np.float64]):
 
     @property
     def sample_count(self) -> int:
-        sample_count = self.covariates.shape[0]
-        if sample_count != self.phenotypes.shape[0]:
-            raise ValueError
+        sample_count = self.shape[0]
         if sample_count != len(self.samples):
             raise ValueError
         return sample_count
@@ -242,16 +241,16 @@ class VariableCollection(SharedArray[np.float64]):
     ) -> Self:
         logger.debug("Reading phenotypes")
         phenotype_samples, phenotype_names, phenotype_array = read_and_combine(
-            phenotype_paths
+            phenotype_paths, noun="phenotypes"
         )
         if samples is None:
             samples = phenotype_samples
-        if samples is None:
+        if not samples:
             raise RuntimeError("No samples found in phenotype files")
 
         logger.debug("Reading covariates")
         covariate_samples, covariate_names, covariate_array = read_and_combine(
-            covariate_paths
+            covariate_paths, noun="covariates"
         )
 
         # Use only samples that are present in all files

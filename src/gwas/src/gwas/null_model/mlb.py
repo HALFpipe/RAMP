@@ -100,9 +100,7 @@ class MaximumLikelihoodBase:
         disp: bool = False,
     ) -> OptimizeResult: ...
 
-    def get_null_model_result(
-        self, indices: tuple[int, int], o: OptimizeInput
-    ) -> NullModelResult:
+    def get_null_model_result(self, o: OptimizeInput) -> NullModelResult:
         try:
             optimize_result = self.optimize(o)
             if optimize_result.x.dtype != np.float64:
@@ -112,7 +110,6 @@ class MaximumLikelihoodBase:
             minus_two_log_likelihood = float(optimize_result.fun)
             heritability, genetic_variance, error_variance = self.get_heritability(terms)
             null_model_result = NullModelResult(
-                indices=indices,
                 log_likelihood=-0.5 * minus_two_log_likelihood,
                 heritability=heritability,
                 genetic_variance=genetic_variance,
@@ -123,11 +120,8 @@ class MaximumLikelihoodBase:
                 variance=np.asarray(se.variance),
             )
         except Exception as e:
-            logger.error(
-                "Failed to fit null model for phenotype at indices " f"{indices}",
-                exc_info=e,
-            )
-            null_model_result = NullModelResult.null(indices)
+            logger.error("Failed to fit null model", exc_info=e)
+            null_model_result = NullModelResult.null()
         return null_model_result
 
     @staticmethod

@@ -158,10 +158,7 @@ class SharedArray(Generic[ScalarType]):
 
     @classmethod
     def from_numpy(
-        cls,
-        array: npt.NDArray[ScalarType],
-        sw: SharedWorkspace,
-        **kwargs: Any,
+        cls, array: npt.NDArray[ScalarType], sw: SharedWorkspace, **kwargs
     ) -> Self:
         if array.dtype == np.object_:
             raise ValueError("Cannot create SharedArray from object array")

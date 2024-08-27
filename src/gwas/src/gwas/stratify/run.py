@@ -44,10 +44,10 @@ def stratify(arguments: Namespace, output_directory: UPath) -> None:
 
     # Read and rename phenotypes and covariates
     covariate_samples_base, covariate_names, covariate_array = read_and_combine(
-        arguments.covariates
+        arguments.covariates, noun="covariates"
     )
     phenotype_samples_base, phenotype_names_base, phenotype_array = read_and_combine(
-        arguments.phenotypes
+        arguments.phenotypes, noun="phenotypes"
     )
     covariate_samples, covariate_array = sample_renamer.rename_samples(
         mds.samples, covariate_samples_base, covariate_array

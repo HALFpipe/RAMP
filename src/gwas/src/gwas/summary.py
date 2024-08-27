@@ -83,8 +83,8 @@ class VariableCollectionSummary:
             self.phenotypes[name].error_variance = float(nm.error_variance[i])
             self.phenotypes[name].heritability = float(nm.heritability[i])
 
-            regression_weights = nm.regression_weights.to_numpy()
-            standard_errors = nm.standard_errors.to_numpy()
+            regression_weights = nm.regression_weights
+            standard_errors = nm.standard_errors
             self.phenotypes[name].regression_weights = {
                 name: RegressionWeight(float(weight), float(error))
                 for name, weight, error in zip(

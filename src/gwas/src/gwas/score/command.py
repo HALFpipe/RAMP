@@ -307,6 +307,12 @@ class GwasCommand:
         logger.debug("Arguments are %s", pformat(vars(self.arguments)))
         variable_collections = self.setup_variable_collections()
 
+        for chromosome, vcf_file in self.vcf_by_chromosome.items():
+            if chromosome in self.selected_chromosomes:
+                continue
+            # We don't need these anymore, so free some memory
+            vcf_file.clear_allele_frequency_columns()
+
         for chromosome in tqdm(
             self.selected_chromosomes,
             unit="chromosomes",
