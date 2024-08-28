@@ -13,7 +13,7 @@ from .utils import check_bias
 
 
 @pytest.mark.parametrize("chromosome", [22], indirect=True)
-@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["small", "medium"], indirect=True)
 def test_mean(
     vcf_file: VCFFile,
     numpy_read_result: ReadResult,

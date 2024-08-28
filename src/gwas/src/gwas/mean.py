@@ -15,12 +15,12 @@ from .utils.numpy import make_sample_boolean_vectors
 from .vcf.base import VCFFile
 
 
-def func(
+def apply(
     genotypes_array: SharedArray[np.float64],
-    shape: tuple[int, int],
     alternate_allele_frequency_array: SharedArray[np.float64],
-    variant_slice: slice,
     sample_boolean_array: SharedArray[np.bool_],
+    shape: tuple[int, int],
+    variant_slice: slice,
     i: int,
 ) -> None:
     genotypes_matrix = genotypes_array.to_numpy(shape=shape)
@@ -79,8 +79,8 @@ def calc_mean(
 
     sw = variable_collections[0].sw
 
-    variant_indices = vcf_file.variant_indices
-    vcf_variant_count = len(variant_indices)
+    vcf_variant_count = vcf_file.vcf_variant_count
+    variant_indices = np.arange(vcf_variant_count, dtype=np.uint32)
 
     base_samples = vcf_file.samples
     validate_samples(variable_collections, base_samples)
@@ -100,8 +100,16 @@ def calc_mean(
         name = SharedArray.get_name(sw, prefix="genotypes")
         genotypes_array = sw.alloc(name, len(base_samples), variant_count)
 
+    func = partial(
+        apply,
+        genotypes_array,
+        alternate_allele_frequency_array,
+        sample_boolean_array,
+    )
+    iterable = list(range(missing_value_pattern_count))
+
     progress_bar = tqdm(
-        total=variant_count,
+        total=vcf_variant_count,
         unit="variants",
         desc="calculating allele frequencies",
         leave=False,
@@ -116,21 +124,11 @@ def calc_mean(
             vcf_file.read(genotypes_matrix.transpose())
 
             # Calculate the alternate allele frequency
-            variant_slice = slice(
-                variant_offset, variant_offset + vcf_file.variant_count
-            )
+            end = variant_offset + vcf_file.variant_count
+            variant_slice = slice(variant_offset, end)
 
-            callable = partial(
-                func,
-                genotypes_array,
-                shape,
-                alternate_allele_frequency_array,
-                variant_slice,
-                sample_boolean_array,
-            )
-            pool, iterator = make_pool_or_null_context(
-                range(missing_value_pattern_count), callable, num_threads
-            )
+            callable = partial(func, shape, variant_slice)
+            pool, iterator = make_pool_or_null_context(iterable, callable, num_threads)
             with pool:
                 for _ in iterator:
                     pass
