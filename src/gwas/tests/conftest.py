@@ -63,7 +63,6 @@ def sw(request: FixtureRequest) -> SharedWorkspace:
     sw = SharedWorkspace.create(size=size)
 
     request.addfinalizer(sw.close)
-    request.addfinalizer(sw.unlink)
     return sw
 
 

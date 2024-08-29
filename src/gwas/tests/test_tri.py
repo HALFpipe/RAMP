@@ -83,7 +83,6 @@ def test_tri(
     )
 
     sw.close()
-    sw.unlink()
 
 
 @pytest.mark.slow
@@ -97,7 +96,6 @@ def test_tri_file(
 ) -> None:
     allocation_names = set(sw.allocations.keys())
 
-    sw = SharedWorkspace.create()
     n = numpy_tri.shape[0]
 
     array = sw.alloc("a", n, n)

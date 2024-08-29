@@ -65,6 +65,9 @@ def round_up(number_to_round: int, multiple: int) -> int:
     return number_to_round + multiple - remainder
 
 
+shared_workspaces: dict[tuple[int, int], "SharedWorkspace"] = dict()
+
+
 @dataclass
 class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
     fd: int
@@ -85,7 +88,17 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         traceback: TracebackType | None,
     ) -> None:
         self.close()
-        self.unlink()
+
+    @staticmethod
+    def get_key(fd: int) -> tuple[int, int]:
+        # A tuple which uniquely identifies a file descriptor
+        # Adapted from https://github.com/pytorch/pytorch/blob/092349dcddb39b9844d730bb0da883921e45d3e7/torch/multiprocessing/reductions.py#L525
+        stat = os.fstat(fd)
+        return (stat.st_ino, stat.st_dev)
+
+    @property
+    def key(self) -> tuple[int, int]:
+        return self.get_key(self.fd)
 
     @property
     def unallocated_size(self) -> int:
@@ -312,15 +325,9 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             self.buf[: len(dict_bytes)] = dict_bytes
 
     def close(self) -> None:
+        del shared_workspaces[self.key]
         self.buf.close()
-
-    def unlink(self) -> None:
         os.close(self.fd)
-        # call([
-        #     "bash",
-        #     "-c",
-        #     f"nohup rm -f /dev/shm/{self.name} >/dev/null 2>&1 &"
-        # ])
 
     @classmethod
     def create(cls, size: int | None = None, dict_size: int = 2**20) -> Self:
@@ -359,6 +366,8 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             ),
         )
         sw.allocations = allocations
+
+        shared_workspaces[sw.key] = sw
         return sw
 
     @classmethod
@@ -374,7 +383,23 @@ def _reduce(
 
 
 def _rebuild(dupfd: Any, size: int) -> SharedWorkspace:
-    return SharedWorkspace.rebuild(dupfd.detach(), size)
+    fd = dupfd.detach()
+    key = SharedWorkspace.get_key(fd)
+
+    if key not in shared_workspaces:
+        logger.debug(
+            f"Rebuilding shared workspace from file descriptor {fd} and size {size}"
+        )
+        wkspace = SharedWorkspace(fd, size)
+        shared_workspaces[key] = wkspace
+    else:
+        logger.debug(
+            f"Reusing shared workspace from cache for key {key}, file descriptor {fd} "
+            f"and size {size}"
+        )
+        os.close(fd)
+
+    return shared_workspaces[key]
 
 
 mp_reduction.register(SharedWorkspace, _reduce)

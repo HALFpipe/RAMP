@@ -73,7 +73,7 @@ class JobCollection:
         logger.debug(f'Saving job collection summary to "{summary_path}"')
         value = asdict(self.summary_collection)
         with CompressedTextWriter(summary_path, self.num_threads) as file_handle:
-            yaml.dump(value, file_handle, sort_keys=False, width=np.inf)
+            yaml.dump(value, file_handle, sort_keys=False, width=2**15 - 1)
 
     def get_eigendecompositions(
         self, chromosome: int | str, variable_collections: list[VariableCollection]

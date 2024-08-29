@@ -6,8 +6,9 @@ from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 
 
-def test_sw_merge() -> None:
+def test_sw_merge(request: pytest.FixtureRequest) -> None:
     sw = SharedWorkspace.create()
+    request.addfinalizer(sw.close)
 
     arrays: list[SharedArray] = list()
     for i in range(10):
@@ -25,22 +26,18 @@ def test_sw_merge() -> None:
     assert np.all(a.to_numpy()[1, 7::100])
     assert np.isclose(a.to_numpy().sum(), 100)
 
-    sw.close()
-    sw.unlink()
 
-
-def test_sw_mem() -> None:
+def test_sw_mem(request: pytest.FixtureRequest) -> None:
     sw = SharedWorkspace.create(size=2**21)
+    request.addfinalizer(sw.close)
 
     with pytest.raises(MemoryError):
         sw.alloc("l", 1000, 1000)
 
-    sw.close()
-    sw.unlink()
 
-
-def test_sw_squash() -> None:
-    sw = SharedWorkspace.create()
+def test_sw_squash(request: pytest.FixtureRequest) -> None:
+    sw = SharedWorkspace.create(size=2**21)
+    request.addfinalizer(sw.close)
 
     n = 100
 
@@ -69,6 +66,3 @@ def test_sw_squash() -> None:
     numpy_array = np.hstack(numpy_arrays)
 
     assert np.allclose(array.to_numpy(), numpy_array)
-
-    sw.close()
-    sw.unlink()
