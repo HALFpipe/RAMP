@@ -17,15 +17,18 @@ num_threads_variables: Sequence[str] = [
 ]
 
 
-def apply_num_threads(num_threads: int | None) -> None:
+def apply_num_threads(
+    num_threads: int | None, enable_dump_traceback_later: bool = False
+) -> None:
     from threadpoolctl import threadpool_info, threadpool_limits
 
     faulthandler.enable(all_threads=True)
     faulthandler.register(signal.SIGUSR1, all_threads=True)
-    # Write a traceback to standard out every six hours
-    faulthandler.dump_traceback_later(60 * 60 * 6, repeat=True)
     if not faulthandler.is_enabled():
         raise RuntimeError("Could not enable faulthandler")
+    if enable_dump_traceback_later:
+        # Write a traceback to standard out every six hours
+        faulthandler.dump_traceback_later(60 * 60 * 6, repeat=True)
 
     xla_flags = f'{os.getenv("XLA_FLAGS", "")} --xla_cpu_enable_fast_math=false'
     if num_threads is not None:

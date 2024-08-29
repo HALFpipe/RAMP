@@ -1,11 +1,11 @@
 from functools import partial
 
 import numpy as np
-import pandas as pd
 from tqdm import tqdm
 
+from .log import logger
 from .mem.arr import SharedArray
-from .mem.data_frame import SharedDataFrame
+from .mem.data_frame import SharedSeries
 from .pheno import VariableCollection
 from .utils.multiprocessing import (
     get_global_lock,
@@ -17,18 +17,23 @@ from .vcf.base import VCFFile
 
 def apply(
     genotypes_array: SharedArray[np.float64],
-    alternate_allele_frequency_array: SharedArray[np.float64],
+    alternate_allele_frequency_arrays: list[SharedArray[np.float64]],
     sample_boolean_array: SharedArray[np.bool_],
     shape: tuple[int, int],
     variant_slice: slice,
     i: int,
 ) -> None:
     genotypes_matrix = genotypes_array.to_numpy(shape=shape)
-    alternate_allele_frequency_matrix = alternate_allele_frequency_array.to_numpy()
-    mean = alternate_allele_frequency_matrix[variant_slice, i]
-    sample_boolean_vector = sample_boolean_array.to_numpy()[:, i]
-    genotypes_matrix.mean(axis=0, where=sample_boolean_vector[:, np.newaxis], out=mean)
-    mean /= 2
+    alternate_allele_frequency = alternate_allele_frequency_arrays[i].to_numpy()
+    sample_boolean_vector = sample_boolean_array.to_numpy()[:, i, np.newaxis]
+
+    mean = alternate_allele_frequency[variant_slice]
+    logger.debug(f"Calculating sum for variants {variant_slice}")
+    np.sum(genotypes_matrix, axis=0, where=sample_boolean_vector, out=mean)
+    sample_count = sample_boolean_vector.sum()
+    logger.debug(f"Dividing by sample count {sample_count} to get mean")
+    if sample_count:
+        np.divide(mean, 2 * sample_count, out=mean)
 
 
 def validate_samples(variable_collections, base_samples):
@@ -44,7 +49,7 @@ def validate_samples(variable_collections, base_samples):
 def make_sample_boolean_array(
     variable_collections: list[VariableCollection],
     base_samples: list[str],
-):
+) -> SharedArray[np.bool_]:
     sw = variable_collections[0].sw
     sample_boolean_vectors = make_sample_boolean_vectors(
         base_samples,
@@ -55,7 +60,9 @@ def make_sample_boolean_array(
     sample_boolean_vectors.insert(0, all_samples_boolean_vector)
 
     sample_boolean_matrix = np.stack(sample_boolean_vectors).transpose()
-    sample_boolean_array = SharedArray.from_numpy(sample_boolean_matrix, sw)
+    sample_boolean_array: SharedArray[np.bool_] = SharedArray.from_numpy(
+        sample_boolean_matrix, sw
+    )
 
     return sample_boolean_array
 
@@ -89,10 +96,11 @@ def calc_mean(
     _, missing_value_pattern_count = sample_boolean_array.shape
 
     with get_global_lock():
-        name = SharedArray.get_name(sw, prefix="alternate-allele-frequency")
-        alternate_allele_frequency_array = sw.alloc(
-            name, vcf_variant_count, missing_value_pattern_count
-        )
+        alternate_allele_frequency_arrays: list[SharedArray[np.float64]] = list()
+        for _ in range(missing_value_pattern_count):
+            name = SharedArray.get_name(sw, prefix="alternate-allele-frequency")
+            array = sw.alloc(name, vcf_variant_count)
+            alternate_allele_frequency_arrays.append(array)
 
         per_variant_size = np.float64().itemsize * len(base_samples)
         variant_count = sw.unallocated_size // per_variant_size
@@ -100,18 +108,11 @@ def calc_mean(
         name = SharedArray.get_name(sw, prefix="genotypes")
         genotypes_array = sw.alloc(name, len(base_samples), variant_count)
 
-    func = partial(
-        apply,
-        genotypes_array,
-        alternate_allele_frequency_array,
-        sample_boolean_array,
-    )
     iterable = list(range(missing_value_pattern_count))
 
     progress_bar = tqdm(
         total=vcf_variant_count,
         unit="variants",
-        desc="calculating allele frequencies",
         leave=False,
     )
     with vcf_file, progress_bar:
@@ -127,7 +128,14 @@ def calc_mean(
             end = variant_offset + vcf_file.variant_count
             variant_slice = slice(variant_offset, end)
 
-            callable = partial(func, shape, variant_slice)
+            callable = partial(
+                apply,
+                genotypes_array,
+                alternate_allele_frequency_arrays,
+                sample_boolean_array,
+                shape,
+                variant_slice,
+            )
             pool, iterator = make_pool_or_null_context(iterable, callable, num_threads)
             with pool:
                 for _ in iterator:
@@ -141,12 +149,6 @@ def calc_mean(
     genotypes_array.free()
     sample_boolean_array.free()
 
-    data_frame = pd.DataFrame(
-        alternate_allele_frequency_array.to_numpy(), columns=columns
-    )
-    shared_data_frame = SharedDataFrame.from_pandas(data_frame, sw)
-    alternate_allele_frequency_array.free()
-
     # Remove old allele frequency columns
     shared_vcf_variants = vcf_file.shared_vcf_variants
     for c in shared_vcf_variants.columns:
@@ -159,7 +161,12 @@ def calc_mean(
     ]
 
     # Add new allele frequency columns
-    shared_vcf_variants.columns.extend(shared_data_frame.columns)
+    shared_vcf_variants.columns.extend(
+        SharedSeries(name=column, values=values)
+        for column, values in zip(
+            columns, alternate_allele_frequency_arrays, strict=False
+        )
+    )
 
     vcf_file.allele_frequency_columns = columns
 

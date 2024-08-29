@@ -287,22 +287,21 @@ class ReadResult(NamedTuple):
 
 @pytest.fixture(scope="session")
 def numpy_read_result(vcf_path: UPath) -> ReadResult:
-    mandatory_column_count = len(VCFFile.mandatory_columns)
     with CompressedTextReader(vcf_path) as file_handle:
-        array = np.loadtxt(
-            file_handle, dtype=object, usecols=range(mandatory_column_count)
-        )
+        array = np.loadtxt(file_handle, dtype=object)
 
     vcf_variants: list[Variant] = list()
-    vcf_dosages = np.zeros((array.shape[0], array.shape[1] - mandatory_column_count))
+    vcf_dosages = np.zeros(
+        (array.shape[0], array.shape[1] - len(VCFFile.mandatory_columns))
+    )
     for i, row in enumerate(tqdm(array)):
         variant = Variant.from_metadata_columns(*row[VCFFile.metadata_column_indices])
         vcf_variants.append(variant)
         if variant.format_str is None:
-            raise ValueError("Format string is missing")
+            raise RuntimeError
         genotype_fields = variant.format_str.split(":")
         dosage_field_index = genotype_fields.index("DS")
-        for j, dosage in enumerate(row[mandatory_column_count:]):
+        for j, dosage in enumerate(row[len(VCFFile.mandatory_columns) :]):
             vcf_dosages[i, j] = float(dosage.split(":")[dosage_field_index])
 
     return ReadResult(VCFFile.make_data_frame(vcf_variants), vcf_dosages)

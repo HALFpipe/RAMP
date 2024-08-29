@@ -143,7 +143,9 @@ class GwasCommand:
     ) -> None:
         # Update the VCF file allele frequencies based on variable collections
         for chromosome in tqdm(
-            self.selected_chromosomes, desc="calculating allele frequencies"
+            self.selected_chromosomes,
+            desc="calculating allele frequencies",
+            unit="chromosomes",
         ):
             vcf_file = self.vcf_by_chromosome[chromosome]
             if calc_mean(

@@ -117,6 +117,7 @@ class JobCollection:
                 num_threads=self.num_threads,
                 jax_trace_dir=jax_trace_dir,
             )
+
             for nm, summary in tqdm(
                 zip(
                     null_model_collections,
@@ -128,6 +129,14 @@ class JobCollection:
                 unit="collections",
             ):
                 summary.put_null_model_collection(nm)
+            # Write null model results to disk
+            self.dump()
+
+            for nm in tqdm(
+                null_model_collections,
+                desc="preparing matrices",
+                unit="collections",
+            ):
                 # Extract the matrices we actually need from the null model
                 (
                     inverse_variance_array,
@@ -135,11 +144,8 @@ class JobCollection:
                 ) = nm.get_arrays_for_score_calc()
                 inverse_variance_arrays.append(inverse_variance_array)
                 scaled_residuals_arrays.append(scaled_residuals_array)
-                # Free the nm.
+                # Free the null model collection
                 nm.free()
-
-            # Write null model results to disk
-            self.dump()
 
             calc_score(
                 self.vcf_file,

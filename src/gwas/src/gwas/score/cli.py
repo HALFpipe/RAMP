@@ -89,8 +89,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
     argument_parser.add_argument(
         "--log-level", choices=logging.getLevelNamesMapping().keys(), default="INFO"
     )
-    argument_parser.add_argument("--debug", action="store_true", default=False)
-    argument_parser.add_argument("--jax-trace", action="store_true", default=False)
+
     argument_parser.add_argument("--mem-gb", type=float)
     argument_parser.add_argument("--num-threads", type=int, default=cpu_count())
     argument_parser.add_argument(
@@ -98,6 +97,12 @@ def parse_arguments(argv: list[str]) -> Namespace:
         choices=Engine,
         type=Engine.__getitem__,
         default=Engine.cpp,
+    )
+
+    argument_parser.add_argument("--debug", action="store_true", default=False)
+    argument_parser.add_argument("--jax-trace", action="store_true", default=False)
+    argument_parser.add_argument(
+        "--dump-traceback-later", action="store_true", default=False
     )
 
     return argument_parser.parse_args(argv)
@@ -119,7 +124,7 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
 
     from ..utils.threads import apply_num_threads
 
-    apply_num_threads(arguments.num_threads)
+    apply_num_threads(arguments.num_threads, arguments.dump_traceback_later)
 
     from ..mem.wkspace import SharedWorkspace
 
