@@ -7,17 +7,25 @@ from typing import Iterable, Literal
 
 from upath import UPath
 
+from ..compression.arr.base import compression_methods
 from ..log import logger, setup_logging
 from ..utils.shutil import unwrap_which
 from ..utils.threads import cpu_count
 
+score_prefixes: list[str] = [
+    "chr*.score",
+    "covariance",
+]
+
+
 path_patterns: list[str] = [
     "chr*.metadata.yaml.gz",
-    "chr*.score.txt.zst",
-    "covariance.txt.zst",
-    "chr*.score.b2array",  # legacy
+    *(
+        f"{prefix}{compression_method.suffix}"
+        for prefix in score_prefixes
+        for compression_method in compression_methods.values()
+    ),
     "chr*.score.axis-metadata.pkl.zst",  # legacy
-    "covariance.b2array",  # legacy
     "covariance.axis-metadata.pkl.zst",  # legacy
     "populations.pdf",
     "*stat-*_statmap.nii.gz",
