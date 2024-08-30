@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
+from upath import UPath
+
 from gwas.compression.cache import load_from_cache, save_to_cache
 from gwas.mem.arr import SharedArray
 from gwas.mem.data_frame import SharedDataFrame
 from gwas.mem.wkspace import SharedWorkspace
-from upath import UPath
 
 
 def test_cache_array(tmp_path: UPath, sw: SharedWorkspace) -> None:

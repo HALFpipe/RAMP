@@ -1,7 +1,8 @@
 from unittest import mock
 
-from gwas.upload_score.cli import run
 from upath import UPath
+
+from gwas.upload_score.cli import run
 
 
 def test_upload_score(tmp_path: UPath) -> None:

@@ -1,5 +1,6 @@
-from gwas.plink import BimFile, FamFile, PsamFile, PVarFile
 from upath import UPath
+
+from gwas.plink import BimFile, FamFile, PsamFile, PVarFile
 
 
 def test_psam(pfile_paths: list[UPath]) -> None:
