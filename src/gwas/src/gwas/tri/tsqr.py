@@ -127,7 +127,7 @@ class TallSkinnyQR:
     @classmethod
     def reduce(cls, *shared_arrays: Triangular) -> Triangular:
         if len(shared_arrays) == 0:
-            raise ValueError
+            raise ValueError("No arrays to reduce")
 
         if len(shared_arrays) == 1:
             (shared_array,) = shared_arrays

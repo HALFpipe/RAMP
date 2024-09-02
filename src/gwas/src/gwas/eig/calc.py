@@ -181,6 +181,11 @@ def calc_eigendecompositions(
 ) -> list[Eigendecomposition]:
     sw.squash()
     tri_arrays = load_tri_arrays(tri_paths, sw, num_threads=num_threads)
+    if len(tri_arrays) == 0:
+        raise ValueError(
+            "No chromosomes available for eigendecomposition calculation. "
+            "Please make sure to pass one VCF file for each chromosome"
+        )
     base_tri_array = TallSkinnyQR.reduce(*tri_arrays)
     sw.squash()
 

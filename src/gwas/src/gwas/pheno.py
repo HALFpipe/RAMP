@@ -274,12 +274,12 @@ class VariableCollection(SharedArray[np.float64]):
         samples = [sample for sample in samples if sample in phenotype_samples]
 
         return cls.from_arrays(
-            samples,
-            phenotype_names,
-            phenotype_array,
-            covariate_names,
-            covariate_array,
-            sw,
+            samples=samples,
+            phenotype_names=phenotype_names,
+            phenotypes=phenotype_array,
+            covariate_names=covariate_names,
+            covariates=covariate_array,
+            sw=sw,
             **kwargs,
         )
 

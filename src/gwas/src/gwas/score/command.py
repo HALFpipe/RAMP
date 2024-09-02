@@ -237,6 +237,7 @@ class GwasCommand:
 
         # Get available memory
         itemsize = np.float64().itemsize
+        self.sw.squash()
         available_size = self.sw.unallocated_size // itemsize
 
         # Predict memory usage
@@ -249,18 +250,24 @@ class GwasCommand:
             variable_collection = variable_collections.pop()
             current_chunk.append(variable_collection)
 
-            # Add memory usage for eigendecomposition
-            size += len(self.vcf_samples) * variable_collection.sample_count
-
-            # Add memory usage for outputs
+            # Add memory usage for eigendecomposition collection
             sample_count = variable_collection.sample_count
-            phenotype_count = variable_collection.phenotype_count
-            per_variant_size += 2 * sample_count * phenotype_count
+            size += len(self.vcf_samples) * sample_count
 
-            if (available_size - size) / per_variant_size < 2**9:
-                # We want to process chunks that are at least 512 variants
+            # Add memory for inverse variance and scaled residuals
+            phenotype_count = variable_collection.phenotype_count
+            size += 2 * sample_count * phenotype_count
+
+            # Add memory usage for stat outputs
+            per_variant_size += 2 * phenotype_count
+
+            if (available_size - size) / per_variant_size < 2**7:
+                # We want to process chunks that are at least 128 variants
                 chunks.append(current_chunk)
                 current_chunk = list()
+                # Reset size
+                size = 0
+                per_variant_size = 2 * len(self.vcf_samples)
 
         chunks.append(current_chunk)
         logger.debug(f"Split variable collections into {len(chunks)} chunks")

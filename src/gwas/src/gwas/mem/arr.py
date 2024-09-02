@@ -166,8 +166,8 @@ class SharedArray(Generic[ScalarType]):
         with get_global_lock():
             name = cls.get_name(sw, **kwargs)
             sa = sw.alloc(name, *array.shape, dtype=array.dtype)
-            a = sa.to_numpy()
 
+        a = sa.to_numpy()
         a[:] = array
 
         cls_names = {field.name for field in fields(cls)}
