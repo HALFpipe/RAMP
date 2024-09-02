@@ -44,6 +44,7 @@ requirements:
     - pyyaml
     - mkl
     - universal_pathlib
+    - more-itertools
     # compression tools
     - zstd
     - htslib
@@ -64,5 +65,7 @@ requirements:
     - sshfs
 
 test:
+  imports:
+    - gwas
   commands:
-    - test $(gwas 2>&1 | wc -w) -gt 0
+    - score 2>&1 | grep usage
