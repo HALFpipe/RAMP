@@ -232,6 +232,7 @@ class VCFFile(AbstractContextManager):
         samples: set[str] | None = None,
         engine: Engine = Engine.cpp,
     ) -> "VCFFile":
+        logger.debug(f'Loading VCF file from "{file_path}" with engine {engine}')
         if engine == Engine.python:
             from .python import PyVCFFile
 
@@ -306,10 +307,10 @@ def load_vcf(
     vcf_file: VCFFile | None = None
     try:
         vcf_file = VCFFile.load_from_cache(cache_path, vcf_path, sw)
-        if not hasattr(vcf_file, "shared_vcf_variants"):
-            raise ValueError
     except ValueError:
         pass
+    if not hasattr(vcf_file, "shared_vcf_variants"):
+        vcf_file = None
     if vcf_file is None:
         vcf_file = VCFFile.from_path(vcf_path, sw, engine=engine)
         vcf_file.save_to_cache(cache_path, num_threads)
