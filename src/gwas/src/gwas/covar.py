@@ -1,7 +1,8 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 import scipy
-from numpy import typing as npt
 from upath import UPath
 
 from .compression.arr.base import CompressionMethod, FileArray, FileArrayWriter
@@ -20,25 +21,46 @@ def calc_covariance(
         logger.debug("Skip writing covariance matrix because it already exists")
         return path
 
+    sw = vc.sw
+
     array = vc.to_numpy()
-    names = [*vc.phenotype_names, *vc.covariate_names]
+    names = vc.names
+    row_count, variable_count = array.shape
 
     logger.debug("Calculating covariance matrix")
-    count = scipy.linalg.blas.dsyrk(alpha=1.0, a=np.isfinite(array), trans=1)
+    degrees_of_freedom_array = sw.alloc(
+        "degrees-of-freedom", variable_count, variable_count
+    )
+    degrees_of_freedom = degrees_of_freedom_array.to_numpy()
+    covariance_array = sw.alloc("covariance", variable_count, variable_count)
+    covariance = covariance_array.to_numpy()
+    a_array = sw.alloc("a", row_count, variable_count)
+    a = a_array.to_numpy()
 
-    # Subtract one to get degrees of freedom
-    degrees_of_freedom = count - 1
+    # Subtract one from counts to get degrees of freedom
+    np.isfinite(array, out=a)
+    scipy.linalg.blas.dsyrk(
+        alpha=1.0, a=a, trans=1, c=degrees_of_freedom, overwrite_c=True
+    )
+    np.subtract(degrees_of_freedom, 1, out=degrees_of_freedom)
 
     # Set lower triangle to 1 to avoid division by zero
-    x, y = np.tril_indices_from(count, k=-1)
+    x, y = np.tril_indices_from(degrees_of_freedom, k=-1)
     degrees_of_freedom[(x, y)] = 1
 
-    a = np.nan_to_num(array - np.nanmean(array, axis=0))
-    product = scipy.linalg.blas.dsyrk(alpha=1.0, a=a, trans=1)
+    a[:] = array
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        a -= np.nanmean(a, axis=0)
+    a = np.nan_to_num(a, copy=False)
 
-    covariance: npt.NDArray[np.float64] = product / degrees_of_freedom
+    scipy.linalg.blas.dsyrk(alpha=1.0, a=a, trans=1, c=covariance, overwrite_c=True)
+    a_array.free()
+
+    np.divide(covariance, degrees_of_freedom, out=covariance)
+    degrees_of_freedom_array.free()
+
     covariance[(x, y)] = covariance[(y, x)]
-    covariance = np.asfortranarray(covariance)
 
     writer: FileArrayWriter[np.float64] = FileArray.create(
         path,
@@ -54,5 +76,7 @@ def calc_covariance(
 
     with writer:
         writer[:, :] = covariance
+
+    covariance_array.free()
 
     return writer.file_path

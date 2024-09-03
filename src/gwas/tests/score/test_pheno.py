@@ -1,4 +1,5 @@
 import sys
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -234,13 +235,21 @@ def test_covariance(
     ) as reader:
         covariance = reader[:, :]
 
-    pandas_covariance = pd.DataFrame(variable_collection.to_numpy()).cov().to_numpy()
+    kwargs: dict[str, Any] = dict(sep="\t", index_col=0, header=0)
+    pandas_frame = pd.read_table(str(covariate_path), **kwargs).combine_first(
+        pd.read_table(str(phenotype_path), **kwargs)
+    )
+    pandas_frame.insert(0, "intercept", 1.0)
+    pandas_covariance_frame = pandas_frame.cov()
+    pandas_covariance = pandas_covariance_frame.to_numpy()
     check_bias(covariance, pandas_covariance)
 
     array = variable_collection.to_numpy()
     c = np.ma.array(array, mask=np.isnan(array))
     numpy_covariance = np.ma.cov(c, rowvar=False, allow_masked=True).filled(np.nan)
     np.testing.assert_allclose(covariance, numpy_covariance)
+
+    assert pandas_covariance_frame.columns.tolist() == variable_collection.names
 
     new_allocation_names = {variable_collection.name}
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)

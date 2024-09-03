@@ -100,6 +100,10 @@ class VariableCollection(SharedArray[np.float64]):
     def is_finite(self) -> bool:
         return bool(np.isfinite(self.to_numpy()).all())
 
+    @property
+    def names(self) -> list[str]:
+        return self.covariate_names + self.phenotype_names
+
     def __post_init__(self) -> None:
         if self.shape[1] != self.covariate_count + self.phenotype_count:
             raise ValueError(
