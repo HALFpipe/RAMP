@@ -146,7 +146,8 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
 
             if len(candidates) == 0:
                 raise MemoryError(
-                    f"No space left in shared memory buffer: {pformat(allocations)}"
+                    "No space left in shared memory buffer to allocate "
+                    f"{allocation_size} bytes: {pformat(allocations)}"
                 )
 
         start = min(candidates)[1]

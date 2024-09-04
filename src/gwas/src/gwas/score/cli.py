@@ -130,7 +130,7 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
 
     size: int | None = None
     if arguments.mem_gb is not None:
-        size = int(arguments.mem_gb * 2**30)
+        size = int(arguments.mem_gb * 2**30 * 0.9)
 
     with SharedWorkspace.create(size=size) as sw:
         try:
@@ -138,7 +138,7 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
 
             GwasCommand(arguments, output_directory, sw).run()
         except Exception as e:
-            logger.exception("Exception: %s", e, exc_info=True)
+            logger.exception("Exception: %s", e, exc_info=True, stack_info=True)
             if arguments.debug:
                 import pdb
 

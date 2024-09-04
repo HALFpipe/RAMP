@@ -184,18 +184,10 @@ class GwasCommand:
 
         # Load phenotypes and covariates
         base_variable_collection = self.get_variable_collection()
-        with threadpool_limits(limits=self.arguments.num_threads):
-            calc_covariance(
-                base_variable_collection,
-                self.output_directory / "covariance",
-                compression_methods[self.arguments.compression_method],
-                num_threads=self.arguments.num_threads,
-            )
         # Split into missing value chunks
         variable_collections: list[VariableCollection] = split_by_missing_values(
             base_variable_collection, self.variable_collection_prefix
         )
-        base_variable_collection.free()
         self.sw.squash()
         if len(variable_collections) == 0:
             raise ValueError(
@@ -220,9 +212,23 @@ class GwasCommand:
             self.arguments.kinship_r_squared_cutoff,
             num_threads=self.arguments.num_threads,
         )
-
         self.set_vcf_files(vcf_files)
 
+        for chromosome, vcf_file in self.vcf_by_chromosome.items():
+            if chromosome in self.selected_chromosomes:
+                continue
+            # We don't need these anymore, so free some memory
+            vcf_file.clear_allele_frequency_columns()
+        self.sw.squash()
+        with threadpool_limits(limits=self.arguments.num_threads):
+            calc_covariance(
+                base_variable_collection,
+                self.output_directory / "covariance",
+                compression_methods[self.arguments.compression_method],
+                num_threads=self.arguments.num_threads,
+            )
+        base_variable_collection.free()
+        self.sw.squash()
         return variable_collections
 
     def set_vcf_files(self, vcf_files: list[VCFFile]) -> None:
@@ -318,12 +324,6 @@ class GwasCommand:
     def run(self) -> None:
         logger.debug("Arguments are %s", pformat(vars(self.arguments)))
         variable_collections = self.setup_variable_collections()
-
-        for chromosome, vcf_file in self.vcf_by_chromosome.items():
-            if chromosome in self.selected_chromosomes:
-                continue
-            # We don't need these anymore, so free some memory
-            vcf_file.clear_allele_frequency_columns()
 
         for chromosome in tqdm(
             self.selected_chromosomes,
