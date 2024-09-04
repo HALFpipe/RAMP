@@ -49,10 +49,9 @@ class ZstdTextCompressionMethod(TextCompressionMethod):
     level: int
 
 
-zstd_high_text = ZstdTextCompressionMethod(suffix=".txt.zst", level=19)
 compression_methods: Mapping[str, CompressionMethod] = dict(
     zstd_text=ZstdTextCompressionMethod(suffix=".txt.zst", level=11),
-    zstd_high_text=zstd_high_text,
+    zstd_high_text=ZstdTextCompressionMethod(suffix=".txt.zst", level=19),
     zstd_ultra_text=ZstdTextCompressionMethod(suffix=".txt.zst", level=22),
     gzip_text=TextCompressionMethod(suffix=".txt.gz"),
     xzip_text=TextCompressionMethod(suffix=".txt.xz"),
@@ -62,7 +61,7 @@ compression_methods: Mapping[str, CompressionMethod] = dict(
     blosc2=Blosc2CompressionMethod(),
     parquet=ParquetCompressionMethod(),
 )
-default_compression_method_name: str = "zstd_high_text"
+default_compression_method_name: str = "zstd_text"
 default_compression_method: CompressionMethod = compression_methods[
     default_compression_method_name
 ]
