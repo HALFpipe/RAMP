@@ -3,10 +3,6 @@
 #include "_check.hpp"
 #include "_reader.hpp"
 
-class error_already_set : public std::exception
-{
-};
-
 struct StrReader : Reader<StrReader>
 {
     std::vector<PyObject *> tokens_;

@@ -7,6 +7,10 @@
 #define NPY_NO_DEPRECATED_API NPY_API_VERSION
 #include "numpy/ndarrayobject.h"
 
+class error_already_set : public std::exception
+{
+};
+
 inline std::optional<std::pair<uint32_t *, size_t>> CheckIndexArray(PyArrayObject *array)
 {
     if (PyArray_NDIM(array) != 1)

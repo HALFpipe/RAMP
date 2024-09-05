@@ -327,6 +327,7 @@ class TextFileArrayWriter(FileArrayWriter[ScalarType]):
             self.compressed_text_writer.close()
             self.file_handle = None
             self.compressed_text_writer = None
+        self.row_index = 0
 
     def write_header(self) -> None:
         if self.compressed_text_writer is None or self.file_handle is None:
@@ -361,14 +362,14 @@ class TextFileArrayWriter(FileArrayWriter[ScalarType]):
         self.file_handle.flush()
 
     def generate_row_prefixes(
-        self, row_start: int, row_stop: int
+        self, row_metadata: pd.DataFrame | None, row_count: int
     ) -> Iterator[bytes | None]:
-        if self.row_metadata is None:
-            for _ in range(row_start, row_stop):
+        if row_metadata is None:
+            for _ in range(row_count):
                 yield None
         else:
-            for row_index in range(row_start, row_stop):
-                metadata = self.row_metadata.iloc[row_index]
+            for row_index in range(row_count):
+                metadata = row_metadata.iloc[row_index]
 
                 if isinstance(metadata, pd.Series):
                     yield delimiter.join(map(to_str, metadata)).encode("utf-8")
@@ -376,19 +377,32 @@ class TextFileArrayWriter(FileArrayWriter[ScalarType]):
                     yield to_str(metadata).encode("utf-8")
 
     def write_values(
-        self,
-        value: npt.NDArray[ScalarType],
-        row_start: int,
-        row_stop: int,
+        self, value: npt.NDArray[ScalarType], row_start: int, row_stop: int
     ) -> None:
         if self.file_handle is None:
             raise RuntimeError("File is not open for writing")
 
         row_count = row_stop - row_start
+        arrays: list[npt.NDArray[ScalarType]] = [value[:row_count, :]]
+
+        row_metadata = self.row_metadata
+        if row_metadata is not None:
+            row_metadata = row_metadata.iloc[row_start:row_stop]
+            while np.issubdtype(
+                (array := row_metadata.iloc[:, -1].to_numpy(copy=False)).dtype,
+                self.dtype,
+            ):
+                logger.debug(
+                    f'Will write metadata column "{row_metadata.columns[-1]}" as array'
+                )
+                arrays.insert(0, array[:, np.newaxis])
+                row_metadata = row_metadata.iloc[:, :-1]
+
         write_float(
-            self.generate_row_prefixes(row_start, row_stop),
-            value[:row_count, :],
+            self.generate_row_prefixes(row_metadata, row_count),
+            arrays,
             self.file_handle.fileno(),
+            self.num_threads,
         )
 
     def __setitem__(

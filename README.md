@@ -87,7 +87,7 @@ micromamba create --name "gwas-protocol" \
   "mkl-include" "mkl" "c-blosc2" \
   "mypy" "pandas-stubs" "types-psutil" "types-pyyaml" "types-seaborn" "types-setuptools" "types-tqdm" \
   "pytest-benchmark" "pytest-cov" \
-  "cython" "gxx_linux-64>=13" "gcc_linux-64>=13" "sysroot_linux-64>=2.17" "zlib"
+  "cython" "gxx_linux-64>=13" "gcc_linux-64>=13" "sysroot_linux-64>=2.17" "zlib" "gdb"
 ```
 
 Finally, install the `gwas` package using the following command:

@@ -4,6 +4,7 @@ import sys
 import numpy as np
 import pandas as pd
 import pytest
+from pytest_benchmark.fixture import BenchmarkFixture
 from upath import UPath
 
 from gwas.compression.arr.base import (
@@ -16,6 +17,7 @@ from gwas.compression.arr.base import (
 from gwas.compression.arr.text import header_prefix
 from gwas.compression.pipe import CompressedTextReader
 from gwas.utils.threads import cpu_count
+from gwas.vcf.base import VCFFile
 
 try:
     import blosc2 as blosc2
@@ -90,3 +92,50 @@ def test_file_array(compression_method_name: str, tmp_path: UPath) -> None:
     indices = np.array([0, 1, 2], dtype=np.uint32)
     data = reader[indices, indices]
     assert np.allclose(data, 7)
+
+
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
+def test_write_float(vcf_file: VCFFile, tmp_path: UPath) -> None:
+    shape = (1000, 10000)
+    data_frame = vcf_file.vcf_variants.iloc[: shape[0], :]
+
+    array = np.random.rand(*shape)
+
+    writer = FileArray.create(
+        file_path=tmp_path / "test",
+        shape=shape,
+        dtype=np.float64,
+        compression_method=compression_methods["text"],
+        num_threads=cpu_count(),
+    )
+    writer.set_axis_metadata(0, data_frame)
+
+    with writer:
+        writer[:, :] = array
+
+
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
+def test_benchmark(
+    vcf_file: VCFFile, tmp_path: UPath, benchmark: BenchmarkFixture
+) -> None:
+    shape = (10000, 10000)
+    data_frame = vcf_file.vcf_variants.iloc[: shape[0], :]
+
+    array = np.random.rand(*shape)
+
+    writer = FileArray.create(
+        file_path=tmp_path / "test",
+        shape=shape,
+        dtype=np.float64,
+        compression_method=compression_methods["text"],
+        num_threads=cpu_count(),
+    )
+    writer.set_axis_metadata(0, data_frame)
+
+    def write():
+        with writer:
+            writer[:, :] = array
+
+    benchmark(write)

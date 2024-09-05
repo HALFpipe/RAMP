@@ -15,8 +15,9 @@ if debugging_symbols_requested:
     extra_compile_args.append("-Wall")
     extra_compile_args.append("-Werror")
     # extra_compile_args.append("-UNDEBUG")
-    # extra_compile_args.append("-O0")
-    extra_compile_args.append("-march=native")
+    # extra_compile_args.append("-U_FORTIFY_SOURCE")
+    # extra_compile_args.append("-O1")
+    # extra_compile_args.append("-march=native")
 
 
 setup(
@@ -95,7 +96,7 @@ setup(
             "gwas.compression.arr._write_float",
             ["src/gwas/compression/arr/_write_float.cpp"],
             include_dirs=[np.get_include()],
-            extra_compile_args=["-std=c++20", *extra_compile_args],
+            extra_compile_args=["-std=c++20", "-fopenmp", *extra_compile_args],
             extra_link_args=extra_link_args,
         ),
     ],

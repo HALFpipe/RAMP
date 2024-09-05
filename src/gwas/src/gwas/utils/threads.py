@@ -41,6 +41,7 @@ def apply_num_threads(
             f"inter_op_parallelism_threads={num_threads} "
             f"{xla_flags}"
         )
+    os.environ["OMP_WAIT_POLICY"] = "PASSIVE"
     os.environ["MKL_DYNAMIC"] = "FALSE"
     os.environ["XLA_FLAGS"] = xla_flags
     os.environ["JAX_PLATFORMS"] = "cpu"

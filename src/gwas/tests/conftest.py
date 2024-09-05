@@ -134,6 +134,8 @@ def vcf_files_by_size_and_chromosome(
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
 ) -> Mapping[str, dict[int | str, VCFFile]]:
+    num_threads = cpu_count()
+
     vcf_files_by_size_and_chromosome: dict[str, dict[int | str, VCFFile]] = {
         sample_size_label: dict() for sample_size_label in sample_sizes.keys()
     }
@@ -142,14 +144,13 @@ def vcf_files_by_size_and_chromosome(
         vcf_paths_by_chromosome,
     ) in vcf_paths_by_size_and_chromosome.items():
         vcf_paths = [vcf_paths_by_chromosome[c] for c in chromosomes]
+        cache_path = cache_path_by_size[sample_size_label]
         vcf_files = calc_vcf(
-            vcf_paths,
-            cache_path=cache_path_by_size[sample_size_label],
-            num_threads=cpu_count(),
-            sw=sw,
+            vcf_paths, cache_path=cache_path, num_threads=num_threads, sw=sw
         )
         for vcf_file in vcf_files:
-            vcf_file.clear_allele_frequency_columns()
+            if vcf_file.clear_allele_frequency_columns():
+                vcf_file.save_to_cache(cache_path, num_threads)
             request.addfinalizer(vcf_file.free)
             vcf_files_by_size_and_chromosome[sample_size_label][vcf_file.chromosome] = (
                 vcf_file
