@@ -206,17 +206,15 @@ class Calc(Worker):
                 )
                 logger.debug("Subtracting the rotated mean from the rotated genotypes")
                 sample_boolean_vector = self.ec.sample_boolean_vectors[i]
-                mean = genotypes.mean(
-                    axis=0,
-                    where=sample_boolean_vector[:, np.newaxis],
-                )
+                mean = genotypes.mean(axis=0, where=sample_boolean_vector[:, np.newaxis])
                 scipy.linalg.blas.dger(
-                    alpha=-1,
+                    alpha=-1.0,
                     x=eigenvector_matrix.sum(axis=0),
                     y=mean,
                     a=rotated_genotypes,
                     overwrite_a=True,
-                    overwrite_y=False,
+                    overwrite_x=True,
+                    overwrite_y=True,
                 )
                 if i == job_count - 1:
                     logger.debug("Allow the reader to read the next batch of variants")

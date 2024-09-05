@@ -1,7 +1,11 @@
+import tracemalloc
+
+import numpy as np
 import pytest
 
 from gwas.eig.base import Eigendecomposition
 from gwas.eig.collection import EigendecompositionCollection
+from gwas.log import logger
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.null_model.base import NullModelCollection
@@ -12,7 +16,7 @@ from gwas.vcf.base import VCFFile
 
 
 @pytest.mark.parametrize("chromosome", [22], indirect=True)
-@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["large"], indirect=True)
 def test_calc_worker(
     vcf_file: VCFFile,
     genotypes_array: SharedArray,
@@ -59,6 +63,9 @@ def test_calc_worker(
     t.read_count_queue.put(int(variant_count))
     t.read_count_queue.put(int(0))
 
+    tracemalloc.clear_traces()
+    tracemalloc.start()
+
     calc_worker = Calc(
         t,
         genotypes_array,
@@ -70,6 +77,23 @@ def test_calc_worker(
         num_threads=cpu_count(),
     )
     calc_worker.func()
+
+    snapshot = tracemalloc.take_snapshot()
+    tracemalloc.stop()
+
+    # Ensure that we did not leak memory
+    domain = np.lib.tracemalloc_domain
+    domain_filter = tracemalloc.DomainFilter(inclusive=True, domain=domain)
+    snapshot = snapshot.filter_traces([domain_filter])
+
+    size = 0
+    for trace in snapshot.traces:
+        size += trace.size
+        traceback = trace.traceback
+        logger.info(f"allocation size {trace.size}: {'\n'.join(traceback.format())}")
+    assert size == 0
+
+    tracemalloc.clear_traces()
 
     new_allocation_names = {
         test_rotated_genotypes_array.name,
