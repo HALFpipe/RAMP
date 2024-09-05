@@ -1,5 +1,5 @@
 from argparse import Namespace
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pprint import pformat
 from typing import Iterable, Mapping, Sequence
 
@@ -111,15 +111,17 @@ class GwasCommand:
 
     variable_collection_prefix: str = "variableCollection"
 
-    phenotype_paths: list[UPath] = field(init=False)
-    covariate_paths: list[UPath] = field(init=False)
+    phenotype_paths: list[UPath] | None = None
+    covariate_paths: list[UPath] | None = None
 
-    vcf_samples: list[str] = field(init=False)
-    vcf_by_chromosome: Mapping[int | str, VCFFile] = field(init=False)
-    tri_paths_by_chromosome: Mapping[int | str, UPath] = field(init=False)
+    vcf_samples: list[str] | None = None
+    vcf_by_chromosome: Mapping[int | str, VCFFile] | None = None
+    tri_paths_by_chromosome: Mapping[int | str, UPath] | None = None
 
     @property
     def chromosomes(self) -> Sequence[int | str]:
+        if self.vcf_by_chromosome is None:
+            raise ValueError
         return sorted(self.vcf_by_chromosome.keys(), key=chromosome_to_int)
 
     @property
@@ -130,6 +132,10 @@ class GwasCommand:
         return sorted(chromosomes, key=chromosome_to_int)
 
     def get_variable_collection(self) -> VariableCollection:
+        if self.phenotype_paths is None:
+            raise RuntimeError
+        if self.covariate_paths is None:
+            raise RuntimeError
         return VariableCollection.from_txt(
             self.phenotype_paths,
             self.covariate_paths,
@@ -141,6 +147,8 @@ class GwasCommand:
     def update_allele_frequencies(
         self, variable_collections: list[VariableCollection]
     ) -> None:
+        if self.vcf_by_chromosome is None:
+            raise RuntimeError
         # Update the VCF file allele frequencies based on variable collections
         for chromosome in tqdm(
             self.selected_chromosomes,
@@ -171,6 +179,8 @@ class GwasCommand:
             engine=self.arguments.vcf_engine,
         )
         self.set_vcf_files(vcf_files)
+        if self.vcf_by_chromosome is None:
+            raise RuntimeError
 
         # Update samples to only include those that are in all VCF files
         base_samples: set[str] = set.intersection(
@@ -178,7 +188,6 @@ class GwasCommand:
         )
         for vcf_file in vcf_files:
             vcf_file.set_samples(base_samples)
-
         # Ensure that we have the samples in the correct order
         self.vcf_samples = vcf_files[0].samples
 
@@ -232,13 +241,19 @@ class GwasCommand:
         return variable_collections
 
     def set_vcf_files(self, vcf_files: list[VCFFile]) -> None:
-        self.vcf_by_chromosome = {
-            vcf_file.chromosome: vcf_file for vcf_file in vcf_files
-        }
+        self.vcf_by_chromosome = dict()
+        for vcf_file in vcf_files:
+            logger.debug(
+                f"Loaded VCF file for chromosome {vcf_file.chromosome}: "
+                f'"{vcf_file.file_path}"'
+            )
+            self.vcf_by_chromosome[vcf_file.chromosome] = vcf_file
 
     def split_into_chunks(
         self, variable_collections: list[VariableCollection]
     ) -> list[list[VariableCollection]]:
+        if self.vcf_samples is None:
+            raise RuntimeError
         chunks: list[list[VariableCollection]] = list()
 
         # Get available memory
@@ -282,6 +297,11 @@ class GwasCommand:
     def run_chromosome(
         self, chromosome: int | str, variable_collections: list[VariableCollection]
     ) -> None:
+        if self.vcf_by_chromosome is None:
+            raise RuntimeError
+        if self.tri_paths_by_chromosome is None:
+            raise RuntimeError
+
         vcf_file = self.vcf_by_chromosome[chromosome]
         vcf_file.set_variants_from_cutoffs(
             minor_allele_frequency_cutoff=(
@@ -337,5 +357,7 @@ class GwasCommand:
             variable_collection.free()
 
     def free(self):
+        if self.vcf_by_chromosome is None:
+            return
         for vcf_file in self.vcf_by_chromosome.values():
             vcf_file.free()

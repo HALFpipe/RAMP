@@ -137,6 +137,7 @@ def test_smoke(
 
         request.addfinalizer(a.free)
 
+    assert command.vcf_by_chromosome is not None
     for v in command.vcf_by_chromosome.values():
         new_allocation_names.update(v.shared_vcf_variants.allocation_names)
 
@@ -145,6 +146,7 @@ def test_smoke(
 
     command.run()
 
+    assert command.vcf_by_chromosome is not None
     for v in command.vcf_by_chromosome.values():
         new_allocation_names.update(v.shared_vcf_variants.allocation_names)
 

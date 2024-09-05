@@ -246,10 +246,17 @@ class VCFFile(AbstractContextManager):
 
             vcf_file = HtslibVCFFile(file_path, sw)
         else:
-            raise ValueError
+            raise NotImplementedError(f"Unsupported engine: {engine}")
 
         if samples is not None:
             vcf_file.set_samples(samples)
+
+        if file_path.name.startswith("chr"):
+            if not file_path.name.startswith(f"chr{vcf_file.chromosome}"):
+                raise ValueError(
+                    f'Found misleading file name: "{file_path.name}" '
+                    f'contains data for chromosome "{vcf_file.chromosome}"'
+                )
 
         return vcf_file
 
