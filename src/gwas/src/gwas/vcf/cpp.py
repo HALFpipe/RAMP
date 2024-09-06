@@ -9,7 +9,6 @@ from ..compression.arr._read_float import (
     run_vcf_float_reader,
 )
 from ..mem.wkspace import SharedWorkspace
-from ..utils.genetics import chromosome_from_int
 from .base import VCFFileReader
 from .variant import Variant
 
@@ -32,11 +31,7 @@ class CppVCFFile(VCFFileReader):
             )
         self.shared_vcf_variants = self.make_shared_data_frame(vcf_variants, sw)
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
-
-        chromosome_int_set = set(self.vcf_variants["chromosome_int"])
-        if len(chromosome_int_set) != 1:
-            raise ValueError("Inconsistent chromosomes across variants.")
-        self.chromosome = chromosome_from_int(chromosome_int_set.pop())
+        self.update_chromosome()
 
         format_str_set = set(self.vcf_variants["format_str"])
         if len(format_str_set) != 1:

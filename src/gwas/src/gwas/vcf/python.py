@@ -7,7 +7,6 @@ from upath import UPath
 from gwas.mem.wkspace import SharedWorkspace
 
 from ..log import logger
-from ..utils.genetics import chromosome_from_int
 from .base import VCFFileReader
 from .variant import Variant
 
@@ -47,10 +46,7 @@ class PyVCFFile(VCFFileReader):
         self.shared_vcf_variants = self.make_shared_data_frame(vcf_variants, sw)
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
 
-        chromosome_int_set = set(self.vcf_variants["chromosome_int"])
-        if len(chromosome_int_set) != 1:
-            raise ValueError("Inconsistent chromosomes across variants.")
-        self.chromosome = chromosome_from_int(chromosome_int_set.pop())
+        self.update_chromosome()
 
     def __enter__(self) -> IO[str]:
         self.variant_index = 0

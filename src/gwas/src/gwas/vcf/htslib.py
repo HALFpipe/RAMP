@@ -45,6 +45,7 @@ class HtslibVCFFile(VCFFile):
 
         self.shared_vcf_variants = self.make_shared_data_frame(variants, sw)
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
+        self.update_chromosome()
 
     def read(self, dosages: npt.NDArray[np.float64]) -> None:
         if dosages.size == 0:

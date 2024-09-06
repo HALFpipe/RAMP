@@ -15,7 +15,7 @@ from ..compression.pipe import CompressedTextReader
 from ..log import logger
 from ..mem.data_frame import SharedDataFrame
 from ..mem.wkspace import SharedWorkspace
-from ..utils.genetics import chromosome_to_int, make_variant_mask
+from ..utils.genetics import chromosome_from_int, chromosome_to_int, make_variant_mask
 from ..utils.multiprocessing import IterationOrder, make_pool_or_null_context
 from .variant import Variant
 
@@ -287,6 +287,12 @@ class VCFFile(AbstractContextManager):
                 continue
             data_frame[column] = data_frame[column].astype("category")
         return data_frame
+
+    def update_chromosome(self) -> None:
+        chromosome_int_set = set(self.vcf_variants["chromosome_int"])
+        if len(chromosome_int_set) != 1:
+            raise ValueError("Inconsistent chromosomes across variants.")
+        self.chromosome = chromosome_from_int(chromosome_int_set.pop())
 
 
 class VCFFileReader(VCFFile, CompressedTextReader):
