@@ -321,7 +321,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             dict_bytes = pickle.dumps(allocations)
 
             if len(dict_bytes) > dict_size:
-                raise ValueError
+                raise ValueError("Allocations dictionary size exceeds reserved space")
 
             self.buf[: len(dict_bytes)] = dict_bytes
 
@@ -331,7 +331,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         os.close(self.fd)
 
     @classmethod
-    def create(cls, size: int | None = None, dict_size: int = 2**20) -> Self:
+    def create(cls, size: int | None = None, dict_size: int = 2**21) -> Self:
         """Creates a shared workspace that is stored in an anonymous file,
         allocated via `memfd_create`. Adapted from
         https://github.com/ska-sa/katgpucbf/blob/main/src/katgpucbf/dsim/shared_array.py
@@ -339,7 +339,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         Args:
             size (int | None, optional): Size to allocate in bytes. Defaults to None.
             dict_size (int, optional): Size to reserve for the allocations dictionary.
-                Defaults to 2**20.
+                Defaults to 2**21 (2 megabytes).
 
         Returns:
             SharedWorkspace: _description_

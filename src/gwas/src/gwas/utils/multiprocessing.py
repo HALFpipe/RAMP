@@ -286,6 +286,8 @@ def get_lock_name(lock: RLock) -> str:
 def get_processes_and_num_threads(
     num_threads: int, count: int, capacity: int
 ) -> tuple[int, int]:
+    if capacity < 1:
+        capacity = 1
     processes = 2 ** int(np.log2(capacity))
     processes = min((processes, count, capacity, num_threads))
     num_threads_per_process = num_threads // processes
