@@ -94,8 +94,20 @@ jobs:
       - name: Patch docker2singularity
         shell: bash
         run: |
-          wget -qO /tmp/docker2singularity.patch https://gist.githubusercontent.com/HippocampusGirl/e2c2166cbdc71e11b75380d34448b3f3/raw
-          patch /docker2singularity.sh /tmp/docker2singularity.patch
+          space=" "
+          patch <<EOF
+          --- docker2singularity.sh
+          +++ docker2singularity.sh
+          @@ -314,6 +314,8 @@
+          echo "(8/10) Stopping and removing the container..."
+          docker stop \$container_id >> /dev/null
+          docker rm \$container_id >> /dev/null
+          +docker container prune --force >> /dev/null
+          +docker image prune --all --force >> /dev/null
+          ${space}
+          # Build a final image from the sandbox
+          echo "(9/10) Building \${image_format} container..."
+          EOF
 
       - name: Convert to Singularity
         shell: bash
