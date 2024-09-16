@@ -1,11 +1,11 @@
 
 package:
   name: upload
-  version: 0.4.1
+  version: 0.5.5
 
 source:
-  url: "https://github.com/hippocampusgirl/upload/archive/v0.4.1.tar.gz"
-  sha256: 395f336fa2dc913e84899f1f1fee8a2f57b650f4b6536c079ddba8ca48af7e62
+  url: "https://github.com/hippocampusgirl/upload/archive/v0.5.5.tar.gz"
+  sha256: 7def6f41395fef10b931181d245d74762119723dd795eb3ebeb530adeef24c3d
 
 build:
   noarch: generic
@@ -14,12 +14,12 @@ requirements:
   build:
     - "{{ compiler('c') }}"
     - "{{ compiler('cxx') }}"
-    - "nodejs<=21"
+    - nodejs
     - make
   host:
-    - "nodejs<=21"
+    - nodejs
   run:
-    - "nodejs<=21"
+    - nodejs
 
 test:
   requires:

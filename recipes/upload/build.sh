@@ -13,7 +13,7 @@ export npm_config_build_from_source=true
 # Ignore custom configuration on build machine
 export NPM_CONFIG_USERCONFIG=/tmp/nonexistentrc
 
-npm install
+npm clean-install
 npm run build
 packed=$(npm pack)
 npm install --global "${packed}"
