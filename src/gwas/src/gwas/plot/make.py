@@ -185,7 +185,7 @@ class PlotGenerator:
 
             figure.savefig(plot_path)
             plt.close(figure)
-        except ValueError as e:
+        except Exception as e:
             logger.error(
                 f"Error while plotting {job.name} for {position.size} variants with "
                 f"log_p_value of shape {log_p_value.shape}",

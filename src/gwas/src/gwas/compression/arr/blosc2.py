@@ -38,8 +38,9 @@ class Blosc2FileArrayWriter(FileArrayWriter[ScalarType]):
     array: blosc2.NDArray | None = None
 
     def __enter__(self) -> Self:
-        self.array = blosc2.empty(
+        self.array = blosc2.full(
             shape=self.shape,
+            fill_value=np.nan,
             urlpath=str(self.file_path),
             dtype=self.dtype,
             cparams=dict(**base_cparams, nthreads=self.num_threads),

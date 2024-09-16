@@ -29,17 +29,17 @@ class Phenotype:
 
 
 def get_chromosome_metadata(
-    input_directory: UPath, chromosome: int | str, num_threads: int
+    input_directory: UPath, chromosome: int | str, num_threads: int = 1
 ) -> tuple[ScoreFile, pd.DataFrame, list[str]] | None:
-    score_path = input_directory / f"chr{chromosome}.score.txt.zst"
-    if not score_path.exists():
-        message = f"Missing score file for chromosome {chromosome} at {score_path}"
+    base_path = input_directory / f"chr{chromosome}.score"
+    array_proxy = FileArray.from_file(base_path, np.float64, num_threads)
+    if not array_proxy.file_path.exists():
+        message = f"Missing score file for chromosome {chromosome} at {base_path}"
         if chromosome == "X":
             logger.warning(message)
         else:
             raise ValueError(message)
 
-    array_proxy = FileArray.from_file(score_path, np.float64, num_threads)
     row_metadata, column_names = array_proxy.row_metadata, array_proxy.column_names
 
     if row_metadata is None or column_names is None:
@@ -67,7 +67,7 @@ def get_metadata(
     column_names: list[str] | None = None
     variant_metadata: list[pd.DataFrame] = list()
 
-    get = partial(get_chromosome_metadata, input_directory)
+    get = partial(get_chromosome_metadata, input_directory, num_threads=num_threads)
 
     chromosomes = chromosomes_list()
     pool, iterator = make_pool_or_null_context(
@@ -79,7 +79,9 @@ def get_metadata(
     )
 
     with pool:
-        for result in tqdm(iterator, desc="loading metadata", unit="chromosomes"):
+        for result in tqdm(
+            iterator, desc="loading metadata", unit="chromosomes", total=len(chromosomes)
+        ):
             if result is None:
                 continue
             score_file, chromosome_variant_metadata, chromosome_column_names = result

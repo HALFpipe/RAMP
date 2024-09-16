@@ -149,7 +149,7 @@ class DataLoader:
 
     chromosome_array: SharedArray[np.int64] = field(init=False)
     position_array: SharedArray[np.int64] = field(init=False)
-    data_array: SharedArray = field(init=False)
+    data_array: SharedArray[np.float64] = field(init=False)
     mask_array: SharedArray[np.bool_] = field(init=False)
 
     variant_count: int = field(init=False)
@@ -174,7 +174,8 @@ class DataLoader:
         self.position_array = self.sw.alloc(
             "position", self.variant_count, dtype=np.int64
         )
-        self.position[:] = offset[self.chromosome - 1] + self.variant_metadata.position
+        chromosome_positions = self.variant_metadata.position.to_numpy(dtype=int)
+        self.position[:] = offset[self.chromosome - 1] + chromosome_positions
 
     def init_data_array(self) -> None:
         row_index = 0
@@ -190,7 +191,7 @@ class DataLoader:
         self.phenotype_count = min(len(self.phenotypes), max_phenotype_count)
 
         self.data_array = self.sw.alloc(
-            "data", copies * self.phenotype_count, self.variant_count
+            "data", copies * self.phenotype_count, self.variant_count, dtype=np.float64
         )
         self.mask_array = self.sw.alloc(
             "mask_array", self.phenotype_count, self.variant_count, dtype=np.bool_

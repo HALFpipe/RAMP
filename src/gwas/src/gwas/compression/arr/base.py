@@ -71,6 +71,10 @@ def compression_method_from_file(file_path: UPath) -> CompressionMethod:
     for compression_method in compression_methods.values():
         if str(file_path).endswith(compression_method.suffix):
             return compression_method
+    for compression_method in compression_methods.values():
+        with_suffix = file_path.parent / f"{file_path.name}{compression_method.suffix}"
+        if with_suffix.is_file():
+            return compression_method
     return default_compression_method
 
 
@@ -157,6 +161,11 @@ class FileArray(Generic[ScalarType]):
         cls, file_path: UPath, dtype: Type[ScalarType], num_threads: int
     ) -> "FileArrayReader":
         compression_method = compression_method_from_file(file_path)
+        if not file_path.is_file():
+            if not file_path.name.endswith(compression_method.suffix):
+                file_path = (
+                    file_path.parent / f"{file_path.name}{compression_method.suffix}"
+                )
         if isinstance(compression_method, TextCompressionMethod):
             from .text import TextFileArrayReader
 
