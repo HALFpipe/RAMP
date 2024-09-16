@@ -99,14 +99,14 @@ jobs:
           --- docker2singularity.sh
           +++ docker2singularity.sh
           @@ -314,6 +314,8 @@
-          echo "(8/10) Stopping and removing the container..."
-          docker stop \$container_id >> /dev/null
-          docker rm \$container_id >> /dev/null
+          ${space}echo "(8/10) Stopping and removing the container..."
+          ${space}docker stop \$container_id >> /dev/null
+          ${space}docker rm \$container_id >> /dev/null
           +docker container prune --force >> /dev/null
           +docker image prune --all --force >> /dev/null
           ${space}
-          # Build a final image from the sandbox
-          echo "(9/10) Building \${image_format} container..."
+          ${space}# Build a final image from the sandbox
+          ${space}echo "(9/10) Building \${image_format} container..."
           EOF
 
       - name: Convert to Singularity
