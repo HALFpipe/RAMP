@@ -95,7 +95,7 @@ jobs:
         shell: bash
         run: |
           space=" "
-          patch <<EOF
+          patch /docker2singularity.sh <<EOF
           --- docker2singularity.sh
           +++ docker2singularity.sh
           @@ -314,6 +314,8 @@
