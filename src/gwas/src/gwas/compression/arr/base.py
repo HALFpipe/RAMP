@@ -75,7 +75,9 @@ def compression_method_from_file(file_path: UPath) -> CompressionMethod:
         with_suffix = file_path.parent / f"{file_path.name}{compression_method.suffix}"
         if with_suffix.is_file():
             return compression_method
-    return default_compression_method
+    raise FileNotFoundError(
+        f'Could not find a file with a valid file array suffix for "{file_path}"'
+    )
 
 
 ScalarType = TypeVar("ScalarType", bound=np.generic)

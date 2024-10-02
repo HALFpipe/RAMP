@@ -37,7 +37,7 @@ def get_file_path(output_directory: UPath, label: str) -> UPath:
 
 
 def plot_manhattan(
-    chromosome_int: npt.NDArray[np.int64],
+    chromosome_int: npt.NDArray[np.uint8],
     position: npt.NDArray[np.int64],
     log_p_value: npt.NDArray[np.float64],
     axes: Axes,
@@ -121,7 +121,7 @@ def plot_q_q(
 
 @dataclass
 class PlotGenerator:
-    chromosome_array: SharedArray[np.int64]
+    chromosome_array: SharedArray[np.uint8]
     position_array: SharedArray[np.int64]
     p_value_array: SharedArray[np.float64]
     mask_array: SharedArray[np.bool_]

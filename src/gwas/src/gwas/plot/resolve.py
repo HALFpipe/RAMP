@@ -8,9 +8,12 @@ from upath import UPath
 
 from ..compression.arr.base import FileArray, FileArrayReader
 from ..log import logger
+from ..mem.data_frame import SharedDataFrame, concat
+from ..mem.wkspace import SharedWorkspace
 from ..summary import SummaryCollection
 from ..utils.genetics import chromosomes_list
 from ..utils.multiprocessing import IterationOrder, make_pool_or_null_context
+from ..vcf.base import VCFFile, base_allele_frequency_columns
 
 
 @dataclass(frozen=True)
@@ -29,8 +32,11 @@ class Phenotype:
 
 
 def get_chromosome_metadata(
-    input_directory: UPath, chromosome: int | str, num_threads: int = 1
-) -> tuple[ScoreFile, pd.DataFrame, list[str]] | None:
+    input_directory: UPath,
+    sw: SharedWorkspace,
+    chromosome: int | str,
+    num_threads: int = 1,
+) -> tuple[ScoreFile, SharedDataFrame, list[str]] | None:
     base_path = input_directory / f"chr{chromosome}.score"
     array_proxy = FileArray.from_file(base_path, np.float64, num_threads)
     if not array_proxy.file_path.exists():
@@ -50,24 +56,44 @@ def get_chromosome_metadata(
         else:
             raise ValueError(message)
 
-    chromosome_variant_metadata = pd.DataFrame(row_metadata)
     score_file = ScoreFile(
         chromosome=chromosome,
         reader=array_proxy,
-        variant_count=len(chromosome_variant_metadata.index),
+        variant_count=len(row_metadata.index),
     )
 
-    return score_file, chromosome_variant_metadata, column_names
+    update_data_frame_types(row_metadata)
+    shared_row_metadata = SharedDataFrame.from_pandas(row_metadata, sw)
+
+    return score_file, shared_row_metadata, column_names
+
+
+def update_data_frame_types(data_frame: pd.DataFrame) -> None:
+    VCFFile.update_data_frame_types(data_frame)
+
+    if "is_imputed" in data_frame.columns:
+        data_frame["is_imputed"] = data_frame["is_imputed"].astype(np.bool_)
+
+    float_columns: set[str] = {"r_squared"}
+    for a in base_allele_frequency_columns:
+        for column in data_frame.columns:
+            if not column.endswith(a):
+                continue
+            float_columns.add(column)
+    for column in float_columns:
+        if column not in data_frame.columns:
+            continue
+        data_frame[column] = data_frame[column].astype(np.float64)
 
 
 def get_metadata(
-    input_directory: UPath, num_threads: int = 1
-) -> tuple[list[str], list[ScoreFile], pd.DataFrame]:
+    input_directory: UPath, sw: SharedWorkspace, num_threads: int = 1
+) -> tuple[list[str], list[ScoreFile], SharedDataFrame]:
     score_files: list[ScoreFile] = []
     column_names: list[str] | None = None
-    variant_metadata: list[pd.DataFrame] = list()
+    variant_metadata: list[SharedDataFrame] = list()
 
-    get = partial(get_chromosome_metadata, input_directory, num_threads=num_threads)
+    get = partial(get_chromosome_metadata, input_directory, sw, num_threads=num_threads)
 
     chromosomes = chromosomes_list()
     pool, iterator = make_pool_or_null_context(
@@ -96,7 +122,10 @@ def get_metadata(
 
     if column_names is None:
         raise ValueError("No column names were found for the score files")
-    return column_names, score_files, pd.concat(variant_metadata)
+
+    shared_data_frame = concat(variant_metadata)
+
+    return column_names, score_files, shared_data_frame
 
 
 def get_variable_collection_names(
@@ -115,8 +144,11 @@ def get_variable_collection_names(
 
 
 def resolve_score_files(
-    input_directory: UPath, phenotype_names: list[str], num_threads: int = 1
-) -> tuple[list[Phenotype], list[ScoreFile], pd.DataFrame]:
+    input_directory: UPath,
+    phenotype_names: list[str],
+    sw: SharedWorkspace,
+    num_threads: int = 1,
+) -> tuple[list[Phenotype], list[ScoreFile], SharedDataFrame]:
     """
     Verifies that each directory contains either all required .score.txt.zst files
     for chromosomes 1 to 22 and optionally X.
@@ -139,16 +171,8 @@ def resolve_score_files(
         raise NotADirectoryError(f"Could not find input directory: {input_directory}")
 
     column_names, score_files, variant_metadata = get_metadata(
-        input_directory, num_threads=num_threads
+        input_directory, sw, num_threads=num_threads
     )
-
-    for column in [
-        "chromosome_int",
-        "reference_allele",
-        "alternate_allele",
-        "format_str",
-    ]:
-        variant_metadata[column] = variant_metadata[column].astype("category")
 
     variable_collection_names = get_variable_collection_names(input_directory)
 

@@ -26,7 +26,7 @@ def plot(arguments: Namespace, output_directory: UPath, sw: SharedWorkspace) -> 
     ]
 
     phenotypes, score_files, variant_metadata = resolve_score_files(
-        input_directory, phenotype_names, num_threads=num_threads
+        input_directory, phenotype_names, sw, num_threads=num_threads
     )
     data_loader = DataLoader(
         phenotypes=phenotypes,

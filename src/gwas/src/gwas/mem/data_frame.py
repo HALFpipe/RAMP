@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Hashable, Iterable, Self, override
+from typing import Any, Hashable, Iterable, Self, Sequence, override
 
 import numpy as np
 import pandas as pd
@@ -13,6 +13,10 @@ from .wkspace import SharedWorkspace
 class SharedSeries:
     name: Hashable | None
     values: SharedArray
+
+    @property
+    def sw(self) -> SharedWorkspace:
+        return self.values.sw
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -41,6 +45,20 @@ class SharedSeries:
             return SharedString._from_pandas(series, sw)
         else:
             return SharedSeries._from_pandas(series, sw)
+
+    @classmethod
+    def _concat(cls, series: Iterable[pd.Series]) -> pd.Series:
+        return pd.concat(series, copy=False)
+
+    @classmethod
+    def concat(cls, shared_series: Sequence[Self]) -> "SharedSeries":
+        sw = shared_series[0].sw
+        names = {s.name for s in shared_series}
+        (name,) = names
+
+        series = cls._concat((s.to_pandas() for s in shared_series))
+        series.name = name
+        return cls.from_pandas(series, sw)
 
 
 @dataclass
@@ -125,11 +143,16 @@ class SharedCategorical(SharedSeries):
             categories = Categories.from_pandas(series, sw)
         return cls(series.name, values, categories)
 
+    @override
+    @classmethod
+    def _concat(cls, series: Iterable[pd.Series]) -> pd.Series:
+        categoricals = [pd.Categorical(s) for s in series]
+        return pd.Series(pd.api.types.union_categoricals(categoricals))
+
 
 @dataclass
 class SharedDataFrame:
     columns: list[SharedSeries]
-    sw: SharedWorkspace
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -146,6 +169,20 @@ class SharedDataFrame:
             return set()
         return set.union(*(column.allocation_names for column in self.columns))
 
+    def __getitem__(self, key: str) -> SharedSeries:
+        for column in self.columns:
+            if column.name == key:
+                return column
+        raise KeyError(key)
+
+    def __delitem__(self, key: str) -> None:
+        for i, column in enumerate(self.columns):
+            if column.name == key:
+                column.free()
+                self.columns.pop(i)
+                return
+        raise KeyError(key)
+
     def free(self) -> None:
         for column in self.columns:
             column.free()
@@ -159,4 +196,19 @@ class SharedDataFrame:
         columns: list[SharedSeries] = list()
         for _, series in data_frame.items():
             columns.append(SharedSeries.from_pandas(series, sw))
-        return cls(columns, sw)
+        return cls(columns)
+
+
+def concat(shared_data_frames: Iterable[SharedDataFrame]) -> SharedDataFrame:
+    c = (shared_data_frame.columns for shared_data_frame in shared_data_frames)
+    column_groups: list[tuple[SharedSeries, ...]] = list(zip(*c, strict=True))
+
+    columns: list[SharedSeries] = list()
+    for column_group in column_groups:
+        if len(column_group) == 0:
+            continue
+
+        s = column_group[0]
+        columns.append(s.concat(column_group))
+
+    return SharedDataFrame(columns)

@@ -2,9 +2,10 @@ from dataclasses import dataclass, field
 from typing import Iterator
 
 import numpy as np
-import pandas as pd
 from numpy import typing as npt
 from tqdm.auto import tqdm
+
+from gwas.mem.data_frame import SharedDataFrame
 
 from ..compression.arr.base import FileArrayReader
 from ..log import logger
@@ -139,7 +140,7 @@ copies: int = 2  # We need to store u_stat and v_stat
 class DataLoader:
     phenotypes: list[Phenotype]
     score_files: list[ScoreFile]
-    variant_metadata: pd.DataFrame
+    variant_metadata: SharedDataFrame | None
     sw: SharedWorkspace
 
     r_squared_cutoff: float
@@ -147,7 +148,7 @@ class DataLoader:
 
     num_threads: int = 1
 
-    chromosome_array: SharedArray[np.int64] = field(init=False)
+    chromosome_array: SharedArray[np.uint8] = field(init=False)
     position_array: SharedArray[np.int64] = field(init=False)
     data_array: SharedArray[np.float64] = field(init=False)
     mask_array: SharedArray[np.bool_] = field(init=False)
@@ -157,25 +158,12 @@ class DataLoader:
     row_offsets: list[int] = field(init=False)
 
     @property
-    def chromosome(self) -> npt.NDArray[np.int64]:
+    def chromosome(self) -> npt.NDArray[np.uint8]:
         return self.chromosome_array.to_numpy()
-
-    def init_chromosome_array(self) -> None:
-        self.chromosome_array = self.sw.alloc(
-            "chromosome", self.variant_count, dtype=np.int64
-        )
-        self.chromosome[:] = self.variant_metadata.chromosome_int
 
     @property
     def position(self) -> npt.NDArray[np.int64]:
         return self.position_array.to_numpy()
-
-    def init_position_array(self) -> None:
-        self.position_array = self.sw.alloc(
-            "position", self.variant_count, dtype=np.int64
-        )
-        chromosome_positions = self.variant_metadata.position.to_numpy(dtype=int)
-        self.position[:] = offset[self.chromosome - 1] + chromosome_positions
 
     def init_data_array(self) -> None:
         row_index = 0
@@ -198,10 +186,17 @@ class DataLoader:
         )
 
     def __post_init__(self) -> None:
-        self.variant_count = len(self.variant_metadata.index)
+        if self.variant_metadata is None:
+            raise ValueError("Variant metadata is required to initialize data loader")
 
-        self.init_chromosome_array()
-        self.init_position_array()
+        self.chromosome_array = self.variant_metadata["chromosome_int"].values  # noqa: PD011
+
+        self.variant_count, _ = self.variant_metadata.shape
+        variant_metadata = self.variant_metadata.to_pandas()
+
+        sw = self.sw
+        self.position_array = sw.alloc("position", self.variant_count, dtype=np.int64)
+        self.position[:] = offset[self.chromosome - 1] + variant_metadata.position
         self.init_data_array()
 
     def free(self) -> None:
@@ -214,13 +209,16 @@ class DataLoader:
         self,
         chunk: list[Phenotype],
     ) -> Iterator[PlotJob]:
+        if self.variant_metadata is None:
+            raise ValueError("Variant metadata is required to generate chunks")
+
         mask = self.mask_array.to_numpy().transpose()
         for i, phenotype in enumerate(chunk):
             mask[:, i] = make_variant_mask(
                 self.variant_metadata[
                     f"{phenotype.variable_collection_name}_alternate_allele_frequency"
-                ],
-                self.variant_metadata.r_squared,
+                ].to_pandas(),
+                self.variant_metadata["r_squared"].to_pandas(),
                 self.minor_allele_frequency_cutoff,
                 self.r_squared_cutoff,
             )
