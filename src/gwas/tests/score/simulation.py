@@ -15,10 +15,15 @@ from ..conftest import DirectoryFactory
 minor_allele_frequency_cutoff: float = 0.001
 causal_variant_count: int = 1000
 heritability: float = 0.6
-simulation_count: int = 6
+base_simulation_count: int = 6
 covariate_count: int = 4
 missing_value_rate: float = 0.05
 missing_value_pattern_count: int = 3
+
+
+@pytest.fixture(scope="session", params=[base_simulation_count])
+def simulation_count(request: pytest.FixtureRequest) -> int:
+    return request.param
 
 
 @pytest.fixture(scope="session")
@@ -53,13 +58,14 @@ def simulation(
     sample_size: int,
     bfile_path: UPath,
     pfile_paths: list[UPath],
+    simulation_count: int,
 ) -> SimulationResult:
     """
     This needs a lot of memory, so we do this before we allocate the shared workspace
     """
     tmp_path = directory_factory.get("variables", sample_size)
 
-    simulation_path = tmp_path / "simulation"
+    simulation_path = tmp_path / f"simulation.{simulation_count}"
 
     variant_ids = get_pfile_variant_ids(pfile_paths)
     return simulate(

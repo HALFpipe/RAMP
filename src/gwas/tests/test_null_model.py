@@ -124,7 +124,3 @@ def test_collection(sw: SharedWorkspace, request: FixtureRequest) -> None:
     for i in range(sample_count):
         np.testing.assert_array_almost_equal(nmc.halfway_scaled_residuals[i, :], a)
         np.testing.assert_array_almost_equal(nmc.variance[i, :], a)
-
-
-def test_apply():
-    pass

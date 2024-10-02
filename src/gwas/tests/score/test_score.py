@@ -23,7 +23,6 @@ from gwas.vcf.base import VCFFile
 from ..utils import check_bias
 from .conftest import RmwScore
 from .rmw_debug import RmwDebug
-from .simulation import simulation_count
 
 
 @pytest.fixture(scope="module")
@@ -112,6 +111,7 @@ def test_genotypes_array(
     genotypes_array: SharedArray,
     variable_collections: list[VariableCollection],
     rmw_score: RmwScore,
+    simulation_count: int,
 ) -> None:
     rmw = rmw_score.array
     genotypes = genotypes_array.to_numpy()

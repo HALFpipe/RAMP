@@ -67,8 +67,8 @@ def simulate(
     missing_value_pattern_count: int,
     simulation_path: UPath,
 ) -> SimulationResult:
-    phen_path = simulation_path.with_suffix(".phen")
-    par_path = simulation_path.with_suffix(".par")
+    phen_path = simulation_path.parent / f"{simulation_path.name}.phen"
+    par_path = simulation_path.parent / f"{simulation_path.name}.par"
 
     if not phen_path.is_file() or not par_path.is_file():
         random.seed(seed)

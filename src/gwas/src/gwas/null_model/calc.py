@@ -97,10 +97,11 @@ def apply(optimize_job: OptimizeJob) -> int:
         )
 
     with context:
-        for phenotype_index in optimize_job.phenotype_indices:
-            rotated_phenotype = rotated_phenotypes[:, phenotype_index, jnp.newaxis]
+        for i, phenotype_index in enumerate(optimize_job.phenotype_indices):
+            rotated_phenotype = rotated_phenotypes[:, i, jnp.newaxis]
             o: OptimizeInput = (eigenvalues, rotated_covariates, rotated_phenotype)
-            optimize_job.nm.put(phenotype_index, ml.get_null_model_result(o))
+            result = ml.get_null_model_result(o)
+            optimize_job.nm.put(phenotype_index, result)
 
     return len(optimize_job.phenotype_indices)
 

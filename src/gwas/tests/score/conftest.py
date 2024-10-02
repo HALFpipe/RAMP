@@ -37,6 +37,7 @@ from gwas.vcf.base import VCFFile
 from ..conftest import DirectoryFactory
 from .rmw_debug import rmw_debug
 from .simulation import (
+    base_simulation_count,
     bfile_path,
     covariate_count,
     missing_value_pattern_count,
@@ -45,7 +46,7 @@ from .simulation import (
     simulation_count,
 )
 
-pytest_fixtures = [bfile_path, pfile_paths, simulation, rmw_debug]
+pytest_fixtures = [simulation_count, bfile_path, pfile_paths, simulation, rmw_debug]
 
 
 @pytest.fixture(scope="session")
@@ -53,7 +54,7 @@ def other_chromosomes(chromosome: int | str) -> list[str | int]:
     return sorted(chromosomes_set() - {chromosome, "X"}, key=chromosome_to_int)
 
 
-@pytest.fixture(scope="session", params=list(range(simulation_count)))
+@pytest.fixture(scope="session", params=list(range(base_simulation_count)))
 def phenotype_index(request: pytest.FixtureRequest) -> int:
     i = request.param
     assert isinstance(i, int)
@@ -65,6 +66,7 @@ def variable_collections(
     simulation: SimulationResult,
     sw: SharedWorkspace,
     request: pytest.FixtureRequest,
+    simulation_count: int,
 ) -> list[VariableCollection]:
     allocation_names = set(sw.allocations.keys())
     new_allocation_names: set[str] = set()

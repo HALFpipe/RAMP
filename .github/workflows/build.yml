@@ -128,9 +128,7 @@ jobs:
           DIGITALOCEAN_REGION: ${{ secrets.DIGITALOCEAN_REGION }}
           DIGITALOCEAN_SPACE_NAME: ${{ secrets.DIGITALOCEAN_SPACE_NAME }}
         run: |
-          apk add python3  py3-pip
-          pip3 install --upgrade pip
-          pip3 install s3cmd
+          apk add s3cmd
           s3cmd --stop-on-error \
             --ssl --no-encrypt \
             --access_key="${DIGITALOCEAN_ACCESS_KEY}" \

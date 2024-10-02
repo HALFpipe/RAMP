@@ -47,32 +47,28 @@ class NullModelCollection(SharedArray[np.float64]):
 
     methods: ClassVar[list[str]] = ["fastlmm", "pml", "mpl", "reml", "ml"]
 
+    def sub_array(self, start: int, shape: tuple[int, ...]) -> npt.NDArray[np.float64]:
+        size = np.prod(shape)
+        array = self.to_numpy()[start : start + size]
+        return array.reshape(shape)
+
     @property
     def per_phenotype_values(self) -> npt.NDArray[np.float64]:
         start = 0
         shape = (self.phenotype_count, 4)
-        size = np.prod(shape)
-
-        array = self.to_numpy()[start : start + size]
-        return array.reshape(shape)
+        return self.sub_array(start, shape)
 
     @property
     def per_covariate_values(self) -> npt.NDArray[np.float64]:
         start = self.phenotype_count * 4
         shape = (self.phenotype_count, self.covariate_count, 2)
-        size = np.prod(shape)
-
-        array = self.to_numpy()[start : start + size]
-        return array.reshape(shape)
+        return self.sub_array(start, shape)
 
     @property
     def per_sample_values(self) -> npt.NDArray[np.float64]:
         start = self.phenotype_count * (4 + 2 * self.covariate_count)
         shape = (self.sample_count, self.phenotype_count, 2)
-        size = np.prod(shape)
-
-        array = self.to_numpy()[start : start + size]
-        return array.reshape(shape)
+        return self.sub_array(start, shape)
 
     @property
     def log_likelihood(self) -> npt.NDArray[np.float64]:

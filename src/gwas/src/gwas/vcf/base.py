@@ -37,6 +37,10 @@ variant_columns = [
     "r_squared",
     "format_str",
 ]
+base_allele_frequency_columns = [
+    "minor_allele_frequency",
+    "alternate_allele_frequency",
+]
 
 
 def read_header(reader: CompressedTextReader) -> tuple[int, list[str], list[str]]:
@@ -114,10 +118,7 @@ class VCFFile(AbstractContextManager):
     def __init__(self, file_path: UPath) -> None:
         self.file_path = file_path
 
-        self.allele_frequency_columns = [
-            "minor_allele_frequency",
-            "alternate_allele_frequency",
-        ]
+        self.allele_frequency_columns = base_allele_frequency_columns.copy()
 
         self.minor_allele_frequency_cutoff = -np.inf
         self.r_squared_cutoff = -np.inf
@@ -187,7 +188,7 @@ class VCFFile(AbstractContextManager):
         columns_to_remove = self.allele_frequency_columns.copy()
 
         # Keep some columns
-        for keep in ["minor_allele_frequency", "alternate_allele_frequency"]:
+        for keep in base_allele_frequency_columns:
             if keep in columns_to_remove:
                 columns_to_remove.remove(keep)
 
@@ -268,17 +269,22 @@ class VCFFile(AbstractContextManager):
     ) -> SharedDataFrame:
         return SharedDataFrame.from_pandas(cls.make_data_frame(vcf_variants), sw)
 
-    @staticmethod
-    def make_data_frame(vcf_variants: list[Variant]) -> pd.DataFrame:
+    @classmethod
+    def make_data_frame(cls, vcf_variants: list[Variant]) -> pd.DataFrame:
         data_frame = pd.DataFrame(vcf_variants, columns=variant_columns)
 
         if all(v.format_str is None for v in vcf_variants):
             data_frame = data_frame.drop(columns=["format_str"])
 
+        cls.update_data_frame_types(data_frame)
+        return data_frame
+
+    @staticmethod
+    def update_data_frame_types(data_frame):
+        data_frame["chromosome_int"] = data_frame["chromosome_int"].astype(np.uint8)
         data_frame["position"] = data_frame["position"].astype(np.uint32)
 
         for column in [
-            "chromosome_int",
             "reference_allele",
             "alternate_allele",
             "format_str",
@@ -286,7 +292,6 @@ class VCFFile(AbstractContextManager):
             if column not in data_frame.columns:
                 continue
             data_frame[column] = data_frame[column].astype("category")
-        return data_frame
 
     def update_chromosome(self) -> None:
         chromosome_int_set = set(self.vcf_variants["chromosome_int"])

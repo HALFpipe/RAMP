@@ -4,13 +4,17 @@ import numpy as np
 import pytest
 from jax import numpy as jnp
 
+from gwas.eig.base import Eigendecomposition
 from gwas.log import logger
+from gwas.null_model.calc import calc_null_model_collections
 from gwas.null_model.fastlmm import FaSTLMM
 from gwas.null_model.ml import MaximumLikelihood
 from gwas.null_model.mlb import OptimizeInput, RegressionWeights, StandardErrors
 from gwas.null_model.mpl import MaximumPenalizedLikelihood
 from gwas.null_model.pml import ProfileMaximumLikelihood
 from gwas.null_model.reml import RestrictedMaximumLikelihood
+from gwas.pheno import VariableCollection
+from gwas.utils.threads import cpu_count
 
 from ..utils import assert_both_close, check_bias, check_types
 from .rmw_debug import RmwDebug
@@ -159,3 +163,45 @@ def test_optimize(
                 rtol=1e-3,
             )
             assert np.isclose(heritability, rmw_heritability, atol=1e-3)
+
+
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
+@pytest.mark.parametrize("simulation_count", [1000], indirect=True)
+def test_calc_null_model_collections(
+    eigendecompositions: list[Eigendecomposition],
+    variable_collections: list[VariableCollection],
+) -> None:
+    # Ensure that all phenotypes are unique
+    for vc in variable_collections:
+        assert (
+            np.isclose(
+                vc.phenotypes[:, np.newaxis, :],
+                vc.phenotypes[:, :, np.newaxis],
+            ).all(axis=0)
+            == np.eye(vc.phenotype_count)
+        ).all()
+
+    nms = calc_null_model_collections(
+        eigendecompositions,
+        variable_collections,
+        method="fastlmm",
+        num_threads=cpu_count(),
+    )
+
+    # Ensure that all results are unique
+    for nm in nms:
+        assert (
+            np.isclose(
+                nm.regression_weights[:, np.newaxis, :],
+                nm.regression_weights[np.newaxis, :, :],
+            ).all(axis=-1)
+            == np.eye(nm.phenotype_count)
+        ).all()
+        assert (
+            np.isclose(
+                nm.variance[:, np.newaxis, :],
+                nm.variance[:, :, np.newaxis],
+            ).all(axis=0)
+            == np.eye(nm.phenotype_count)
+        ).all()

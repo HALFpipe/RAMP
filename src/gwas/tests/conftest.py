@@ -132,7 +132,7 @@ def vcf_files_by_size_and_chromosome(
     vcf_paths_by_size_and_chromosome: Mapping[SampleSizeLabel, dict[int | str, UPath]],
     cache_path_by_size: Mapping[SampleSizeLabel, UPath],
     sw: SharedWorkspace,
-    request: pytest.FixtureRequest,
+    request: FixtureRequest,
 ) -> Mapping[str, dict[int | str, VCFFile]]:
     num_threads = cpu_count()
 

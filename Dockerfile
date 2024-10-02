@@ -77,9 +77,9 @@ RUN conda install --yes --use-local \
     "python=3.12" \
     "jaxlib=*=cpu*" \
     "gwas" && \
-    conda create --name "bgenix" "bgenix" && \
-    conda create --name "regenie" "regenie" && \
-    conda create --name "r-saige" "r-saige" && \
+    conda create --yes --name "bgenix" "bgenix" && \
+    conda create --yes --name "regenie" "regenie" && \
+    conda create --yes --name "r-saige" "r-saige" && \
     sync && \
     rm -rf /opt/conda/conda-bld && \
     conda clean --yes --all --force-pkgs-dirs
