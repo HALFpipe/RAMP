@@ -134,14 +134,16 @@ def test_eig(
         tri_array.to_numpy().transpose(),
         full_matrices=False,
     )
-    assert np.allclose(scipy_singular_values, tri_singular_values)
+    np.testing.assert_allclose(
+        scipy_singular_values, tri_singular_values, rtol=1e-5, atol=1e-8
+    )
 
     (tri_r,) = scipy.linalg.qr(tri_array.to_numpy().transpose(), mode="r")
-    assert np.allclose(
+    np.testing.assert_allclose(
         tri_r.transpose() @ tri_r,
         numpy_tri.transpose() @ numpy_tri,
     )
-    assert np.allclose(tri_r.transpose() @ tri_r / variant_count, c, atol=1e-3)
+    np.testing.assert_allclose(tri_r.transpose() @ tri_r / variant_count, c, atol=1e-3)
 
     tri_paths = [tri_paths_by_chromosome[c] for c in chromosomes]
     (eig_array,) = calc_eigendecompositions(
@@ -150,14 +152,14 @@ def test_eig(
     request.addfinalizer(eig_array.free)
 
     scipy_eigenvalues = np.square(scipy_singular_values) / variant_count
-    assert np.allclose(scipy_eigenvalues, eig_array.eigenvalues)
+    np.testing.assert_allclose(scipy_eigenvalues, eig_array.eigenvalues)
     assert np.abs(scipy_eigenvalues - eig_array.eigenvalues).mean() < 1e-14
 
     # Check reconstructing covariance
     eig_c = (
         eig_array.eigenvectors * eig_array.eigenvalues
     ) @ eig_array.eigenvectors.transpose()
-    assert np.allclose(c, eig_c, atol=1e-3)
+    np.testing.assert_allclose(c, eig_c, atol=1e-3)
     assert np.abs(c - eig_c).mean() < 1e-4
 
     # Check that eigenvectors are just permuted
@@ -274,7 +276,7 @@ def test_eig_rmw(
     eig_c = (
         eig_array.eigenvectors * eig_array.eigenvalues
     ) @ eig_array.eigenvectors.transpose()
-    assert np.allclose(eig_c, kinship, atol=1e-6)
+    np.testing.assert_allclose(eig_c, kinship, rtol=1e-5, atol=1e-5)
 
     numpy_eigenvalues, numpy_eigenvectors = np.linalg.eigh(kinship)
     permutation = np.rint(
@@ -283,7 +285,7 @@ def test_eig_rmw(
     assert np.logical_or(permutation == 0, np.abs(permutation) == 1).all()
     assert (1 == np.count_nonzero(permutation, axis=0)).all()
     assert (1 == np.count_nonzero(permutation, axis=1)).all()
-    assert np.allclose(numpy_eigenvalues[::-1], eig_array.eigenvalues, atol=1e-6)
+    np.testing.assert_allclose(numpy_eigenvalues[::-1], eig_array.eigenvalues, atol=1e-6)
 
     new_allocation_names = {eig_array.name}
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)

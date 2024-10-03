@@ -81,7 +81,7 @@ def test_file_array(compression_method_name: str, tmp_path: UPath) -> None:
         data_frame = data_frame.drop(columns=column_names)
 
     pd.testing.assert_frame_equal(data_frame, row_metadata)
-    assert np.allclose(matrix, 7)
+    np.testing.assert_allclose(matrix, 7)
 
     reader = FileArray.from_file(file_path, dtype=np.float64, num_threads=cpu_count())
     assert reader.shape == writer.shape
@@ -91,7 +91,7 @@ def test_file_array(compression_method_name: str, tmp_path: UPath) -> None:
 
     indices = np.array([0, 1, 2], dtype=np.uint32)
     data = reader[indices, indices]
-    assert np.allclose(data, 7)
+    np.testing.assert_allclose(data, 7)
 
 
 @pytest.mark.parametrize("chromosome", [22], indirect=True)

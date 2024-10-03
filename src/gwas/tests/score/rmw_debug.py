@@ -101,7 +101,7 @@ def rmw_debug(
     command = [unwrap_which("raremetalworker-debug"), *command[1:]]
 
     prefix_index = command.index("--prefix")
-    command[prefix_index + 1] = f"{command[prefix_index + 1]}-debug"
+    command[prefix_index + 1] = f"{command[prefix_index + 1]}debug"
 
     process_handle = Popen(
         command,
@@ -158,14 +158,14 @@ def rmw_debug(
     assert rmw_debug.residuals.shape == (sample_count,)
     assert rmw_debug.genotype.shape == (sample_count,)
 
-    assert np.allclose(
+    np.testing.assert_allclose(
         rmw_debug.residuals,
         rmw_debug.trans_u_y - rmw_debug.trans_u_x @ rmw_debug.beta_hat,
         atol=1e-3,
         rtol=1e-3,
     )
 
-    assert np.allclose(
+    np.testing.assert_allclose(
         rmw_debug.sigma2,
         rmw_debug.sigma_g2_hat * rmw_debug.d + rmw_debug.sigma_e2_hat,
         atol=1e-3,

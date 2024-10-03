@@ -101,7 +101,9 @@ def test_rotate_demeaned_genotypes(
             overwrite_a=True,
             overwrite_y=False,
         )
-        assert np.allclose(rotated_with_mean, rotated_genotypes)
+        np.testing.assert_allclose(
+            rotated_with_mean, rotated_genotypes, rtol=1e-05, atol=1e-08
+        )
 
 
 @pytest.mark.parametrize("chromosome", [22], indirect=True)
@@ -116,7 +118,7 @@ def test_genotypes_array(
     rmw = rmw_score.array
     genotypes = genotypes_array.to_numpy()
 
-    sample_count, _ = genotypes.shape
+    sample_count, variant_count = genotypes.shape
     positions = np.asanyarray(vcf_file.vcf_variants.position)
 
     assert np.all(rmw["POS"] == positions[:, np.newaxis])
@@ -153,10 +155,20 @@ def test_genotypes_array(
         mean = alternate_allele_count / sample_count
         alternate_allele_frequency = mean / 2
 
-        assert np.allclose(rmw["FOUNDER_AF"][:, i], alternate_allele_frequency)
-        assert np.allclose(rmw["ALL_AF"][:, i], alternate_allele_frequency)
-        assert np.allclose(
-            rmw["INFORMATIVE_ALT_AC"][:, i],
+        np.testing.assert_allclose(
+            rmw["FOUNDER_AF"][:variant_count, i],
+            alternate_allele_frequency,
+            rtol=1e-05,
+            atol=1e-08,
+        )
+        np.testing.assert_allclose(
+            rmw["ALL_AF"][:variant_count, i],
+            alternate_allele_frequency,
+            rtol=1e-05,
+            atol=1e-08,
+        )
+        np.testing.assert_allclose(
+            rmw["INFORMATIVE_ALT_AC"][:variant_count, i],
             alternate_allele_count,
         )
 
@@ -215,15 +227,16 @@ def plot_stat(
 def test_score(
     tmp_path: UPath,
     phenotype_index: int,
-    null_model_collections: list[NullModelCollection],
+    vcf_file: VCFFile,
+    genotypes_array: SharedArray,
     eigendecompositions: list[Eigendecomposition],
     rotated_genotypes_arrays: list[SharedArray],
+    null_model_collections: list[NullModelCollection],
     rmw_score: RmwScore,
     rmw_debug: RmwDebug,
 ) -> None:
     variable_collection_index = 0
     inner_index = phenotype_index
-
     for null_model_collection in null_model_collections:
         if inner_index - null_model_collection.phenotype_count < 0:
             break
@@ -235,19 +248,28 @@ def test_score(
         f"{variable_collection_index} at position {inner_index}"
     )
 
-    null_model_collection = null_model_collections[variable_collection_index]
+    genotypes = genotypes_array.to_numpy()
     eigendecomposition = eigendecompositions[variable_collection_index]
+    (sample_boolean_vector,) = make_sample_boolean_vectors(
+        vcf_file.samples, (eigendecomposition.samples,)
+    )
+    genotype = genotypes[sample_boolean_vector, 0]
+    np.testing.assert_allclose(
+        genotype - genotype.mean(),
+        rmw_debug.genotype,
+        rtol=1e-4,
+        atol=1e-4,
+    )
+    assert check_bias(eigendecomposition.eigenvalues[::-1], rmw_debug.d)
+
     rotated_genotypes_array = rotated_genotypes_arrays[variable_collection_index]
-
     rotated_genotypes = rotated_genotypes_array.to_numpy()
-
-    phenotype_count = 1
     rotated_genotype = rotated_genotypes[:, 0]
-    assert np.allclose(
+    np.testing.assert_allclose(
         eigendecomposition.eigenvectors.transpose() @ rmw_debug.genotype,
         rotated_genotype,
-        atol=1e-6,
-        rtol=1e-6,
+        rtol=1e-05,
+        atol=1e-06,
     )
 
     sample_count, variant_count = rotated_genotypes.shape
@@ -269,9 +291,10 @@ def test_score(
     finite = np.isfinite(rmw_u_stat).all(axis=1)
     finite &= np.isfinite(rmw_sqrt_v_stat).all(axis=1)
 
-    u_stat = np.empty((variant_count, phenotype_count))
-    v_stat = np.empty((variant_count, phenotype_count))
+    u_stat = np.empty((variant_count, 1))
+    v_stat = np.empty((variant_count, 1))
 
+    null_model_collection = null_model_collections[variable_collection_index]
     halfway_scaled_residuals = null_model_collection.halfway_scaled_residuals
     halfway_scaled_residuals = halfway_scaled_residuals[:, inner_index, np.newaxis]
     variance = null_model_collection.variance

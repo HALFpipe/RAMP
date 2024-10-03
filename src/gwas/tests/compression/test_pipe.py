@@ -32,4 +32,4 @@ def test_compressed_bytes(tmp_path: UPath, compression: str) -> None:
     with CompressedBytesWriter(test_path, num_threads=cpu_count()) as file_handle:
         pickle.dump(x, file_handle)
     with CompressedBytesReader(test_path) as file_handle:
-        assert np.allclose(pickle.load(file_handle), x)
+        np.testing.assert_allclose(pickle.load(file_handle), x)

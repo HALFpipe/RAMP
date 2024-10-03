@@ -52,8 +52,8 @@ def test_vcf_file(
         vcf_file.variant_indices = np.arange(1000, 2000, dtype=np.uint32)
         vcf_file.read(array3)
 
-    assert np.allclose(array1[:1000, :], array2)
-    assert np.allclose(array1[1000:2000, :], array3)
+    np.testing.assert_allclose(array1[:1000, :], array2)
+    np.testing.assert_allclose(array1[1000:2000, :], array3)
 
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
 
@@ -92,7 +92,7 @@ def test_read(
         check_dtype=False,
         check_exact=False,
     )
-    assert np.allclose(numpy_read_result.dosages, read_result.dosages)
+    np.testing.assert_allclose(numpy_read_result.dosages, read_result.dosages)
 
 
 @pytest.mark.parametrize("chromosome", [22], indirect=True)

@@ -62,13 +62,15 @@ def test_fastlmm(
 
         se: StandardErrors = check_types(ml.get_standard_errors)(terms, optimize_input)
         # Sanity check as these values should just be passed through
-        assert np.allclose(se.regression_weights, r.regression_weights, atol=1e-3)
-        assert np.allclose(
+        np.testing.assert_allclose(
+            se.regression_weights, r.regression_weights, atol=1e-3
+        )
+        np.testing.assert_allclose(
             se.halfway_scaled_residuals, r.halfway_scaled_residuals, atol=1e-3
         )
 
         # Compare to raremetalworker
-        assert np.allclose(se.regression_weights.ravel(), rmw_beta, atol=1e-3)
+        np.testing.assert_allclose(se.regression_weights.ravel(), rmw_beta, atol=1e-3)
         factor = np.asarray(se.halfway_scaled_residuals * np.sqrt(se.variance)).ravel()
         assert check_bias(factor, rmw_factor)
 
@@ -86,17 +88,26 @@ def test_fastlmm(
     (_, genetic_variance, error_variance) = ml.get_heritability(terms)
 
     assert np.isclose(genetic_variance, rmw_debug.sigma_g2_hat, atol=1e-3, rtol=1e-3)
-    assert np.isclose(error_variance, rmw_debug.sigma_e2_hat, atol=1e-2)
+    assert np.isclose(error_variance, rmw_debug.sigma_e2_hat, atol=1e-2, rtol=1e-5)
 
     se = ml.get_standard_errors(terms, optimize_input)
-    assert np.allclose(se.regression_weights.ravel(), rmw_debug.beta_hat, atol=1e-3)
-    assert np.allclose(
+    np.testing.assert_allclose(
+        se.regression_weights.ravel(),
+        rmw_debug.beta_hat,
+        atol=1e-3,
+    )
+    np.testing.assert_allclose(
         (se.halfway_scaled_residuals * np.sqrt(se.variance)).ravel(),
         rmw_debug.residuals,
         atol=1e-3,
         rtol=1e-3,
     )
-    assert np.allclose(se.variance.ravel(), rmw_debug.sigma2, atol=1e-3)
+    np.testing.assert_allclose(
+        se.variance.ravel(),
+        rmw_debug.sigma2,
+        rtol=1e-5,
+        atol=1e-3,
+    )
 
 
 @pytest.mark.parametrize(

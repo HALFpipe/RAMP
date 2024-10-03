@@ -1,12 +1,12 @@
 import numpy as np
-import pytest
 from numpy import typing as npt
+from pytest import FixtureRequest, raises
 
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 
 
-def test_sw_merge(request: pytest.FixtureRequest) -> None:
+def test_sw_merge(request: FixtureRequest) -> None:
     sw = SharedWorkspace.create()
     request.addfinalizer(sw.close)
 
@@ -27,16 +27,16 @@ def test_sw_merge(request: pytest.FixtureRequest) -> None:
     assert np.isclose(a.to_numpy().sum(), 100)
 
 
-def test_sw_mem(request: pytest.FixtureRequest) -> None:
+def test_sw_mem(request: FixtureRequest) -> None:
     sw = SharedWorkspace.create(size=2**21)
     request.addfinalizer(sw.close)
 
-    with pytest.raises(MemoryError):
+    with raises(MemoryError):
         sw.alloc("l", 1000, 1000)
 
 
-def test_sw_squash(request: pytest.FixtureRequest) -> None:
-    sw = SharedWorkspace.create(size=2**21)
+def test_sw_squash(request: FixtureRequest) -> None:
+    sw = SharedWorkspace.create(size=2**22)
     request.addfinalizer(sw.close)
 
     n = 100
@@ -65,4 +65,4 @@ def test_sw_squash(request: pytest.FixtureRequest) -> None:
 
     numpy_array = np.hstack(numpy_arrays)
 
-    assert np.allclose(array.to_numpy(), numpy_array)
+    np.testing.assert_allclose(array.to_numpy(), numpy_array)

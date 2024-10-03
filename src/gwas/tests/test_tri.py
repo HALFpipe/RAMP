@@ -36,7 +36,7 @@ def numpy_tri(genotypes_array: npt.NDArray[np.float64]) -> npt.NDArray[np.float6
     if not isinstance(r, np.ndarray):
         raise TypeError("Numpy not return an array")
 
-    assert np.allclose(
+    np.testing.assert_allclose(
         a.transpose() @ a,
         r.transpose() @ r,
     )
@@ -74,10 +74,10 @@ def test_tri(
 
     eigenvalues = np.linalg.svd(a, full_matrices=False, compute_uv=False)
     numpy_eigenvalues = np.linalg.svd(numpy_tri, full_matrices=False, compute_uv=False)
-    assert np.allclose(eigenvalues, numpy_eigenvalues)
+    np.testing.assert_allclose(eigenvalues, numpy_eigenvalues, rtol=1e-5, atol=1e-8)
 
     # triangularizations are not unique, but their square is
-    assert np.allclose(
+    np.testing.assert_allclose(
         a @ a.transpose(),
         numpy_tri.transpose() @ numpy_tri,
     )
@@ -164,7 +164,7 @@ def test_tri_subset_samples(sw: SharedWorkspace, request: pytest.FixtureRequest)
     x, y = np.meshgrid(indices, indices)
     d = c[x, y]
     # Sanity check.
-    assert np.allclose(b.transpose() @ b, d)
+    np.testing.assert_allclose(b.transpose() @ b, d)
 
     samples = [f"sample_{i:02d}" for i in range(k)]
     subset_samples = [samples[i] for i in indices]
@@ -179,14 +179,14 @@ def test_tri_subset_samples(sw: SharedWorkspace, request: pytest.FixtureRequest)
     assert isinstance(r1, np.ndarray) and not isinstance(r1, tuple)
     r1 = r1.transpose()  # Ensure that we have a lower triangular matrix
     assert is_lower_triangular(r1)
-    assert np.allclose(r1 @ r1.transpose(), d)
+    np.testing.assert_allclose(r1 @ r1.transpose(), d)
 
     r2 = np.linalg.qr(r[indices, :].transpose(), mode="r")
     assert isinstance(r2, np.ndarray)
     r2 = r2.transpose()  # Ensure that we have a lower triangular matrix
     assert is_lower_triangular(r2)
-    assert np.allclose(np.abs(r2), np.abs(r1))
-    assert np.allclose(r2 @ r2.transpose(), d)
+    np.testing.assert_allclose(np.abs(r2), np.abs(r1))
+    np.testing.assert_allclose(r2 @ r2.transpose(), d)
 
     tri = Triangular.from_numpy(
         r,
@@ -201,17 +201,17 @@ def test_tri_subset_samples(sw: SharedWorkspace, request: pytest.FixtureRequest)
 
     assert isinstance(tri, Triangular)
     assert is_lower_triangular(tri.to_numpy())
-    assert np.allclose(tri.to_numpy(), r)
+    np.testing.assert_allclose(tri.to_numpy(), r)
 
     tri.subset_samples(subset_samples)
     r3 = tri.to_numpy()
-    assert np.allclose(r3 @ r3.transpose(), d)
+    np.testing.assert_allclose(r3 @ r3.transpose(), d)
 
     r4 = np.linalg.qr(r3.transpose(), mode="r")
     assert isinstance(r4, np.ndarray)
     r4 = r4.transpose()  # Ensure that we have a lower triangular matrix
     assert is_lower_triangular(r4)
-    assert np.allclose(np.abs(r4), np.abs(r1))
+    np.testing.assert_allclose(np.abs(r4), np.abs(r1))
 
     new_allocation_names = {tri.name}
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)

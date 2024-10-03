@@ -36,7 +36,7 @@ def test_io(shared_array: SharedArray, tmp_path: UPath) -> None:
 
     a = shared_array.to_numpy()
     c = array.to_numpy()
-    assert np.allclose(a, c)
+    np.testing.assert_allclose(a, c)
 
 
 def test_transpose(shared_array: SharedArray) -> None:
@@ -44,7 +44,7 @@ def test_transpose(shared_array: SharedArray) -> None:
 
     shared_array.transpose()
     a = shared_array.to_numpy()
-    assert np.allclose(a, b.transpose())
+    np.testing.assert_allclose(a, b.transpose())
 
 
 def test_compress_rows(shared_array: SharedArray) -> None:
@@ -53,7 +53,7 @@ def test_compress_rows(shared_array: SharedArray) -> None:
     indices = np.array([0, 3, 4], dtype=np.uint32)
     shared_array.compress(indices)
     a = shared_array.to_numpy()
-    assert np.allclose(b[indices, :], a)
+    np.testing.assert_allclose(b[indices, :], a)
 
 
 def test_compress_columns(shared_array: SharedArray) -> None:
@@ -62,7 +62,7 @@ def test_compress_columns(shared_array: SharedArray) -> None:
     indices = np.array([0, 3, 4], dtype=np.uint32)
     shared_array.compress(indices, axis=1)
     a = shared_array.to_numpy()
-    assert np.allclose(b[:, indices], a)
+    np.testing.assert_allclose(b[:, indices], a)
 
 
 def test_resize(shared_array: SharedArray) -> None:
@@ -73,4 +73,4 @@ def test_resize(shared_array: SharedArray) -> None:
 
     a = shared_array.to_numpy()
     assert a.shape == (m, m)
-    assert np.allclose(b[:, :m], a)
+    np.testing.assert_allclose(b[:, :m], a)

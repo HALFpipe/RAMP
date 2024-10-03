@@ -10,7 +10,7 @@ def test_dimatcopy_square() -> None:
     b = a.copy()
     dimatcopy(b)
 
-    assert np.allclose(a.transpose(), b)
+    np.testing.assert_allclose(a.transpose(), b)
 
 
 def test_dimatcopy_rect() -> None:
@@ -19,7 +19,7 @@ def test_dimatcopy_rect() -> None:
     b = a.copy()
     dimatcopy(b)
 
-    assert np.allclose(
+    np.testing.assert_allclose(
         a,
         np.ndarray(b.shape, b.dtype, buffer=b.data, order="F"),
     )
@@ -29,14 +29,14 @@ def test_dimatcopy_rect() -> None:
 def test_set_triu(shape: tuple[int, ...]) -> None:
     a = np.asfortranarray(np.random.rand(*shape))
     set_triu(a)
-    assert np.allclose(np.triu(a, k=1), 0)
+    np.testing.assert_allclose(np.triu(a, k=1), 0)
 
 
 @pytest.mark.parametrize("shape", [(5, 5), (5, 7), (7, 5)])
 def test_set_tril(shape: tuple[int, ...]) -> None:
     a = np.asfortranarray(np.random.rand(*shape))
     set_tril(a)
-    assert np.allclose(np.tril(a, k=-1), 0)
+    np.testing.assert_allclose(np.tril(a, k=-1), 0)
 
 
 def test_dgesvdq() -> None:
@@ -50,8 +50,8 @@ def test_dgesvdq() -> None:
     _, singular_values, singular_vectors = np.linalg.svd(a, full_matrices=False)
 
     numrank = dgesvdq(a, s, v)
-    assert np.allclose(s, singular_values)
-    assert np.allclose(np.abs(v), np.abs(singular_vectors))
+    np.testing.assert_allclose(s, singular_values)
+    np.testing.assert_allclose(np.abs(v), np.abs(singular_vectors))
     assert numrank == n
 
 
