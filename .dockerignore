@@ -1,0 +1,7 @@
+README.md
+LICENSE.txt
+.git
+.github
+.gitignore
+.pre-commit-config.yaml
+.vscode
