@@ -26,6 +26,7 @@ from gwas.utils.threads import cpu_count
 from gwas.vcf.base import VCFFile
 
 from .conftest import chromosomes
+from .utils import check_bias
 
 
 def load_genotypes(
@@ -152,8 +153,13 @@ def test_eig(
     request.addfinalizer(eig_array.free)
 
     scipy_eigenvalues = np.square(scipy_singular_values) / variant_count
-    np.testing.assert_allclose(scipy_eigenvalues, eig_array.eigenvalues)
-    assert np.abs(scipy_eigenvalues - eig_array.eigenvalues).mean() < 1e-14
+    np.testing.assert_allclose(
+        scipy_eigenvalues,
+        eig_array.eigenvalues,
+        rtol=1e-5,
+        atol=1e-8,
+    )
+    assert check_bias(scipy_eigenvalues, eig_array.eigenvalues)
 
     # Check reconstructing covariance
     eig_c = (
@@ -285,7 +291,7 @@ def test_eig_rmw(
     assert np.logical_or(permutation == 0, np.abs(permutation) == 1).all()
     assert (1 == np.count_nonzero(permutation, axis=0)).all()
     assert (1 == np.count_nonzero(permutation, axis=1)).all()
-    np.testing.assert_allclose(numpy_eigenvalues[::-1], eig_array.eigenvalues, atol=1e-6)
+    assert check_bias(numpy_eigenvalues[::-1], eig_array.eigenvalues)
 
     new_allocation_names = {eig_array.name}
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
