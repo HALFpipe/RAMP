@@ -87,12 +87,33 @@ jobs:
         singularity_version:
           - "v3.11.5"
           - "v2.6"
-    container:
-      image: quay.io/singularity/docker2singularity:${{ matrix.singularity_version }}
-      options: --privileged
     steps:
-      - name: Patch docker2singularity
-        shell: bash
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: >
+            3.12
+          check-latest: true
+      - name: Install Python dependencies
+        run: |
+          python -m pip install \
+            awscli \
+            pygithub \
+            setuptools_scm
+
+      - name: Setup build container
+        run: |
+          mkdir -p -v "/home/runner/output"
+          docker run --privileged --rm --detach \
+            --name="build" \
+            --volume="/var/run/docker.sock:/var/run/docker.sock" \
+            --volume="/home/runner/output:/output" \
+            --entrypoint="tail" \
+            quay.io/singularity/docker2singularity:${{ matrix.singularity_version }} \
+            -f "/dev/null"
+
+      - name: Patch `docker2singularity` in build container
+        shell: docker exec build bash -x -e {0}
         run: |
           space=" "
           patch /docker2singularity.sh <<EOF
@@ -109,34 +130,32 @@ jobs:
           ${space}echo "(9/10) Building \${image_format} container..."
           EOF
 
-      - name: Convert to Singularity
-        shell: bash
+      - name: Run `docker2singularity` in build container
+        shell: docker exec build bash -x -e {0}
         env:
           docker_build_tag: ${{ needs.docker_build.outputs.tag }}
         run: |
-          singularity_image_name=$(echo -n ${docker_build_tag} | tr -c '[:alnum:]' '-')
-          mkdir -p -v /output
+          singularity_image_name="$(echo -n ${docker_build_tag} | tr -c '[:alnum:]' '-')"
+          mkdir -p -v "/output"
           docker-entrypoint.sh /docker2singularity.sh \
             --name ${singularity_image_name} \
             ${{ secrets.REGISTRY }}/${docker_build_tag}
 
-      - name: Upload to DigitalOcean
+      - name: Upload image file
         shell: bash
         env:
-          DIGITALOCEAN_ACCESS_KEY: ${{ secrets.DIGITALOCEAN_ACCESS_KEY }}
-          DIGITALOCEAN_SECRET_KEY: ${{ secrets.DIGITALOCEAN_SECRET_KEY }}
-          DIGITALOCEAN_REGION: ${{ secrets.DIGITALOCEAN_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.DIGITALOCEAN_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.DIGITALOCEAN_SECRET_KEY }}
+          AWS_ENDPOINT_URL: ${{ secrets.DIGITALOCEAN_REGION }}.digitaloceanspaces.com
           DIGITALOCEAN_SPACE_NAME: ${{ secrets.DIGITALOCEAN_SPACE_NAME }}
         run: |
-          apk add s3cmd
-          s3cmd --stop-on-error \
-            --ssl --no-encrypt \
-            --access_key="${DIGITALOCEAN_ACCESS_KEY}" \
-            --secret_key="${DIGITALOCEAN_SECRET_KEY}" \
-            --host="${DIGITALOCEAN_REGION}.digitaloceanspaces.com" \
-            --host-bucket="%(bucket)s.${DIGITALOCEAN_REGION}.digitaloceanspaces.com" \
-            --dump-config \
-            > ${HOME}/.s3cfg
-          singularity_image_file=$(find "/output" -type f | head -n1)
-          s3cmd put ${singularity_image_file} s3://${DIGITALOCEAN_SPACE_NAME}/singularity/
-          s3cmd setacl s3://${DIGITALOCEAN_SPACE_NAME}/singularity/$(basename ${singularity_image_file}) --acl-public
+          image_file=$(find "/home/runner/output" -type f | head -n1)
+          aws s3 mv \
+            --only-show-errors \
+            --acl public-read \
+            ${image_file} \
+            s3://${DIGITALOCEAN_SPACE_NAME}/singularity/
+
+      - name: Stop build container
+        run: |
+          docker kill build
