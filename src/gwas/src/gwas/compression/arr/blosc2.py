@@ -78,6 +78,7 @@ def load_metadata(
     try:
         row_metadata, column_metadata = get_vlmeta(array, "axis_metadata")
     except KeyError:
+        # Compatibility with how metadata was stored previously
         axis_metadata_path = file_path.parent / f"{file_path.stem}.axis-metadata.pkl.zst"
         if axis_metadata_path.is_file():
             with CompressedBytesReader(axis_metadata_path) as file_handle:

@@ -1,51 +1,70 @@
-import pickle
 from argparse import Namespace
 from functools import partial
 
-import blosc2
 import numpy as np
+import pandas as pd
+from IPython.lib.pretty import pretty
+from pandas.api.types import is_object_dtype
 from tqdm.auto import tqdm
 from upath import UPath
 
 from ..compression.arr.base import (
     CompressionMethod,
     FileArray,
+    FileArrayReader,
+    FileArrayWriter,
     compression_methods,
-    default_compression_method,
 )
-from ..compression.pipe import CompressedBytesReader
 from ..log import logger
 from ..utils.multiprocessing import (
     get_processes_and_num_threads,
     make_pool_or_null_context,
 )
+from ..vcf.base import VCFFile, base_allele_frequency_columns
 
-suffix_to_convert = ".b2array"
+dtype = np.float64
 
 
-def convert(arguments: Namespace) -> None:
+def convert(arguments: Namespace, size: int) -> None:
     num_threads = arguments.num_threads
 
-    compression_method: CompressionMethod = default_compression_method
-    if arguments.compression_method is not None:
-        compression_method = compression_methods[arguments.compression_method]
+    compression_method = compression_methods[arguments.compression_method]
+    suffixes_to_convert = {
+        compression_method.suffix
+        for name, compression_method in compression_methods.items()
+        if name != arguments.compression_method
+    }
 
-    path = UPath(arguments.path)
-    if path.is_file():
-        paths = [path]
-    else:
-        paths = list(path.rglob(f"*{suffix_to_convert}"))
+    paths: list[UPath] = list()
+    for path in arguments.path:
+        path = UPath(path)
+        if path.is_file():
+            paths.append(path)
+            continue
+
+        for s in suffixes_to_convert:
+            for p in path.rglob(f"*{s}"):
+                name = p.name.removesuffix(s)
+                if name.endswith("score") or name.endswith("covariance"):
+                    paths.append(p)
 
     paths = [path for path in paths if path.is_file()]
+    paths.sort()
+
+    logger.info(f"Converting {len(paths)} files: {pretty(paths)}")
 
     processes, num_threads_per_process = get_processes_and_num_threads(
         num_threads, len(paths), num_threads
     )
 
+    size_per_process = size // processes // dtype().itemsize
+
     callable = partial(
         convert_file,
         compression_method=compression_method,
         num_threads=num_threads_per_process,
+        size=size_per_process,
+        debug=arguments.debug,
     )
     pool, iterator = make_pool_or_null_context(paths, callable, processes)
     with pool:
@@ -57,53 +76,129 @@ def axis_metadata_path(path: UPath) -> UPath:
     return path.parent / f"{path.stem}.axis-metadata.pkl.zst"
 
 
+def update_row_metadata_dtypes(
+    name: str, row_metadata: pd.DataFrame | pd.Series
+) -> pd.DataFrame:
+    if name.endswith("score"):
+        if isinstance(row_metadata, pd.Series):
+            raise ValueError("Score file must have a data frame of row metadata")
+        VCFFile.update_data_frame_types(row_metadata)
+        row_metadata["is_imputed"] = row_metadata["is_imputed"].astype(bool)
+        float_columns: set[str] = {"r_squared"}
+        for column in row_metadata.columns:
+            if any(column.endswith(s) for s in base_allele_frequency_columns):
+                float_columns.add(column)
+        for column in float_columns:
+            row_metadata[column] = row_metadata[column].astype(np.float64)
+        data_frame = row_metadata
+    elif name.endswith("covariance"):
+        if isinstance(row_metadata, pd.Series):
+            data_frame = pd.DataFrame(dict(variable=row_metadata), dtype="string")
+    else:
+        raise ValueError(f"Unknown file type: {name}")
+    return data_frame
+
+
 def convert_file(
-    path: UPath, compression_method: CompressionMethod, num_threads: int
+    path: UPath,
+    compression_method: CompressionMethod,
+    num_threads: int,
+    size: int,
+    debug: bool,
 ) -> None:
+    converted_path: UPath | None = None
     try:
-        if path.name.endswith(suffix_to_convert):
-            array = blosc2.open(
-                urlpath=str(path),
-                cparams=dict(nthreads=num_threads),
-                dparams=dict(nthreads=num_threads),
+        reader = FileArray.from_file(path, dtype, num_threads=num_threads)
+        row_count, column_count = reader.shape
+
+        row_chunk_size = size // column_count
+        logger.debug(
+            f'Converting "{path}" with shape {reader.shape} '
+            f"with {row_chunk_size} rows per chunk"
+        )
+
+        name = path.name.removesuffix(reader.compression_method.suffix)
+        converted_path = path.parent / f"{name}{compression_method.suffix}"
+        if converted_path.is_file():
+            logger.warning(
+                f'Skipping "{path}" because "{converted_path}" already exists'
             )
-            try:
-                vlmeta = array.schunk.vlmeta
-                axis_metadata_bytes = vlmeta.get_vlmeta("axis_metadata")
-                row_metadata, column_metadata = pickle.loads(axis_metadata_bytes)
-            except KeyError:
-                if axis_metadata_path(path).is_file():
-                    with CompressedBytesReader(axis_metadata_path(path)) as file_handle:
-                        row_metadata, column_metadata = pickle.load(file_handle)
-                else:
-                    row_metadata, column_metadata = None, None
+            return
 
-            row_chunk_size, _ = array.chunks
-            row_count, column_count = array.shape
+        writer = FileArray.create(
+            converted_path,
+            (row_count, column_count),
+            np.float64,
+            compression_method=compression_method,
+            num_threads=num_threads,
+        )
 
-            name = path.name.removesuffix(suffix_to_convert)
-            stat_file_array_path = path.parent / f"{name}{compression_method.suffix}"
-            if stat_file_array_path.is_file():
-                logger.warning(
-                    f'Skipping "{path}" because "{stat_file_array_path}" already exists'
-                )
-                return
-            stat_file_array = FileArray.create(
-                stat_file_array_path,
-                (row_count, column_count),
-                np.float64,
-                compression_method=compression_method,
-                num_threads=num_threads,
-            )
-            stat_file_array.set_axis_metadata(0, row_metadata)
-            stat_file_array.set_axis_metadata(1, column_metadata)
+        row_metadata = reader.row_metadata
+        if row_metadata is not None:
+            row_metadata = update_row_metadata_dtypes(name, row_metadata)
+            for d in row_metadata.dtypes:
+                if is_object_dtype(d):
+                    raise ValueError("Refusing to convert object dtype")
 
-            with stat_file_array:
-                for row_start in tqdm(
-                    range(0, row_count, row_chunk_size), unit="chunks", leave=False
-                ):
-                    row_end = min(row_start + row_chunk_size, row_count)
-                    row_chunk = array[row_start:row_end, :]
-                    stat_file_array[row_start:row_end, :] = np.asfortranarray(row_chunk)
+            writer.set_axis_metadata(0, row_metadata)
+        if reader.column_names is not None:
+            writer.set_axis_metadata(1, reader.column_names)
+
+        copy(reader, writer, row_count, row_chunk_size)
+
+        converted_reader = FileArray.from_file(
+            converted_path, dtype, num_threads=num_threads
+        )
+
+        row_chunk_size = row_chunk_size // 2
+        logger.debug(
+            f'Verifying "{converted_path}" with shape {converted_reader.shape} '
+            f"with {row_chunk_size} rows per chunk"
+        )
+        verify(reader, converted_reader, row_count, row_chunk_size)
     except Exception as exception:
+        if converted_path is not None:
+            converted_path.unlink(missing_ok=True)
         logger.error(f'Error converting "{path}": {exception}', exc_info=True)
+        if debug:
+            raise exception
+
+
+def verify(
+    reader: FileArrayReader,
+    converted_reader: FileArrayReader,
+    row_count: int,
+    row_chunk_size: int,
+) -> None:
+    with reader, converted_reader:
+        for row_start in tqdm(
+            range(0, row_count, row_chunk_size),
+            desc="verifying",
+            unit="chunks",
+            leave=False,
+        ):
+            row_end = min(row_start + row_chunk_size, row_count)
+            row_chunk = reader[row_start:row_end, :]
+            converted_row_chunk = converted_reader[row_start:row_end, :]
+
+            if not np.array_equal(row_chunk, converted_row_chunk, equal_nan=True):
+                raise ValueError(f"Failed to verify chunk {row_start}:{row_end}")
+
+
+def copy(
+    reader: FileArrayReader,
+    writer: FileArrayWriter,
+    row_count: int,
+    row_chunk_size: int,
+) -> None:
+    with reader, writer:
+        for row_start in tqdm(
+            range(0, row_count, row_chunk_size),
+            desc="converting",
+            unit="chunks",
+            leave=False,
+        ):
+            row_end = min(row_start + row_chunk_size, row_count)
+            row_chunk = reader[row_start:row_end, :]
+            logger.debug(f"Writing chunk with shape {row_chunk.shape} at {row_start}")
+            writer[row_start:row_end, :] = np.asfortranarray(row_chunk)
