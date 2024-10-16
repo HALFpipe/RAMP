@@ -43,32 +43,55 @@ COPY recipes/conda_build_config.yaml /root/conda_build_config.yaml
 RUN echo "int mkl_serv_intel_cpu_true() {return 1;}" | \
     gcc -x "c" -shared -fPIC -o "/opt/libfakeintel.so" -
 
+FROM builder as dosage-convertor
 RUN --mount=source=recipes/dosage-convertor,target=/dosage-convertor \
     conda build --no-anaconda-upload --numpy "2.0" "dosage-convertor"
+
+FROM builder as metal
+RUN --mount=source=recipes/metal,target=/metal \
+    conda build --no-anaconda-upload --numpy "2.0" --use-local "metal"
+
+FROM builder as qctool
 RUN --mount=source=recipes/qctool,target=/qctool \
     conda build --no-anaconda-upload --numpy "2.0" --use-local "qctool"
+
+FROM builder as raremetal
+RUN --mount=source=recipes/raremetal,target=/raremetal \
+    conda build --no-anaconda-upload --numpy "2.0" --use-local "raremetal"
+
+FROM builder as raremetal-debug
 RUN --mount=source=recipes/raremetal,target=/raremetal \
     --mount=source=recipes/raremetal-debug,target=/raremetal-debug \
-    conda build --no-anaconda-upload --numpy "2.0" --use-local "raremetal" && \
     conda build --no-anaconda-upload --numpy "2.0" --use-local "raremetal-debug"
+
+FROM builder as r-gmmat
 RUN --mount=source=recipes/r-gmmat,target=/r-gmmat \
     conda build --no-anaconda-upload --numpy "2.0" --use-local "r-gmmat"
+
+FROM builder as upload
 RUN --mount=source=recipes/upload,target=/upload \
     conda build --no-anaconda-upload --numpy "2.0" --use-local "upload"
+
+FROM builder as gwas
+COPY --from=dosage-convertor /opt/conda/conda-bld /opt/conda/conda-bld
+COPY --from=metal /opt/conda/conda-bld /opt/conda/conda-bld
+COPY --from=qctool /opt/conda/conda-bld /opt/conda/conda-bld
+COPY --from=raremetal /opt/conda/conda-bld /opt/conda/conda-bld
+COPY --from=raremetal-debug /opt/conda/conda-bld /opt/conda/conda-bld
+COPY --from=r-gmmat /opt/conda/conda-bld /opt/conda/conda-bld
+COPY --from=upload /opt/conda/conda-bld /opt/conda/conda-bld
+RUN conda index /opt/conda/conda-bld
 # Mount .git folder too for setuptools_scm
 RUN --mount=source=recipes/gwas,target=/gwas-protocol/recipes/gwas \
     --mount=source=src/gwas,target=/gwas-protocol/src/gwas \
     --mount=source=.git,target=/gwas-protocol/.git \
     conda build --no-anaconda-upload --numpy "2.0" --use-local "gwas-protocol/recipes/gwas"
-RUN conda build purge
-
-RUN conda index /opt/conda/conda-bld
 
 # Install packages
 # ================
 FROM conda AS install
 
-COPY --from=builder /opt/conda/conda-bld /opt/conda/conda-bld
+COPY --from=gwas /opt/conda/conda-bld /opt/conda/conda-bld
 RUN conda install --yes --use-local \
     "parallel" \
     "dosage-convertor" \
