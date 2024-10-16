@@ -1,5 +1,6 @@
 from abc import abstractmethod
 from contextlib import AbstractContextManager
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from functools import partial
 from typing import ClassVar
@@ -68,6 +69,7 @@ def read_header(reader: CompressedTextReader) -> tuple[int, list[str], list[str]
     return header_length, columns, example_lines
 
 
+@dataclass(kw_only=True)
 class VCFFile(AbstractContextManager):
     mandatory_columns: ClassVar[tuple[str, ...]] = (
         "CHROM",
@@ -100,28 +102,23 @@ class VCFFile(AbstractContextManager):
         dtype=np.uint32,
     )
 
-    file_path: UPath
+    file_path: UPath = field()
+    sw: SharedWorkspace = field()
 
-    chromosome: int | str
+    chromosome: int | str = field(init=False)
 
-    vcf_samples: list[str]
-    samples: list[str]
-    sample_indices: npt.NDArray[np.uint32]
+    vcf_samples: list[str] = field(init=False)
+    samples: list[str] = field(init=False)
+    sample_indices: npt.NDArray[np.uint32] = field(init=False)
 
-    shared_vcf_variants: SharedDataFrame
-    variant_indices: npt.NDArray[np.uint32]
-    allele_frequency_columns: list[str]
+    shared_vcf_variants: SharedDataFrame = field(init=False)
+    variant_indices: npt.NDArray[np.uint32] = field(init=False)
+    allele_frequency_columns: list[str] = field(
+        default_factory=lambda: base_allele_frequency_columns.copy()
+    )
 
-    minor_allele_frequency_cutoff: float
-    r_squared_cutoff: float
-
-    def __init__(self, file_path: UPath) -> None:
-        self.file_path = file_path
-
-        self.allele_frequency_columns = base_allele_frequency_columns.copy()
-
-        self.minor_allele_frequency_cutoff = -np.inf
-        self.r_squared_cutoff = -np.inf
+    minor_allele_frequency_cutoff: float = -np.inf
+    r_squared_cutoff: float = -np.inf
 
     @property
     def vcf_variants(self) -> pd.DataFrame:
@@ -239,15 +236,15 @@ class VCFFile(AbstractContextManager):
         if engine == Engine.python:
             from .python import PyVCFFile
 
-            vcf_file: VCFFile = PyVCFFile(file_path, sw)
+            vcf_file: VCFFile = PyVCFFile(file_path=file_path, sw=sw)
         elif engine == Engine.cpp:
             from .cpp import CppVCFFile
 
-            vcf_file = CppVCFFile(file_path, sw)
+            vcf_file = CppVCFFile(file_path=file_path, sw=sw)
         elif engine == Engine.htslib:
             from .htslib import HtslibVCFFile
 
-            vcf_file = HtslibVCFFile(file_path, sw)
+            vcf_file = HtslibVCFFile(file_path=file_path, sw=sw)
         else:
             raise NotImplementedError(f"Unsupported engine: {engine}")
 
@@ -300,10 +297,10 @@ class VCFFile(AbstractContextManager):
         self.chromosome = chromosome_from_int(chromosome_int_set.pop())
 
 
+@dataclass
 class VCFFileReader(VCFFile, CompressedTextReader):
-    def __init__(self, file_path: UPath) -> None:
-        super().__init__(file_path)
-        super(CompressedTextReader, self).__init__(file_path)
+    def __post_init__(self) -> None:
+        super(CompressedTextReader, self).__post_init__()
 
         # Read header information and example line
         self.header_length, self.columns, self.example_lines = read_header(self)

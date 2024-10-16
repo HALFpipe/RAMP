@@ -1,7 +1,7 @@
 import json
 from dataclasses import KW_ONLY, dataclass
 from types import TracebackType
-from typing import IO, Any, Iterator, Self, Type, override
+from typing import IO, TYPE_CHECKING, Any, Iterator, Self, Type, override
 
 import numpy as np
 import pandas as pd
@@ -11,7 +11,7 @@ from upath import UPath
 from ...log import logger
 from ...utils.numpy import to_str
 from ..pipe import CompressedTextReader, CompressedTextWriter
-from ._read_float import read_float
+from ._read_float import create_tsv_float_reader, run_tsv_float_reader
 from ._read_str import (
     read_str,
 )
@@ -25,6 +25,9 @@ from .base import (
     compression_method_from_file,
     compression_methods,
 )
+
+if TYPE_CHECKING:
+    from ._read_float import TSVFloatReader
 
 delimiter: str = "\t"
 header_prefix: str = "# "
@@ -149,11 +152,13 @@ def read_header(
 
 
 @dataclass(kw_only=True)
-class TextFileArrayReader(FileArrayReader[ScalarType]):
+class TextFileArrayReader(FileArrayReader[ScalarType], CompressedTextReader):
     _: KW_ONLY
     compression_method: TextCompressionMethod
     header_length: int
     column_count: int
+
+    float_reader: "TSVFloatReader | None" = None
 
     @override
     @classmethod
@@ -202,13 +207,18 @@ class TextFileArrayReader(FileArrayReader[ScalarType]):
         )
         return reader
 
+    def __enter__(self) -> IO[str]:
+        return super(CompressedTextReader, self).__enter__()
+
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        pass
+        super().__exit__(exc_type, exc_value, traceback)
+        self.float_reader = None
+        self.column_indices = None
 
     def read_indices(
         self,
@@ -216,21 +226,26 @@ class TextFileArrayReader(FileArrayReader[ScalarType]):
         column_indices: npt.NDArray[np.uint32],
         array: npt.NDArray[ScalarType],
     ) -> None:
-        reader = CompressedTextReader(self.file_path)
-
         column_indices = column_indices.copy()
         column_indices += self.metadata_column_count
 
+        if self.output_file_handle is None:
+            raise RuntimeError("File is not open for reading")
+
+        if self.float_reader is None:
+            self.float_reader = create_tsv_float_reader(
+                self.output_file_handle.fileno(),
+                self.header_length,
+                self.column_count + self.metadata_column_count,
+                column_indices,
+            )
+
         if np.issubdtype(self.dtype, np.float64):
-            with reader as file_handle:
-                read_float(
-                    array,  # type: ignore
-                    file_handle.fileno(),
-                    self.header_length,
-                    self.column_count + self.metadata_column_count,
-                    column_indices,
-                    row_indices,
-                )
+            run_tsv_float_reader(
+                array,  # type: ignore
+                self.float_reader,
+                row_indices,
+            )
         else:
             raise NotImplementedError
 

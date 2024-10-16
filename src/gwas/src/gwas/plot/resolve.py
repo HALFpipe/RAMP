@@ -178,6 +178,8 @@ def resolve_score_files(
 
     phenotypes = []
     for phenotype_name in phenotype_names:
+        if phenotype_name not in variable_collection_names:
+            continue
         phenotype = Phenotype(
             name=phenotype_name,
             variable_collection_name=variable_collection_names[phenotype_name],

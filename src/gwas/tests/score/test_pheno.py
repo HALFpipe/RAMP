@@ -229,10 +229,8 @@ def test_covariance(
     covariance_path = calc_covariance(
         variable_collection, covariance_path, compression_method, num_threads=cpu_count()
     )
-
-    with FileArray.from_file(
-        covariance_path, np.float64, num_threads=cpu_count()
-    ) as reader:
+    reader = FileArray.from_file(covariance_path, np.float64, num_threads=cpu_count())
+    with reader:
         covariance = reader[:, :]
 
     kwargs: dict[str, Any] = dict(sep="\t", index_col=0, header=0)

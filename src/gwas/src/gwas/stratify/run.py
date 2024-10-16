@@ -150,7 +150,7 @@ def prune_classes(
             if len(class_dict[k]) < minimum_class_size:
                 class_info = {by: k}
                 logger.info(
-                    f"Will not output {class_info} because it has "
+                    f"Discarding {class_info} because it has "
                     f"only {len(class_dict[k])} samples, which is less than "
                     f"{minimum_class_size}"
                 )
@@ -241,5 +241,11 @@ def apply_classes_to_phenotypes(
 
         phenotype_names_new.extend(f"{prefix}_{name}" for name in phenotype_names_base)
 
+    if len(phenotype_arrays) == 0:
+        raise ValueError(
+            "No samples remaining after applying "
+            f"`--minimum-sample-size {arguments.minimum_sample_size}` and "
+            f"`--minimum-subsample-size {arguments.minimum_subsample_size}`"
+        )
     phenotype_array_new = np.hstack(phenotype_arrays)
     return phenotype_names_new, phenotype_array_new

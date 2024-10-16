@@ -90,7 +90,8 @@ def test_file_array(compression_method_name: str, tmp_path: UPath) -> None:
     assert reader.file_paths <= writer.file_paths
 
     indices = np.array([0, 1, 2], dtype=np.uint32)
-    data = reader[indices, indices]
+    with reader:
+        data = reader[indices, indices]
     np.testing.assert_allclose(data, 7)
 
 

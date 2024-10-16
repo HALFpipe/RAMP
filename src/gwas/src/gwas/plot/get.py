@@ -113,9 +113,10 @@ def load_score_file(job: LoadPValueJob) -> None:
 
     data = job.data
     row_indices = np.arange(job.row_count, dtype=np.uint32)
-    job.reader.read_indices(
-        row_indices=row_indices, column_indices=job.column_indices, array=data
-    )
+    with job.reader:
+        job.reader.read_indices(
+            row_indices=row_indices, column_indices=job.column_indices, array=data
+        )
 
     u_stat = data[:, ::2]
     v_stat = data[:, 1::2]

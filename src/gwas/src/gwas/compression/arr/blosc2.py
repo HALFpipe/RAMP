@@ -132,7 +132,9 @@ class Blosc2FileArrayReader(FileArrayReader[ScalarType]):
         cls, file_path: UPath, dtype: Type[ScalarType], num_threads: int
     ) -> FileArrayReader:
         params = dict(nthreads=num_threads)
-        b2array = blosc2.open(urlpath=str(file_path), cparams=params, dparams=params)
+        b2array = blosc2.open(
+            urlpath=str(file_path), cparams=params, dparams=params, mmap_mode="r"
+        )
         shape = b2array.shape
         dtype = b2array.dtype
 

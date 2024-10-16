@@ -10,7 +10,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
     """Parses command-line arguments"""
     argument_parser = ArgumentParser(description="Generate Manhattan & QQ Plots")
 
-    argument_parser.add_argument("path")
+    argument_parser.add_argument("path", nargs="+")
     argument_parser.add_argument(
         "--compression-method", default=default_compression_method_name
     )

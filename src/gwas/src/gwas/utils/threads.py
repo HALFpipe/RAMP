@@ -14,6 +14,7 @@ num_threads_variables: Sequence[str] = [
     "VECLIB_MAXIMUM_THREADS",
     "NUMEXPR_NUM_THREADS",
     "NUMEXPR_MAX_THREADS",
+    "NPROC",
 ]
 
 

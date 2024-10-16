@@ -3,7 +3,11 @@ import atexit
 
 from cython cimport boundscheck, wraparound, numeric
 from cython.operator cimport dereference
-from libc.stdint cimport int16_t, int64_t
+from libc.stddef cimport size_t
+from libc.stdint cimport uint8_t, int16_t, int64_t
+from libc.stdlib cimport free, malloc
+from libc.string cimport memcpy
+from libcpp cimport bool as c_bool
 
 import numpy as np
 
@@ -32,8 +36,14 @@ cdef extern from "blosc2.h":
         blosc2_storage* storage
         blosc2_context* dctx
 
-    blosc2_schunk *blosc2_schunk_open(
-        const char* urlpath
+    ctypedef struct blosc2_io:
+        uint8_t id
+        const char *name
+        void* params
+
+    blosc2_schunk *blosc2_schunk_open_udio(
+        const char* urlpath,
+        const blosc2_io *udio
     ) nogil
 
     ctypedef struct blosc2_context:
@@ -50,6 +60,16 @@ cdef extern from "blosc2.h":
         blosc2_schunk *schunk,
         const char *name
     ) nogil
+
+    ctypedef enum:
+        BLOSC2_IO_FILESYSTEM_MMAP
+
+    ctypedef struct blosc2_stdio_mmap:
+        const char* mode
+        int64_t initial_mapping_size
+        c_bool needs_free
+
+    blosc2_stdio_mmap blosc2_get_blosc2_stdio_mmap_defaults() nogil
 
 
 cdef extern from "b2nd.h":
@@ -83,6 +103,7 @@ def get_orthogonal_selection(
 ) :
     cdef int64_t row_count = row_indices.size
     cdef int64_t column_count = column_indices.size
+    cdef size_t itemsize = array.itemsize
 
     if array.shape[0] != row_count:
         raise ValueError("Array row count does not match selection shape")
@@ -96,12 +117,28 @@ def get_orthogonal_selection(
     cdef int64_t *array_shape = selection_shape
     cdef int64_t array_size = row_count * column_count
 
+    cdef blosc2_stdio_mmap default_params
+    cdef blosc2_stdio_mmap* params
     cdef blosc2_schunk *schunk
     cdef b2nd_array_t *b2nd_array
     cdef int return_code
 
     with nogil:
-        schunk = blosc2_schunk_open(urlpath_char)
+        # schunk = blosc2_schunk_open(urlpath_char)
+
+        params = <blosc2_stdio_mmap *> malloc(sizeof(blosc2_stdio_mmap))
+        default_params = blosc2_get_blosc2_stdio_mmap_defaults()
+        memcpy(params, &default_params, sizeof(blosc2_stdio_mmap))
+        params.mode = b"r"
+        params.needs_free = True
+        params.initial_mapping_size = row_count * column_count * itemsize
+
+        io = <blosc2_io *> malloc(sizeof(blosc2_io))
+        io.id = BLOSC2_IO_FILESYSTEM_MMAP
+        io.params = params
+
+        schunk = blosc2_schunk_open_udio(urlpath_char, io)
+        free(io)
 
         schunk.storage.dparams.nthreads = num_threads
         blosc2_free_ctx(schunk.dctx)

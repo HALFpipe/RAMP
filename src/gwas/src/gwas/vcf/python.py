@@ -1,22 +1,21 @@
+from dataclasses import dataclass
 from typing import IO
 
 import numpy as np
 from numpy import typing as npt
-from upath import UPath
-
-from gwas.mem.wkspace import SharedWorkspace
 
 from ..log import logger
 from .base import VCFFileReader
 from .variant import Variant
 
 
+@dataclass
 class PyVCFFile(VCFFileReader):
-    def __init__(self, file_path: UPath, sw: SharedWorkspace) -> None:
-        super().__init__(file_path)
+    def __post_init__(self) -> None:
+        super().__post_init__()
 
         # Read metadata.
-        logger.debug(f'Reading metadata for "{str(file_path)}".')
+        logger.debug(f'Reading metadata for "{str(self.file_path)}".')
         n_mandatory_columns = len(self.mandatory_columns)
 
         vcf_variants: list[Variant] = list()
@@ -43,7 +42,7 @@ class PyVCFFile(VCFFileReader):
                         format_str,
                     )
                 )
-        self.shared_vcf_variants = self.make_shared_data_frame(vcf_variants, sw)
+        self.shared_vcf_variants = self.make_shared_data_frame(vcf_variants, self.sw)
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
 
         self.update_chromosome()

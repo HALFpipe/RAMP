@@ -1,21 +1,24 @@
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from numpy import typing as npt
-from upath import UPath
 
 from ..compression.arr._read_float import (
     create_vcf_float_reader,
     run_vcf_float_reader,
 )
-from ..mem.wkspace import SharedWorkspace
 from .base import VCFFileReader
 from .variant import Variant
 
+if TYPE_CHECKING:
+    from ..compression.arr._read_float import VCFFloatReader
 
+
+@dataclass
 class CppVCFFile(VCFFileReader):
-    def __init__(self, file_path: UPath, sw: SharedWorkspace) -> None:
-        super().__init__(file_path)
+    def __post_init__(self) -> None:
+        super().__post_init__()
 
         vcf_variants: list[Variant] = list()
         from ..compression.arr._read_str import read_str
@@ -29,7 +32,7 @@ class CppVCFFile(VCFFileReader):
                 len(self.columns),
                 self.metadata_column_indices,
             )
-        self.shared_vcf_variants = self.make_shared_data_frame(vcf_variants, sw)
+        self.shared_vcf_variants = self.make_shared_data_frame(vcf_variants, self.sw)
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
         self.update_chromosome()
 
@@ -47,7 +50,7 @@ class CppVCFFile(VCFFileReader):
         token = tokens[-1].replace("\n", "\t")
         self.column_count = self.metadata_column_count + token.count("\t")
 
-        self.float_reader: Any = None
+        self.float_reader: "VCFFloatReader | None" = None
 
     def set_samples(self, samples: set[str]) -> None:
         super().set_samples(samples)
@@ -64,7 +67,7 @@ class CppVCFFile(VCFFileReader):
         dosages: npt.NDArray[np.float64],
     ) -> None:
         if self.output_file_handle is None:
-            raise ValueError("Cannot read from a closed file")
+            raise RuntimeError("File is not open for reading")
 
         if dosages.size == 0:
             return  # Nothing to do.

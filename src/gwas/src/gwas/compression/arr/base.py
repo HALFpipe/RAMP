@@ -220,9 +220,7 @@ class FileArrayWriter(
 
 
 @dataclass(kw_only=True)
-class FileArrayReader(
-    FileArray[ScalarType], AbstractContextManager["FileArrayReader[ScalarType]"]
-):
+class FileArrayReader(FileArray[ScalarType], AbstractContextManager[object]):
     @abstractmethod
     def read_indices(
         self,

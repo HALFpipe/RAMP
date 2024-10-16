@@ -1,11 +1,10 @@
+from dataclasses import dataclass
 from types import TracebackType
 from typing import Type
 
 import numpy as np
 from numpy import typing as npt
-from upath import UPath
 
-from ..mem.wkspace import SharedWorkspace
 from ..utils.genetics import chromosome_to_int
 from ._htslib import read_dosages, read_variants
 from .base import VCFFile
@@ -34,16 +33,15 @@ def variant_from_htslib(
     )
 
 
+@dataclass
 class HtslibVCFFile(VCFFile):
-    def __init__(self, file_path: UPath, sw: SharedWorkspace) -> None:
-        super().__init__(file_path)
-
+    def __post_init__(self) -> None:
         variants, samples = read_variants(str(self.file_path), variant_from_htslib)
 
         self.vcf_samples = samples
         self.set_samples(set(samples))
 
-        self.shared_vcf_variants = self.make_shared_data_frame(variants, sw)
+        self.shared_vcf_variants = self.make_shared_data_frame(variants, self.sw)
         self.variant_indices = np.arange(self.vcf_variant_count, dtype=np.uint32)
         self.update_chromosome()
 

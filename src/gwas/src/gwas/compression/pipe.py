@@ -1,8 +1,9 @@
 from collections import deque
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from subprocess import PIPE, Popen
 from types import TracebackType
-from typing import IO, Mapping, Type, TypeVar
+from typing import IO, Literal, Mapping, Type, TypeVar
 
 from upath import UPath
 
@@ -25,16 +26,18 @@ decompress_commands: Mapping[str, list[str]] = {
 T = TypeVar("T", bytes, str)
 
 
+@dataclass
 class CompressedReader(AbstractContextManager[IO[T]]):
-    def __init__(self, file_path: UPath | str, is_text: bool = True) -> None:
-        self.file_path: UPath = UPath(file_path)
+    file_path: UPath
+    is_text: bool = True
+
+    input_file_handle: IO[bytes] | None = None
+    process_handle: Popen[T] | None = None
+    output_file_handle: IO[T] | None = None
+
+    def __post_init__(self) -> None:
         if not self.file_path.is_file():
             raise FileNotFoundError(self.file_path)
-        self.is_text = is_text
-
-        self.input_file_handle: IO[bytes] | None = None
-        self.process_handle: Popen[T] | None = None
-        self.output_file_handle: IO[T] | None = None
 
     def __enter__(self) -> IO[T]:
         return self.open()
@@ -110,16 +113,14 @@ class CompressedReader(AbstractContextManager[IO[T]]):
 
 
 class CompressedBytesReader(CompressedReader[bytes]):
-    def __init__(self, file_path: UPath | str) -> None:
-        super().__init__(file_path, is_text=False)
+    is_text: Literal[False] = False
 
     def __enter__(self) -> IO[bytes]:
         return super().__enter__()
 
 
 class CompressedTextReader(CompressedReader[str]):
-    def __init__(self, file_path: UPath | str) -> None:
-        super().__init__(file_path, is_text=True)
+    is_text: Literal[True] = True
 
     def open(self) -> IO[str]:
         if self.file_path.suffix not in decompress_commands:

@@ -175,10 +175,7 @@ class Scorefile:
             summaries[name] = summary
 
     @classmethod
-    def read_header(
-        cls,
-        file_path: UPath | str,
-    ) -> ScorefileHeader:
+    def read_header(cls, file_path: UPath) -> ScorefileHeader:
         header_dict: dict[str, Any] = dict(
             null_model_estimates=list(),
             covariate_summaries=list(),
@@ -213,10 +210,7 @@ class Scorefile:
         return np.dtype(list(zip(cls.names, cls.types, strict=True)))
 
     @classmethod
-    def read(
-        cls,
-        file_path: UPath | str,
-    ) -> tuple[ScorefileHeader, npt.NDArray[np.float64]]:
+    def read(cls, file_path: UPath) -> tuple[ScorefileHeader, npt.NDArray[np.float64]]:
         line_count = 0
         with CompressedTextReader(file_path) as file:
             for line in file:
