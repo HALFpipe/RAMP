@@ -1,11 +1,11 @@
 
 package:
   name: upload
-  version: 0.5.5
+  version: 0.5.8
 
 source:
-  url: "https://github.com/hippocampusgirl/upload/archive/v0.5.5.tar.gz"
-  sha256: 7def6f41395fef10b931181d245d74762119723dd795eb3ebeb530adeef24c3d
+  url: "https://github.com/hippocampusgirl/upload/archive/v0.5.8.tar.gz"
+  sha256: dd6b818fb6ba4c91e387e22ddcd30dfac3d827bd87e8354d8a39c661ce387948
 
 build:
   noarch: generic

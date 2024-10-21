@@ -3,17 +3,14 @@ import sys
 from argparse import ArgumentParser, Namespace
 from typing import Literal
 
+from upath import UPath
+
 
 def parse_arguments(argv: list[str]) -> Namespace:
-    from ..compression.arr.base import default_compression_method_name
-
     """Parses command-line arguments"""
     argument_parser = ArgumentParser(description="Generate Manhattan & QQ Plots")
 
-    argument_parser.add_argument("path", nargs="+")
-    argument_parser.add_argument(
-        "--compression-method", default=default_compression_method_name
-    )
+    argument_parser.add_argument("path")
 
     argument_parser.add_argument("--debug", action="store_true", default=False)
     argument_parser.add_argument(
@@ -34,7 +31,7 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
 
     from ..log import logger, setup_logging
 
-    setup_logging(level=arguments.log_level)
+    setup_logging(level=arguments.log_level, path=UPath(arguments.path).parent)
 
     from ..utils.threads import apply_num_threads, cpu_count
 
@@ -42,17 +39,20 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
         arguments.num_threads = cpu_count()
     apply_num_threads(arguments.num_threads)
 
+    from ..mem.wkspace import SharedWorkspace
+
     size = int(arguments.mem_gb * 2**30)
 
-    try:
-        from .command import convert
+    with SharedWorkspace.create(size=size) as sw:
+        try:
+            from .command import convert
 
-        convert(arguments, size)
-    except Exception as e:
-        logger.exception("Exception: %s", e, exc_info=True)
-        if arguments.debug:
-            import pdb
+            convert(arguments, sw)
+        except Exception as e:
+            logger.exception("Exception: %s", e, exc_info=True)
+            if arguments.debug:
+                import pdb
 
-            pdb.post_mortem()
-        if error_action == "raise":
-            raise e
+                pdb.post_mortem()
+            if error_action == "raise":
+                raise e

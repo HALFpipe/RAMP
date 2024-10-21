@@ -197,6 +197,7 @@ class Process(multiprocessing_context.Process):  # type: ignore
     ) -> None:
         self.initargs: InitArgs = get_initargs(num_threads)
         self.exception_queue = exception_queue
+
         super().__init__(name=name)
 
     def set_num_threads(self, num_threads: int) -> None:

@@ -1,5 +1,6 @@
 from dataclasses import dataclass, fields
 from itertools import pairwise
+from math import prod
 from typing import (
     Any,
     ClassVar,
@@ -47,16 +48,8 @@ class SharedArray(Generic[ScalarType]):
         return self.allocation.shape
 
     @property
-    def start(self) -> int:
-        return self.allocation.start
-
-    @property
-    def end(self) -> int:
-        return self.allocation.end
-
-    @property
     def size(self) -> int:
-        return self.allocation.size
+        return prod(self.shape)
 
     @property
     def dtype(self) -> np.dtype[ScalarType]:

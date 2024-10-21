@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from collections import deque
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
@@ -29,11 +30,14 @@ T = TypeVar("T", bytes, str)
 @dataclass
 class CompressedReader(AbstractContextManager[IO[T]]):
     file_path: UPath
-    is_text: bool = True
 
     input_file_handle: IO[bytes] | None = None
     process_handle: Popen[T] | None = None
     output_file_handle: IO[T] | None = None
+
+    @property
+    @abstractmethod
+    def is_text(self) -> bool: ...
 
     def __post_init__(self) -> None:
         if not self.file_path.is_file():

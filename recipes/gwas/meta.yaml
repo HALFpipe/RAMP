@@ -56,6 +56,7 @@ requirements:
     # genetics tools
     - bcftools >=1.17
     - gcta
+    - metal
     - plink
     - plink2
     - raremetal

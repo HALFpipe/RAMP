@@ -166,7 +166,7 @@ class Calc(Worker):
             if value is Action.Exit:
                 break
             elif not isinstance(value, int):
-                raise ValueError("Expected an integer.")
+                raise ValueError("Expected an integer")
             variant_count = value
             self.t.calc_count_queue.put(variant_count)
             if value == 0:

@@ -1,9 +1,9 @@
 from contextlib import nullcontext
 from dataclasses import dataclass
+from itertools import batched
 from multiprocessing import current_process
 from typing import ContextManager, Mapping, Sequence, Type
 
-from more_itertools import chunked
 from tqdm.auto import tqdm
 from upath import UPath
 
@@ -134,7 +134,7 @@ def fit(
             null_model_collections,
             strict=True,
         )
-        for phenotype_indices in chunked(range(vc.phenotype_count), chunksize)
+        for phenotype_indices in batched(range(vc.phenotype_count), chunksize)
     ]
     logger.debug(
         f"Running {len(optimize_jobs)} optimize jobs "

@@ -51,5 +51,6 @@ def test_compression(
         )
 
         reader = FileArray.from_file(file_path, np.float64, cpu_count())
-        array = reader[:, :]
+        with reader:
+            array = reader[:, :]
         np.testing.assert_array_equal(scores, array[...])

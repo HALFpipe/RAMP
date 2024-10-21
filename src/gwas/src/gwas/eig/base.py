@@ -250,6 +250,6 @@ def load_tri_arrays(
                 leave=False,
             )
         )
-    tri_arrays.sort(key=attrgetter("start"))
+    tri_arrays.sort(key=attrgetter("allocation.start"))
     logger.debug(f"Loaded {len(tri_arrays)} triangular matrices: {tri_arrays}")
     return tri_arrays

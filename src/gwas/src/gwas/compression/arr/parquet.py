@@ -157,11 +157,11 @@ class ParquetFileArrayReader(FileArrayReader[ScalarType]):
         for record_batch in iterator:
             record_batch_end = record_batch_start + record_batch.num_rows
 
-            tensor = record_batch.to_tensor().to_numpy()
-
             mask = row_mask[record_batch_start:record_batch_end]
             row_end = row_start + np.count_nonzero(mask)
-            array[row_start:row_end, :] = tensor[mask, :]
+            if np.any(mask):
+                tensor = record_batch.to_tensor().to_numpy()
+                array[row_start:row_end, :] = tensor[mask, :]
 
             record_batch_start = record_batch_end
             row_start = row_end
