@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from collections import deque
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from subprocess import PIPE, Popen
@@ -87,12 +86,13 @@ class CompressedReader(AbstractContextManager[IO[T]]):
         value: BaseException | None = None,
         traceback: TracebackType | None = None,
     ) -> None:
-        output_file_handle = self.output_file_handle
-        if output_file_handle is not None:
-            # Read until EOF
-            # Taken from https://stackoverflow.com/a/50938015
-            deque(output_file_handle, maxlen=0)
+        returncodes: set[int] = {0}
         if self.process_handle is not None:
+            self.process_handle.poll()
+            if self.process_handle.returncode is None:
+                self.process_handle.terminate()
+                returncodes.add(-15)
+
             stderr = self.process_handle.stderr
             if stderr is None:
                 raise IOError
@@ -104,7 +104,7 @@ class CompressedReader(AbstractContextManager[IO[T]]):
             self.process_handle.__exit__(exc_type, value, traceback)
             returncode = self.process_handle.returncode
 
-            if returncode:
+            if returncode not in returncodes:
                 raise ValueError(
                     f'Decompression failed with code {returncode} and message "{data}"'
                 )

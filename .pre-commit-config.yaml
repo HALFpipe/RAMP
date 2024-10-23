@@ -44,6 +44,7 @@ repos:
           - pandas-stubs
           - types-psutil
           - types-PyYAML
+          - types-requests
           - types-seaborn
           - types-setuptools
           - types-tqdm
