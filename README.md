@@ -22,12 +22,12 @@ You need to download the container file using one of the following commands. Thi
   <tr>
     <td>Singularity</td>
     <td>3.x</td>
-    <td><code>wget <a href="http://download.gwas.science/singularity/gwas-protocol-latest.sif">http://download.gwas.science/singularity/gwas-protocol-latest.sif</code></a></td>
+    <td><code>wget <a href="http://download.gwas.science/singularity/gwas-protocol-latest.sif">http://download.gwas.science/singularity/ramp-latest.sif</code></a></td>
   </tr>
   <tr>
     <td>Docker</td>
     <td></td>
-    <td><code>docker pull gwas.science/gwas-protocol:latest</code></td>
+    <td><code>docker pull gwas.science/ramp:latest</code></td>
   </tr>
 </tbody>
 </table>
