@@ -23,7 +23,7 @@ def genotypes_array(vcf_file: VCFFile) -> npt.NDArray[np.float64]:
     with vcf_file:
         vcf_file.read(a)
 
-    scale(a)
+    scale(vcf_file, a)
 
     return a
 
@@ -42,6 +42,18 @@ def numpy_tri(genotypes_array: npt.NDArray[np.float64]) -> npt.NDArray[np.float6
     )
 
     return r
+
+
+@pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
+@pytest.mark.parametrize("chromosome", [22], indirect=True)
+def test_zero_variance(
+    vcf_file: VCFFile, genotypes_array: npt.NDArray[np.float64]
+) -> None:
+    a = genotypes_array.copy()
+    a[42, :] = 0
+
+    with pytest.raises(ValueError):
+        scale(vcf_file, a)
 
 
 @pytest.mark.slow

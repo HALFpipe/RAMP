@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from functools import reduce
+from pprint import pformat
 from typing import Self, override
 
 import numpy as np
@@ -250,7 +251,9 @@ class VariableCollection(SharedArray[np.float64]):
         if samples is None:
             samples = phenotype_samples
         if not samples:
-            raise RuntimeError("No samples found in phenotype files")
+            raise RuntimeError(
+                f"No samples found in phenotype files: {pformat(phenotype_paths)}"
+            )
 
         logger.debug("Reading covariates")
         covariate_samples, covariate_names, covariate_array = read_and_combine(
@@ -288,7 +291,7 @@ class VariableCollection(SharedArray[np.float64]):
         )
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True)
 class VariableSummary:
     minimum: float
     lower_quartile: float
@@ -326,11 +329,11 @@ class VariableSummary:
         )
         (minimum, lower_quartile, median, upper_quartile, maximum) = quantiles.ravel()
         return cls(
-            float(minimum),
-            float(lower_quartile),
-            float(median),
-            float(upper_quartile),
-            float(maximum),
-            float(value.mean()),
-            float(value.var(ddof=1)),
+            minimum=float(minimum),
+            lower_quartile=float(lower_quartile),
+            median=float(median),
+            upper_quartile=float(upper_quartile),
+            maximum=float(maximum),
+            mean=float(value.mean()),
+            variance=float(value.var(ddof=1)),
         )

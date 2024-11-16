@@ -1,4 +1,4 @@
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass, replace
 from itertools import chain
 from typing import Any, Literal, Self, Type, TypeVar, get_args, get_origin
 
@@ -43,18 +43,18 @@ def parse_obj_as(cls: Type[T], data: Any) -> T:
     return data
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class RegressionWeight:
     value: float
     standard_error: float
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True)
 class CovariateSummary(VariableSummary):
     pass
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True)
 class PhenotypeSummary(VariableSummary):
     method: str | None = None
     log_likelihood: float | None = None
@@ -77,23 +77,27 @@ class VariableCollectionSummary:
     def put_null_model_collection(self, nm: NullModelCollection) -> None:
         self.status = "null_model_complete"
         for i, name in enumerate(self.phenotypes.keys()):
-            self.phenotypes[name].method = nm.method
-            self.phenotypes[name].log_likelihood = float(nm.log_likelihood[i])
-            self.phenotypes[name].genetic_variance = float(nm.genetic_variance[i])
-            self.phenotypes[name].error_variance = float(nm.error_variance[i])
-            self.phenotypes[name].heritability = float(nm.heritability[i])
-
             regression_weights = nm.regression_weights
             standard_errors = nm.standard_errors
-            self.phenotypes[name].regression_weights = {
-                name: RegressionWeight(float(weight), float(error))
-                for name, weight, error in zip(
-                    self.covariates.keys(),
-                    regression_weights[i],
-                    standard_errors[i],
-                    strict=True,
-                )
-            }
+            self.phenotypes[name] = replace(
+                self.phenotypes[name],
+                method=nm.method,
+                log_likelihood=float(nm.log_likelihood[i]),
+                genetic_variance=float(nm.genetic_variance[i]),
+                error_variance=float(nm.error_variance[i]),
+                heritability=float(nm.heritability[i]),
+                regression_weights={
+                    name: RegressionWeight(
+                        value=float(value), standard_error=float(standard_error)
+                    )
+                    for name, value, standard_error in zip(
+                        self.covariates.keys(),
+                        regression_weights[i],
+                        standard_errors[i],
+                        strict=True,
+                    )
+                },
+            )
 
     @classmethod
     def from_variable_collection(cls, vc: VariableCollection) -> Self:
@@ -137,7 +141,7 @@ class SummaryCollection:
     @classmethod
     def from_file(cls, file_path: UPath) -> Self:
         with CompressedTextReader(file_path) as file_handle:
-            chunks_data = yaml.safe_load(file_handle)
+            chunks_data = yaml.load(file_handle, yaml.CSafeLoader)
         instance = parse_obj_as(cls, chunks_data)
 
         return instance

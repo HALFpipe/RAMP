@@ -8,6 +8,7 @@ from tqdm.auto import tqdm
 from gwas.mem.data_frame import SharedDataFrame
 
 from ..compression.arr.base import FileArrayReader
+from ..hg19 import offset
 from ..log import logger
 from ..mem.arr import ScalarType, SharedArray
 from ..mem.wkspace import SharedWorkspace
@@ -16,7 +17,6 @@ from ..utils.multiprocessing import (
     IterationOrder,
     make_pool_or_null_context,
 )
-from .hg19 import offset
 from .resolve import Phenotype, ScoreFile
 
 
@@ -31,34 +31,34 @@ class LoadPValueJob:
     num_threads: int = 1
 
     def subset_array(
-        self, shared_array: SharedArray[ScalarType]
+        self, shared_array: SharedArray[ScalarType], column_count: int
     ) -> npt.NDArray[ScalarType]:
         numpy_array = shared_array.to_numpy().transpose()
         numpy_array = numpy_array[
             self.row_offset : (self.row_offset + self.row_count), :
         ]
-        column_count = self.column_indices.size
         numpy_array = numpy_array[:, :column_count]
         return numpy_array
 
     @property
     def data(self) -> npt.NDArray[np.float64]:
-        return self.subset_array(self.data_array)
+        column_count = self.column_indices.size
+        return self.subset_array(self.data_array, column_count)
 
     @property
     def mask(self) -> npt.NDArray[np.bool_]:
-        return self.subset_array(self.mask_array)
+        column_count = self.column_indices.size // 2
+        return self.subset_array(self.mask_array, column_count)
 
 
 def calculate_chi_squared_p_value(
     u_stat: npt.NDArray[np.float64], v_stat: npt.NDArray[np.float64]
-) -> None:
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     import scipy
 
     """
     Calculates the p-value from U-statistic and V-statistic using the chi-square test
     """
-    logger.debug(f"Calculating chi-squared p-value for {u_stat.size} tests")
 
     # Find which inputs are invalid
     invalid_u_stat = np.logical_or(np.isnan(u_stat), np.isinf(u_stat))
@@ -104,28 +104,34 @@ def calculate_chi_squared_p_value(
             f"{v_stat[invalid_mask]} for p-values values {u_stat[invalid_mask]}"
         )
 
+    return u_stat, v_stat
+
 
 def load_score_file(job: LoadPValueJob) -> None:
-    logger.debug(
-        f"Loading {job.row_count} rows and {len(job.column_indices)} columns "
-        f"from {job.reader.file_path} with b2nd_get_orthogonal_selection"
-    )
-
-    data = job.data
-    row_indices = np.arange(job.row_count, dtype=np.uint32)
-    with job.reader:
-        job.reader.read_indices(
-            row_indices=row_indices, column_indices=job.column_indices, array=data
+    try:
+        logger.debug(
+            f"Loading {job.row_count} rows and {len(job.column_indices)} columns "
+            f"from {job.reader.file_path}"
         )
 
-    u_stat = data[:, ::2]
-    v_stat = data[:, 1::2]
+        data = job.data
+        row_indices = np.arange(job.row_count, dtype=np.uint32)
+        with job.reader:
+            job.reader.read_indices(
+                row_indices=row_indices, column_indices=job.column_indices, array=data
+            )
 
-    # Update the mask in place
-    mask = job.mask
-    np.logical_and(~np.isclose(u_stat, 0), mask, out=mask)
+        u_stat = data[:, ::2]
+        v_stat = data[:, 1::2]
 
-    calculate_chi_squared_p_value(u_stat, v_stat)
+        # Update the mask in place
+        mask = job.mask
+        np.logical_and(~np.isclose(u_stat, 0), mask, out=mask)
+
+        calculate_chi_squared_p_value(u_stat, v_stat)
+    except Exception as e:
+        logger.error(f'Error while loading "{job.reader.file_path}"', exc_info=e)
+        raise e
 
 
 @dataclass
@@ -216,12 +222,12 @@ class DataLoader:
         mask = self.mask_array.to_numpy().transpose()
         for i, phenotype in enumerate(chunk):
             mask[:, i] = make_variant_mask(
-                self.variant_metadata[
+                allele_frequencies=self.variant_metadata[
                     f"{phenotype.variable_collection_name}_alternate_allele_frequency"
                 ].to_pandas(),
-                self.variant_metadata["r_squared"].to_pandas(),
-                self.minor_allele_frequency_cutoff,
-                self.r_squared_cutoff,
+                r_squared=self.variant_metadata["r_squared"].to_pandas(),
+                minor_allele_frequency_cutoff=self.minor_allele_frequency_cutoff,
+                r_squared_cutoff=self.r_squared_cutoff,
             )
 
         column_indices = np.asarray(
@@ -278,4 +284,10 @@ class DataLoader:
             chunk = phenotypes[: self.phenotype_count]
             phenotypes = phenotypes[self.phenotype_count :]
 
-            yield self.generate_chunk(chunk)
+            try:
+                # need to yield the generator so that we only continue
+                # after all the array data has been processed, so we
+                # don't overwrite data that is still being read
+                yield self.generate_chunk(chunk)
+            except Exception as e:
+                logger.error("Error while processing chunk", exc_info=e)

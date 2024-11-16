@@ -168,7 +168,18 @@ class Scorefile:
             header_dict["heritability"] = array
             return
 
-        summary = VariableSummary(*array)
+        (minimum, lower_quartile, median, upper_quartile, maximum, mean, variance) = (
+            array
+        )
+        summary = VariableSummary(
+            minimum=minimum,
+            lower_quartile=lower_quartile,
+            median=median,
+            upper_quartile=upper_quartile,
+            maximum=maximum,
+            mean=mean,
+            variance=variance,
+        )
         if name == "AnalyzedTrait":
             header_dict["analyzed_trait"] = summary
         else:

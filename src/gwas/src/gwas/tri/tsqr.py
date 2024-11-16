@@ -13,21 +13,22 @@ from ..vcf.base import VCFFile
 from .base import TaskSyncCollection, Triangular
 
 
-def scale(b: npt.NDArray[np.float64]) -> None:
-    # Calculate variant properties
+def scale(vcf_file: VCFFile, b: npt.NDArray[np.float64]) -> None:
+    # calculate variant properties
     mean = b.mean(axis=1)
-    minor_allele_frequency = mean / 2
+    standard_deviation = b.std(axis=1)
+
+    close_to_zero = np.isclose(standard_deviation, 0)
+    if close_to_zero.any():
+        variants = vcf_file.variants.iloc[close_to_zero, :]
+        raise ValueError(
+            f"""Some variants have zero standard deviation:
+{variants}
+Please adjust the criteria for including variants"""
+        )
 
     # apply scaling
     b -= mean[:, np.newaxis]
-    standard_deviation = np.sqrt(
-        2 * minor_allele_frequency * (1 - minor_allele_frequency)
-    )
-    if np.isclose(standard_deviation, 0).any():
-        raise ValueError(
-            "Some variants have zero standard deviation. "
-            "Please adjust the criteria for including variants"
-        )
     b /= standard_deviation[:, np.newaxis]
 
 
@@ -101,7 +102,7 @@ class TallSkinnyQR:
                 f"Cannot handle missing dosages in {self.vcf_file.file_path}"
             )
 
-        scale(array)
+        scale(self.vcf_file, array)
 
         multithreading_semaphore: ContextManager[Any] = nullcontext()
         if self.t is not None:

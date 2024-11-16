@@ -47,6 +47,10 @@ FROM builder as dosage-convertor
 RUN --mount=source=recipes/dosage-convertor,target=/dosage-convertor \
     conda build --no-anaconda-upload --numpy "2.0" "dosage-convertor"
 
+FROM builder as ldsc
+RUN --mount=source=recipes/ldsc,target=/ldsc \
+    conda build --no-anaconda-upload --numpy "2.0" --use-local "ldsc"
+
 FROM builder as metal
 RUN --mount=source=recipes/metal,target=/metal \
     conda build --no-anaconda-upload --numpy "2.0" --use-local "metal"
@@ -74,6 +78,7 @@ RUN --mount=source=recipes/upload,target=/upload \
 
 FROM builder as gwas
 COPY --from=dosage-convertor /opt/conda/conda-bld /opt/conda/conda-bld
+COPY --from=ldsc /opt/conda/conda-bld /opt/conda/conda-bld
 COPY --from=metal /opt/conda/conda-bld /opt/conda/conda-bld
 COPY --from=qctool /opt/conda/conda-bld /opt/conda/conda-bld
 COPY --from=raremetal /opt/conda/conda-bld /opt/conda/conda-bld

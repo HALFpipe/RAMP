@@ -65,6 +65,8 @@ def convert(arguments: Namespace, sw: SharedWorkspace) -> None:
         verify(reader, converted_reader, array)
     except Exception as exception:
         logger.error(f'Error converting "{input_path}": {exception}', exc_info=True)
+        if arguments.debug:
+            raise exception
         if output_path is not None:
             logger.info(f'Deleting "{output_path}" after error', exc_info=True)
             output_path.unlink(missing_ok=True)

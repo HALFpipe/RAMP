@@ -13,16 +13,22 @@ def parse_chromosome(chromosome: str) -> int | str:
 
 
 def chromosome_to_int(chromosome: int | str) -> int:
-    if chromosome == "X":
-        return 23
-    elif isinstance(chromosome, str) and chromosome.isdigit():
-        return int(chromosome)
+    if isinstance(chromosome, str):
+        if chromosome.startswith("NC_"):
+            chromosome = chromosome.removeprefix("NC_")
+            chromosome, _ = chromosome.split(".")
+        if chromosome == "X":
+            return 23
+        elif chromosome.isdigit():
+            return int(chromosome)
     elif isinstance(chromosome, int):
         return chromosome
     raise ValueError(f'Unknown chromsome "{chromosome}"')
 
 
 def chromosome_from_int(chromosome_int: int) -> int | str:
+    if hasattr(chromosome_int, "as_py"):  # handle pyarrow
+        chromosome_int = chromosome_int.as_py()
     if chromosome_int == 23:
         return "X"
     else:

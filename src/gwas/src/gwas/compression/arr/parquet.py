@@ -38,13 +38,11 @@ class ParquetFileArrayWriter(FileArrayWriter[ScalarType]):
 
     @cached_property
     def arrow_type(self) -> pa.DataType:
-        return pa.from_numpy_dtype(self.dtype)
+        return pa.from_numpy_dtype(np.dtype(self.dtype))
 
     @cached_property
     def schema(self) -> pa.Schema:
         fields: list[pa.Field] = self.row_metadata_fields.copy()
-
-        arrow_type = pa.from_numpy_dtype(self.dtype)
 
         _, column_count = self.shape
         column_names: list[str] | None = None
@@ -55,7 +53,7 @@ class ParquetFileArrayWriter(FileArrayWriter[ScalarType]):
                 name = column_names[i]
             else:
                 name = f"column-{i}"
-            fields.append(pa.field(name, arrow_type))
+            fields.append(pa.field(name, self.arrow_type))
 
         metadata: dict[bytes, bytes] = dict()
         for key, value in self.extra_metadata.items():
@@ -79,6 +77,8 @@ class ParquetFileArrayWriter(FileArrayWriter[ScalarType]):
         value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
+        if self.parquet_writer is not None:
+            self.parquet_writer.close()
         self.parquet_writer = None
 
     def __setitem__(
@@ -105,7 +105,13 @@ class ParquetFileArrayWriter(FileArrayWriter[ScalarType]):
         for column_index in range(value.shape[1]):
             column = value[:, column_index]
             array = pa.Array.from_buffers(
-                self.arrow_type, column.size, [None, pa.py_buffer(column.data)]
+                self.arrow_type,
+                column.size,
+                # None will produce a null buffer pointer for the bitmap of null values
+                [
+                    None,  # type: ignore
+                    pa.py_buffer(column.data),
+                ],
             )
             arrays.append(array)
 
@@ -152,19 +158,21 @@ class ParquetFileArrayReader(FileArrayReader[ScalarType]):
         record_batch_start = 0
         row_start = 0
 
-        parquet_file = pq.ParquetFile(self.file_path)
-        iterator = parquet_file.iter_batches(columns=columns, use_threads=use_threads)
-        for record_batch in iterator:
-            record_batch_end = record_batch_start + record_batch.num_rows
+        with pq.ParquetFile(self.file_path) as parquet_file:
+            iterator = parquet_file.iter_batches(
+                columns=columns, use_threads=use_threads
+            )
+            for record_batch in iterator:
+                record_batch_end = record_batch_start + record_batch.num_rows
 
-            mask = row_mask[record_batch_start:record_batch_end]
-            row_end = row_start + np.count_nonzero(mask)
-            if np.any(mask):
-                tensor = record_batch.to_tensor().to_numpy()
-                array[row_start:row_end, :] = tensor[mask, :]
+                mask = row_mask[record_batch_start:record_batch_end]
+                row_end = row_start + np.count_nonzero(mask)
+                if np.any(mask):
+                    tensor = record_batch.to_tensor().to_numpy()
+                    array[row_start:row_end, :] = tensor[mask, :]
 
-            record_batch_start = record_batch_end
-            row_start = row_end
+                record_batch_start = record_batch_end
+                row_start = row_end
 
     @override
     @classmethod
@@ -172,54 +180,55 @@ class ParquetFileArrayReader(FileArrayReader[ScalarType]):
         cls, file_path: UPath, dtype: Type[ScalarType], num_threads: int
     ) -> FileArrayReader:
         use_threads = num_threads > 1
-        parquet_file = pq.ParquetFile(file_path)
+        with pq.ParquetFile(file_path) as parquet_file:
+            try:
+                schema = parquet_file.schema.to_arrow_schema()
+                metadata = schema.metadata
 
-        try:
-            schema = parquet_file.schema.to_arrow_schema()
-            metadata = schema.metadata
+                fields = [
+                    pa.field(name, type)
+                    for name, type in zip(schema.names, schema.types, strict=True)
+                ]
 
-            fields = [
-                pa.field(name, type)
-                for name, type in zip(schema.names, schema.types, strict=True)
-            ]
+                metadata_column_indices: list[int] = list()
+                if b"metadata_column_indices" in metadata:
+                    metadata_column_indices = json.loads(
+                        metadata.pop(b"metadata_column_indices")
+                    )
 
-            metadata_column_indices: list[int] = list()
-            if b"metadata_column_indices" in metadata:
-                metadata_column_indices = json.loads(
-                    metadata.pop(b"metadata_column_indices")
+                row_metadata_fields = [fields[i] for i in metadata_column_indices]
+                row_metadata: pd.DataFrame | None = None
+                if row_metadata_fields:
+                    row_metadata_columns = [
+                        fields[i].name for i in metadata_column_indices
+                    ]
+                    row_metadata = parquet_file.read(
+                        columns=row_metadata_columns, use_threads=use_threads
+                    ).to_pandas()
+
+                column_names: list[str] = [
+                    field.name
+                    for i, field in enumerate(fields)
+                    if i not in metadata_column_indices
+                ]
+                column_count = len(column_names)
+                row_count = parquet_file.metadata.num_rows
+                shape = (row_count, column_count)
+
+                extra_metadata: dict[str, Any] = {
+                    key.decode(): json.loads(value.decode())
+                    for key, value in metadata.items()
+                }
+
+                return cls(
+                    file_path=file_path,
+                    dtype=dtype,
+                    shape=shape,
+                    compression_method=ParquetCompressionMethod(),
+                    row_metadata=row_metadata,
+                    column_names=column_names,
+                    extra_metadata=extra_metadata,
+                    num_threads=num_threads,
                 )
-
-            row_metadata_fields = [fields[i] for i in metadata_column_indices]
-            row_metadata: pd.DataFrame | None = None
-            if row_metadata_fields:
-                row_metadata_columns = [fields[i].name for i in metadata_column_indices]
-                row_metadata = parquet_file.read(
-                    columns=row_metadata_columns, use_threads=use_threads
-                ).to_pandas()
-
-            column_names: list[str] = [
-                field.name
-                for i, field in enumerate(fields)
-                if i not in metadata_column_indices
-            ]
-            column_count = len(column_names)
-            row_count = parquet_file.metadata.num_rows
-            shape = (row_count, column_count)
-
-            extra_metadata: dict[str, Any] = {
-                key.decode(): json.loads(value.decode())
-                for key, value in metadata.items()
-            }
-
-            return cls(
-                file_path=file_path,
-                dtype=dtype,
-                shape=shape,
-                compression_method=ParquetCompressionMethod(),
-                row_metadata=row_metadata,
-                column_names=column_names,
-                extra_metadata=extra_metadata,
-                num_threads=num_threads,
-            )
-        finally:
-            parquet_file.close()
+            finally:
+                parquet_file.close()

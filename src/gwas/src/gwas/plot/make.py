@@ -12,16 +12,16 @@ from upath import UPath
 
 from gwas.mem.arr import SharedArray
 
-from ..log import logger
-from ..utils.genetics import chromosomes_list
-from .get import PlotJob
-from .hg19 import (
+from ..hg19 import (
     genome_wide_segments,
     offset,
     suggestive_log_p_value,
     suggestive_segments,
     x_ticks,
 )
+from ..log import logger
+from ..utils.genetics import chromosomes_list
+from .get import PlotJob
 
 matplotlib.rcParams["font.family"] = "DejaVu Sans"
 
@@ -76,9 +76,7 @@ def plot_manhattan(
 
 
 def plot_q_q(
-    p_value: npt.NDArray[np.float64],
-    log_p_value: npt.NDArray[np.float64],
-    axes: Axes,
+    p_value: npt.NDArray[np.float64], log_p_value: npt.NDArray[np.float64], axes: Axes
 ) -> None:
     if not np.all(p_value >= 0):
         raise ValueError("p-values must be positive")
@@ -129,9 +127,12 @@ class PlotGenerator:
     output_directory: UPath
 
     def __post_init__(self) -> None:
-        (variant_count,) = self.chromosome_array.shape
+        self.validate()
 
-        expected_shape: tuple[int, ...] = (self.mask_array.shape[0] * 2, variant_count)
+    def validate(self) -> None:
+        phenotype_count, variant_count = self.mask_array.shape
+
+        expected_shape: tuple[int, ...] = (phenotype_count * 2, variant_count)
         if self.p_value_array.shape != expected_shape:
             raise ValueError(
                 f"Expected shape {expected_shape} for p-value array "
@@ -139,34 +140,39 @@ class PlotGenerator:
             )
 
         expected_shape = (variant_count,)
+        if self.chromosome_array.shape != expected_shape:
+            raise ValueError(
+                f"Expected shape {expected_shape} for chromosome array "
+                f"but got {self.position_array.shape}"
+            )
         if self.position_array.shape != expected_shape:
             raise ValueError(
                 f"Expected shape {expected_shape} for position array "
                 f"but got {self.position_array.shape}"
             )
 
-        if self.mask_array.shape[1] != variant_count:
-            raise ValueError
-
     def plot(self, job: PlotJob) -> None:
-        chromosome_int = self.chromosome_array.to_numpy()
-        position = self.position_array.to_numpy()
-        data = self.p_value_array.to_numpy().transpose()
-        mask = self.mask_array.to_numpy().transpose()
-
-        p_value = data[:, ::2]
-        log_p_value = data[:, 1::2]
-
-        mask = mask[:, job.phenotype_index]
-        p_value = p_value[:, job.phenotype_index]
-        log_p_value = log_p_value[:, job.phenotype_index]
-
-        chromosome_int = chromosome_int[mask]
-        position = position[mask]
-        p_value = p_value[mask]
-        log_p_value = log_p_value[mask]
-
+        logger.debug(f"Plotting {job.name}")
         try:
+            self.validate()
+
+            chromosome_int = self.chromosome_array.to_numpy()
+            position = self.position_array.to_numpy()
+            data = self.p_value_array.to_numpy().transpose()
+            mask = self.mask_array.to_numpy().transpose()
+
+            p_value = data[:, ::2]
+            log_p_value = data[:, 1::2]
+
+            mask = mask[:, job.phenotype_index]
+            p_value = p_value[:, job.phenotype_index]
+            log_p_value = log_p_value[:, job.phenotype_index]
+
+            chromosome_int = chromosome_int[mask]
+            position = position[mask]
+            p_value = p_value[mask]
+            log_p_value = log_p_value[mask]
+
             plot_path = get_file_path(self.output_directory, job.name)
             figure, axes_array = plt.subplots(
                 nrows=1,
@@ -186,8 +192,4 @@ class PlotGenerator:
             figure.savefig(plot_path)
             plt.close(figure)
         except Exception as e:
-            logger.error(
-                f"Error while plotting {job.name} for {position.size} variants with "
-                f"log_p_value of shape {log_p_value.shape}",
-                exc_info=e,
-            )
+            logger.error(f'Error while plotting "{job.name}"', exc_info=e)

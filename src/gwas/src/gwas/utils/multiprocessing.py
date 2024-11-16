@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import os
+from abc import abstractmethod
 from contextlib import nullcontext
 from dataclasses import dataclass, field, fields
 from enum import Enum, auto
@@ -203,6 +204,7 @@ class Process(multiprocessing_context.Process):  # type: ignore
     def set_num_threads(self, num_threads: int) -> None:
         self.initargs = get_initargs(num_threads=num_threads)
 
+    @abstractmethod
     def func(self) -> None:
         raise NotImplementedError
 

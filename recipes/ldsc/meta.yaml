@@ -1,0 +1,44 @@
+{% set name = "ldsc" %}
+{% set version = "2.0.1" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/ldsc-{{ version }}.tar.gz
+  sha256: fe72f99da8a26414d82e47f2d2ee7cebbbab6c20d1b4ea51a0c38cc650c63556
+
+build:
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+  number: 0
+
+requirements:
+  host:
+    - python
+    - pip
+  run:
+    - python
+    - bitarray >=2.6.0
+    - nose >=1.3.7
+    - pybedtools >=0.9.0
+    - scipy >=1.9.2
+    - numpy >=1.23.3
+    - pandas >=1.5.0
+
+test:
+  requires:
+    - nose
+  imports:
+    - ldscore.ldscore
+  commands:
+    - nosetests ldscore
+    - make_annot.py --help 2>&1 | grep usage
+    - munge_sumstats.py --help 2>&1 | grep usage
+    - ldsc.py --help 2>&1 | grep usage
+
+about:
+  home: http://github.com/bulik/ldsc
+  summary: LD Score Regression (LDSC)
+  license: GPL-3.0
+  license_file: LICENSE

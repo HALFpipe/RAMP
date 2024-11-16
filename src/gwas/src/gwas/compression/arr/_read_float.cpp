@@ -235,12 +235,31 @@ static PyObject *RunTSVFloatReader(PyObject *self, PyObject *args, PyObject *kwa
     return nullptr;
   }
 
-  reader->array_ = array;
+  if (reader->row_indices_ != nullptr)
+  {
+    if (reader->row_indices_ == row_indices)
+    {
+      PyErr_SetString(PyExc_ValueError, "Row indices have already been read");
+      return nullptr;
+    }
+
+    auto previous_row_index = reader->row_indices_[reader->row_indices_index_ - 1];
+    if (previous_row_index > row_indices[0])
+    {
+      auto error_string = std::format("Previous row index {} is larger than first row index {}",
+                                      previous_row_index, row_indices[0]);
+      PyErr_SetString(PyExc_ValueError, error_string.c_str());
+      return nullptr;
+    }
+  }
+
+  Py_BEGIN_ALLOW_THREADS
+
+      reader->array_ = array;
   reader->row_indices_ = row_indices;
   reader->row_index_count_ = row_index_count;
   reader->row_indices_index_ = 0;
 
-  Py_BEGIN_ALLOW_THREADS
   try
   {
     reader->loop();
@@ -253,7 +272,7 @@ static PyObject *RunTSVFloatReader(PyObject *self, PyObject *args, PyObject *kwa
   }
   Py_END_ALLOW_THREADS
 
-      Py_RETURN_NONE;
+      return PyLong_FromUnsignedLong(reader->row_indices_[reader->row_indices_index_ - 1]);
 }
 
 struct VCFFloatReader : FloatReader<VCFFloatReader>

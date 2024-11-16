@@ -159,6 +159,7 @@ class TextFileArrayReader(FileArrayReader[ScalarType], CompressedTextReader):
     column_count: int
 
     float_reader: "TSVFloatReader | None" = None
+    column_indices: npt.NDArray[np.uint32] | None = None
 
     @override
     @classmethod
@@ -233,12 +234,20 @@ class TextFileArrayReader(FileArrayReader[ScalarType], CompressedTextReader):
             raise RuntimeError("File is not open for reading")
 
         if self.float_reader is None:
+            self.column_indices = column_indices
             self.float_reader = create_tsv_float_reader(
                 self.output_file_handle.fileno(),
                 self.header_length,
                 self.column_count + self.metadata_column_count,
-                column_indices,
+                self.column_indices,
             )
+        elif self.column_indices is not None:
+            if not np.array_equal(column_indices, self.column_indices):
+                raise ValueError("Column indices do not match previous indices")
+        else:
+            raise RuntimeError
+
+        logger.debug(f"Reading {row_indices}")
 
         if np.issubdtype(self.dtype, np.float64):
             run_tsv_float_reader(
@@ -255,6 +264,7 @@ def unpack_key(
     value_shape: tuple[int, ...],
     row_index: int,
     key: tuple[slice, slice],
+    verb: str = "write",
 ) -> tuple[int, int, int, int]:
     if len(key) != len(shape):
         raise ValueError("Key must have same number of dimensions as array")
@@ -270,22 +280,22 @@ def unpack_key(
     col_stop = shape[1] if col_stop is None else col_stop
 
     if row_step is not None and row_step != 1:
-        raise ValueError("Can only write file sequentially, row step must be 1")
+        raise ValueError(f"Can only {verb} file sequentially, row step must be 1")
     if col_step is not None and col_step != 1:
-        raise ValueError("Can only write file sequentially, column step must be 1")
+        raise ValueError(f"Can only {verb} file sequentially, column step must be 1")
     if row_start != row_index:
         raise ValueError(
-            "Can only write file sequentially, row start must be "
+            f"Can only {verb} file sequentially, row start must be "
             f"{row_index} (got {row_start}): {key=} {shape=}"
         )
     if col_start != 0:
         raise ValueError(
-            "Can only write file sequentially, column start must be 0 "
+            f"Can only {verb} file sequentially, column start must be 0 "
             f"(got {col_start}): {key=} {shape=}"
         )
     if col_stop != shape[1]:
         raise ValueError(
-            "Can only write file sequentially, column stop must be "
+            f"Can only {verb} file sequentially, column stop must be "
             f"{shape[1]} (got {col_start}): {key=} {shape=}"
         )
 
@@ -417,7 +427,6 @@ class TextFileArrayWriter(FileArrayWriter[ScalarType]):
             self.generate_row_prefixes(row_metadata, row_count),
             arrays,
             self.file_handle.fileno(),
-            self.num_threads,
         )
 
     def __setitem__(

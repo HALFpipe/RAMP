@@ -3,7 +3,6 @@ import atexit
 
 from cython cimport boundscheck, wraparound, numeric
 from cython.operator cimport dereference
-from libc.stddef cimport size_t
 from libc.stdint cimport uint8_t, int16_t, int64_t
 from libc.stdlib cimport free, malloc
 from libc.string cimport memcpy
@@ -103,7 +102,6 @@ def get_orthogonal_selection(
 ) :
     cdef int64_t row_count = row_indices.size
     cdef int64_t column_count = column_indices.size
-    cdef size_t itemsize = array.itemsize
 
     if array.shape[0] != row_count:
         raise ValueError("Array row count does not match selection shape")
@@ -131,7 +129,6 @@ def get_orthogonal_selection(
         memcpy(params, &default_params, sizeof(blosc2_stdio_mmap))
         params.mode = b"r"
         params.needs_free = True
-        params.initial_mapping_size = row_count * column_count * itemsize
 
         io = <blosc2_io *> malloc(sizeof(blosc2_io))
         io.id = BLOSC2_IO_FILESYSTEM_MMAP

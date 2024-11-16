@@ -85,6 +85,7 @@ class VCFFile(AbstractContextManager):
 
     chromosome_column_index: ClassVar[int] = mandatory_columns.index("CHROM")
     position_column_index: ClassVar[int] = mandatory_columns.index("POS")
+    id_column_index: ClassVar[int] = mandatory_columns.index("ID")
     reference_allele_column_index: ClassVar[int] = mandatory_columns.index("REF")
     alternate_allele_column_index: ClassVar[int] = mandatory_columns.index("ALT")
     info_column_index: ClassVar[int] = mandatory_columns.index("INFO")

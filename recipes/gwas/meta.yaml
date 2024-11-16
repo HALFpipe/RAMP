@@ -29,6 +29,7 @@ requirements:
   run:
     - python
     # python dependencies
+    - ipython
     - "numpy>=1.22"
     - scipy
     - pandas
@@ -45,6 +46,8 @@ requirements:
     - mkl
     - universal_pathlib
     - more-itertools
+    - tabulate
+    - adjusttext
     # compression tools
     - zstd
     - htslib
@@ -56,6 +59,7 @@ requirements:
     # genetics tools
     - bcftools >=1.17
     - gcta
+    - ldsc
     - metal
     - plink
     - plink2

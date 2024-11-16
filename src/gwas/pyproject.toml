@@ -24,6 +24,9 @@ dependencies = [
 [project.scripts]
 benchmark = "gwas.benchmark.cli:main"
 convert = "gwas.convert.cli:main"
+meta-prepare = "gwas.meta.cli:prepare"
+meta-worker = "gwas.meta.cli:worker"
+meta-merge = "gwas.meta.cli:merge"
 plot = "gwas.plot.cli:main"
 score = "gwas.score.cli:main"
 stratify = "gwas.stratify.cli:main"

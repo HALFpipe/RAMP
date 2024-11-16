@@ -29,18 +29,15 @@ static PyObject *WriteFloat(PyObject *self, PyObject *args, PyObject *kwargs)
     PyObject *row_prefix_iterator;
     PyObject *arrays_sequence;
     int file_descriptor = 0;
-    unsigned int num_threads = 1;
 
     static const char *keywords[] = {
         "row_prefix_generator",
         "arrays",
-        "file_descriptor",
-        "num_threads", NULL};
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOiI", const_cast<char **>(keywords),
+        "file_descriptor", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOi", const_cast<char **>(keywords),
                                      &row_prefix_iterator, // O
                                      &arrays_sequence,     // O
-                                     &file_descriptor,     // i
-                                     &num_threads))        // I
+                                     &file_descriptor))    // i
     {
         // PyArg_ParseTupleAndKeywords has raised an exception
         return nullptr;

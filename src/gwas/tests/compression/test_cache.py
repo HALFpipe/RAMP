@@ -16,6 +16,7 @@ def test_cache_array(tmp_path: UPath, sw: SharedWorkspace) -> None:
     save_to_cache(tmp_path, "shared_array", shared_array, num_threads=1)
 
     loaded_shared_array = load_from_cache(tmp_path, "shared_array", sw)
+    assert loaded_shared_array is not None
     np.testing.assert_array_equal(loaded_shared_array.to_numpy(), numpy_array)
 
 
@@ -35,4 +36,5 @@ def test_cache_data_frame(tmp_path: UPath, sw: SharedWorkspace) -> None:
     save_to_cache(tmp_path, "shared_data_frame", shared_data_frame, num_threads=1)
 
     loaded_shared_data_frame = load_from_cache(tmp_path, "shared_data_frame", sw)
+    assert loaded_shared_data_frame is not None
     pd.testing.assert_frame_equal(loaded_shared_data_frame.to_pandas(), data_frame)

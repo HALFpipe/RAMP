@@ -17,7 +17,7 @@ def run_tsv_float_reader(
     data_array: npt.NDArray[np.float64],
     reader: TSVFloatReader,
     row_indices: npt.NDArray[np.uint32],
-) -> None: ...
+) -> int: ...
 def create_vcf_float_reader(
     file_descriptor: int,
     skip_bytes: int,

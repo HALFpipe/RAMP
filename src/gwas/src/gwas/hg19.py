@@ -52,8 +52,8 @@ def make_segments(log_p_value: float) -> list[list[tuple[float, float]]]:
     ]
 
 
-suggestive_log_p_value = -np.log10(1e-05)
+suggestive_log_p_value = -np.log10(1e-5)
 suggestive_segments = make_segments(suggestive_log_p_value)
 
-genome_wide_log_p_value = -np.log10(1e-08)
+genome_wide_log_p_value = -np.log10(1e-8)
 genome_wide_segments = make_segments(genome_wide_log_p_value)

@@ -65,7 +65,7 @@ def load_genotypes(
         start += vcf_file.variant_count
 
     a = array.to_numpy()
-    scale(a)
+    scale(vcf_file, a)
 
     sample_count = len(samples)
     sample_indices = [vcf_file.samples.index(sample) for sample in samples]

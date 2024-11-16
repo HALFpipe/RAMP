@@ -81,11 +81,11 @@ micromamba create --name "gwas-protocol" \
   "jupyterlab" "ipywidgets" \
   "python=3.12" "more-itertools" "psutil" "tqdm" "pyyaml" \
   "python-blosc2" "pyarrow" \
-  "numpy" "scipy" "pandas" "threadpoolctl" "universal_pathlib" \
+  "numpy" "scipy" "pandas" "threadpoolctl" "universal_pathlib" "tabulate" \
   "matplotlib" "seaborn" \
   "jax" "jaxlib=*=cpu*" "jaxtyping" "chex" "etils" "python-flatbuffers" \
   "mkl-include" "mkl" "c-blosc2" \
-  "mypy" "pandas-stubs" "types-psutil" "types-pyyaml" "types-seaborn" "types-setuptools" "types-tqdm" \
+  "mypy" "pandas-stubs" "pyarrow-stubs" "types-psutil" "types-pyyaml" "types-seaborn" "types-setuptools" "types-tqdm" \
   "pytest-benchmark" "pytest-cov" \
   "cython" "gxx_linux-64>=13" "gcc_linux-64>=13" "sysroot_linux-64>=2.17" "zlib" "gdb"
 ```

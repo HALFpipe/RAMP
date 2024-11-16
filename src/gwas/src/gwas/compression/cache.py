@@ -1,4 +1,5 @@
 import pickle
+from datetime import datetime, timezone
 from typing import Any, Callable, override
 
 from numpy import typing as npt
@@ -12,14 +13,25 @@ from .pipe import CompressedBytesReader, CompressedBytesWriter
 cache_suffix: str = ".pickle.zst"
 
 
-def load_from_cache(cache_path: UPath, key: str, sw: SharedWorkspace) -> Any:
+def get_last_modified(path: UPath) -> datetime:
+    stat_result = path.stat()
+    return datetime.fromtimestamp(stat_result.st_mtime, tz=timezone.utc)
+
+
+def load_from_cache(
+    cache_path: UPath, key: str, sw: SharedWorkspace | None = None
+) -> Any | None:
     file_path = cache_path / f"{key}{cache_suffix}"
     if not file_path.is_file():
         logger.debug(f'Cache entry "{file_path}" not found')
         return None
+
     with CompressedBytesReader(file_path) as file_handle:
         try:
-            return SharedArrayUnpickler(sw, file_handle).load()
+            if sw is None:
+                return pickle.load(file_handle)
+            else:
+                return SharedArrayUnpickler(sw, file_handle).load()
         except (pickle.UnpicklingError, EOFError) as error:
             logger.warning(f'Failed to load "{file_path}"', exc_info=error)
             return None
@@ -35,7 +47,7 @@ def save_to_cache(
     with CompressedBytesWriter(
         cache_path / f"{key}{cache_suffix}", num_threads
     ) as file_handle:
-        SharedArrayPickler(file_handle).dump(value)
+        SharedArrayPickler(file_handle, protocol=pickle.HIGHEST_PROTOCOL).dump(value)
 
 
 def rebuild_shared_array(
