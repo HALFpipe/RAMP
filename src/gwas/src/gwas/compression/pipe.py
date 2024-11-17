@@ -109,7 +109,11 @@ class CompressedReader(AbstractContextManager[IO[T]]):
                     f'Decompression failed with code {returncode} and message "{data}"'
                 )
             elif data:
-                logger.warning(f'Decompression received stderr: "{data}"')
+                message = f'Decompression received stderr: "{data}"'
+                if "premature end" in data:
+                    raise ValueError(message)
+                else:
+                    logger.warning(message)
 
         self.process_handle = None
         self.input_file_handle = None

@@ -1,0 +1,43 @@
+{% set name = "pynose" %}
+{% set version = "1.5.3" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/pynose-{{ version }}.tar.gz
+  sha256: 1b00ab94447cd7fcbb0a344fc1435137404c043db4a8e3cda63ca2893f8e5903
+
+build:
+  entry_points:
+    - nosetests = nose.core:run_exit
+    - pynose = nose.core:run_exit
+  noarch: python
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+  number: 0
+
+requirements:
+  host:
+    - python >=3.7
+    - setuptools >=68.0.0
+    - wheel >=0.42.0
+    - pip
+  run:
+    - python >=3.7
+
+test:
+  imports:
+    - nose
+  commands:
+    - nosetests --help
+    - pynose --help
+
+about:
+  home: https://github.com/mdmintz/pynose
+  summary: pynose fixes nose to extend unittest and make testing easier
+  dev_url: https://github.com/mdmintz/pynose
+  license: LGPL-2.1 AND EPL-2.0
+  license_file:
+    - LICENSE
+    - LICENSE.cpython

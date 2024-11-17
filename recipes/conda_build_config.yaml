@@ -10,3 +10,5 @@ gcc_version:
   - 13.2.0
 zstd:
   - 1.5.5
+libdeflate:
+  - 1.21

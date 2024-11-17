@@ -2,7 +2,6 @@ import re
 from dataclasses import dataclass
 from subprocess import PIPE, STDOUT, run
 from tempfile import TemporaryDirectory
-from typing import Literal
 
 import polars as pl
 from upath import UPath
@@ -115,7 +114,7 @@ class LDSCOutput:
     ldsc_mean_chisq: float
     ldsc_lambda_gc: float
     ldsc_intercept: ValueSE
-    ldsc_ratio: ValueSE | Literal["< 0 (usually indicates GC correction)"]
+    ldsc_ratio: ValueSE | str
     ldsc_total_observed_scale_h2: ValueSE
 
 
@@ -147,10 +146,11 @@ def parse_logs(munge_sumstats_log: str, ldsc_log: str) -> LDSCOutput:
 
     ldsc_intercept = parse_value_se(get_value("Intercept", ldsc_log))
     ldsc_ratio_str = get_value("Ratio", ldsc_log)
-    if ldsc_ratio_str == "< 0 (usually indicates GC correction)":
-        ldsc_ratio: ValueSE | Literal["< 0 (usually indicates GC correction)"] = (
-            "< 0 (usually indicates GC correction)"
-        )
+    if ldsc_ratio_str in {
+        "< 0 (usually indicates GC correction)",
+        "NA (mean chi^2 < 1)",
+    }:
+        ldsc_ratio: ValueSE | str = ldsc_ratio_str
     else:
         ldsc_ratio = parse_value_se(ldsc_ratio_str)
     ldsc_total_observed_scale_h2 = parse_value_se(

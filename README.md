@@ -61,7 +61,7 @@ Next, start an interactive shell inside the container using one of the following
 
 ## Development
 
-To create a local development environment install [Miniforge](https://github.com/conda-forge/miniforge) and create a `.condarc` file in your home directory with the following contents:
+To create a local development environment install [Micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html) and create a `.condarc` file in your home directory with the following contents:
 
 ```
 channels:
@@ -69,9 +69,7 @@ channels:
   - bioconda
 ```
 
-Then update your `.bashrc` or `.zshrc` with `mamba init`. This will allow you to use the `conda` command.
-
-Next, install `mamba` using `conda install mamba` and then create the environment using the following command:
+Next, create the environment using the following command:
 
 ```bash
 micromamba create --name "gwas-protocol" \

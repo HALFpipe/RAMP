@@ -39,44 +39,74 @@ FROM conda AS builder
 RUN conda install --yes "c-compiler" "conda-build"
 COPY recipes/conda_build_config.yaml /root/conda_build_config.yaml
 
+RUN cat <<EOF > "/usr/bin/retry"
+#!/bin/bash
+set -euo pipefail
+timeout="1"
+attempt="1"
+until "\$@"; do
+    if [ "\${attempt}" -ge "5" ]; then
+        exit "$?"
+    fi
+    sleep "\${timeout}"
+    timeout=\$((timeout * 10))
+    attempt=\$((attempt + 1))
+done
+EOF
+RUN chmod "+x" "/usr/bin/retry"
+
 # https://danieldk.eu/Posts/2020-08-31-MKL-Zen.html
 RUN echo "int mkl_serv_intel_cpu_true() {return 1;}" | \
     gcc -x "c" -shared -fPIC -o "/opt/libfakeintel.so" -
 
-FROM builder as dosage-convertor
+FROM builder AS dosage-convertor
 RUN --mount=source=recipes/dosage-convertor,target=/dosage-convertor \
-    conda build --no-anaconda-upload --numpy "2.0" "dosage-convertor"
+    --mount=type=cache,target=/opt/conda/pkgs \
+    retry conda build --no-anaconda-upload --numpy "2.0" "dosage-convertor"
 
-FROM builder as ldsc
-RUN --mount=source=recipes/ldsc,target=/ldsc \
-    conda build --no-anaconda-upload --numpy "2.0" --use-local "ldsc"
-
-FROM builder as metal
+FROM builder AS metal
 RUN --mount=source=recipes/metal,target=/metal \
-    conda build --no-anaconda-upload --numpy "2.0" --use-local "metal"
+    --mount=type=cache,target=/opt/conda/pkgs \
+    retry conda build --no-anaconda-upload --numpy "2.0" --use-local "metal"
 
-FROM builder as qctool
+FROM builder AS pynose
+RUN --mount=source=recipes/pynose,target=/pynose \
+    --mount=type=cache,target=/opt/conda/pkgs \
+    retry conda build --no-anaconda-upload --numpy "2.0" --use-local "pynose"
+
+FROM builder AS qctool
 RUN --mount=source=recipes/qctool,target=/qctool \
-    conda build --no-anaconda-upload --numpy "2.0" --use-local "qctool"
+    --mount=type=cache,target=/opt/conda/pkgs \
+    retry conda build --no-anaconda-upload --numpy "2.0" --use-local "qctool"
 
-FROM builder as raremetal
+FROM builder AS raremetal
 RUN --mount=source=recipes/raremetal,target=/raremetal \
-    conda build --no-anaconda-upload --numpy "2.0" --use-local "raremetal"
+    --mount=type=cache,target=/opt/conda/pkgs \
+    retry conda build --no-anaconda-upload --numpy "2.0" --use-local "raremetal"
 
-FROM builder as raremetal-debug
+FROM builder AS raremetal-debug
 RUN --mount=source=recipes/raremetal,target=/raremetal \
     --mount=source=recipes/raremetal-debug,target=/raremetal-debug \
-    conda build --no-anaconda-upload --numpy "2.0" --use-local "raremetal-debug"
+    --mount=type=cache,target=/opt/conda/pkgs \
+    retry conda build --no-anaconda-upload --numpy "2.0" --use-local "raremetal-debug"
 
-FROM builder as r-gmmat
+FROM builder AS r-gmmat
 RUN --mount=source=recipes/r-gmmat,target=/r-gmmat \
-    conda build --no-anaconda-upload --numpy "2.0" --use-local "r-gmmat"
+    --mount=type=cache,target=/opt/conda/pkgs \
+    retry conda build --no-anaconda-upload --numpy "2.0" --use-local "r-gmmat"
 
-FROM builder as upload
+FROM builder AS upload
 RUN --mount=source=recipes/upload,target=/upload \
-    conda build --no-anaconda-upload --numpy "2.0" --use-local "upload"
+    --mount=type=cache,target=/opt/conda/pkgs \
+    retry conda build --no-anaconda-upload --numpy "2.0" --use-local "upload"
 
-FROM builder as gwas
+FROM builder AS ldsc
+COPY --from=pynose /opt/conda/conda-bld /opt/conda/conda-bld
+RUN --mount=source=recipes/ldsc,target=/ldsc \
+    --mount=type=cache,target=/opt/conda/pkgs \
+    retry conda build --no-anaconda-upload --numpy "2.0" --use-local "ldsc"
+
+FROM builder AS gwas
 COPY --from=dosage-convertor /opt/conda/conda-bld /opt/conda/conda-bld
 COPY --from=ldsc /opt/conda/conda-bld /opt/conda/conda-bld
 COPY --from=metal /opt/conda/conda-bld /opt/conda/conda-bld
@@ -90,14 +120,16 @@ RUN conda index /opt/conda/conda-bld
 RUN --mount=source=recipes/gwas,target=/gwas-protocol/recipes/gwas \
     --mount=source=src/gwas,target=/gwas-protocol/src/gwas \
     --mount=source=.git,target=/gwas-protocol/.git \
-    conda build --no-anaconda-upload --numpy "2.0" --use-local "gwas-protocol/recipes/gwas"
+    --mount=type=cache,target=/opt/conda/pkgs \
+    retry conda build --no-anaconda-upload --numpy "2.0" --use-local "gwas-protocol/recipes/gwas"
 
 # Install packages
 # ================
 FROM conda AS install
 
 COPY --from=gwas /opt/conda/conda-bld /opt/conda/conda-bld
-RUN conda install --yes --use-local \
+RUN --mount=type=cache,target=/opt/conda/pkgs \
+    conda install --yes --use-local \
     "parallel" \
     "dosage-convertor" \
     "qctool" \

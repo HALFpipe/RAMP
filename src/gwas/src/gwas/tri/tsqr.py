@@ -16,7 +16,11 @@ from .base import TaskSyncCollection, Triangular
 def scale(vcf_file: VCFFile, b: npt.NDArray[np.float64]) -> None:
     # calculate variant properties
     mean = b.mean(axis=1)
-    standard_deviation = b.std(axis=1)
+    minor_allele_frequency = mean / 2
+
+    standard_deviation = np.sqrt(
+        2 * minor_allele_frequency * (1 - minor_allele_frequency)
+    )
 
     close_to_zero = np.isclose(standard_deviation, 0)
     if close_to_zero.any():

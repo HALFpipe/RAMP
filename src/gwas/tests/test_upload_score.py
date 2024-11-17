@@ -23,7 +23,7 @@ def test_upload_score(tmp_path: UPath) -> None:
         )
         call_upload_client.assert_called_once()
         _, _, paths = call_upload_client.call_args.args
-        assert paths == {str(p.name) for p in input_paths}
+        assert paths == {str(path).removeprefix("/") for path in input_paths}
 
 
 def test_upload_score_multiple(tmp_path: UPath) -> None:
@@ -50,4 +50,4 @@ def test_upload_score_multiple(tmp_path: UPath) -> None:
         )
         call_upload_client.assert_called_once()
         _, _, paths = call_upload_client.call_args.args
-        assert paths == {str(p.relative_to(tmp_path / "a")) for p in input_paths}
+        assert paths == {str(path).removeprefix("/") for path in input_paths}

@@ -2,8 +2,7 @@ import logging
 import sys
 from argparse import ArgumentParser, Namespace
 from subprocess import call
-from tempfile import TemporaryDirectory
-from typing import Iterable, Literal
+from typing import Literal
 
 from upath import UPath
 
@@ -37,9 +36,10 @@ path_patterns: list[str] = [
 ]
 
 
-def call_upload_client(
-    arguments: Namespace, tmp_path: UPath, paths: Iterable[str]
-) -> None:
+def call_upload_client(arguments: Namespace, paths: set[UPath]) -> None:
+    base_path = UPath("/")
+    path_strs = sorted(f"{path.relative_to(base_path)}" for path in paths)
+
     upload_executable = unwrap_which("upload")
     command: list[str] = [
         upload_executable,
@@ -49,54 +49,24 @@ def call_upload_client(
         "--endpoint",
         arguments.endpoint,
         "--path",
-        *sorted(paths),
+        *path_strs,
     ]
     if arguments.log_level == "DEBUG":
         command.append("--debug")
 
     logger.debug(f"Running command: {' '.join(command)}")
-    call(command, cwd=tmp_path)
-
-
-def get_relative_path(path: UPath, k: int) -> UPath:
-    return UPath(*path.parts[-k - 1 :])
-
-
-def has_duplicates(paths: Iterable[UPath], k: int) -> bool:
-    seen: set[UPath] = set()
-    for path in paths:
-        path = get_relative_path(path, k)
-        if path in seen:
-            return True
-        seen.add(path)
-    return False
+    call(command, cwd=base_path)
 
 
 def upload(arguments: Namespace) -> None:
-    upload_paths: set[UPath] = set()
+    paths: set[UPath] = set()
     for input_directory_str in arguments.input_directory:
         input_directory = UPath(input_directory_str).absolute()
         for path_pattern in path_patterns:
-            upload_paths.update(input_directory.glob(f"**/{path_pattern}"))
-
-    k = 0
-    while has_duplicates(upload_paths, k):
-        k += 1
-
-    with TemporaryDirectory() as tmp_path_str:
-        tmp_path = UPath(tmp_path_str)
-        paths: set[str] = set()
-        for upload_path in upload_paths:
-            if upload_path.name.startswith("sub-"):
-                # Skip BIDS subject files
-                continue
-            link_path = tmp_path / get_relative_path(upload_path, k)
-            link_path.parent.mkdir(parents=True, exist_ok=True)
-            link_path.symlink_to(upload_path)
-            paths.add(link_path.relative_to(tmp_path).as_posix())
+            paths.update(input_directory.glob(f"**/{path_pattern}"))
 
         logger.info(f"Uploading {len(paths)} files")
-        call_upload_client(arguments, tmp_path, paths)
+    call_upload_client(arguments, paths)
 
 
 def parse_arguments(argv: list[str]) -> Namespace:

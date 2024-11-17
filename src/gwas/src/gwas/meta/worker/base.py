@@ -20,7 +20,8 @@ def worker(job: Job, output_directory: UPath, arguments: Namespace) -> None:
     cache_path.mkdir(parents=True, exist_ok=True)
 
     tags = dict(parse(job.name))
-    for key in ["population", "age", "feature"]:
+    output_directory = output_directory / "worker-outputs"
+    for key in ["population", "age", "feature", "taskcontrast"]:
         if key not in tags:
             continue
         output_directory = output_directory / f"{key}-{tags[key]}"
