@@ -108,7 +108,7 @@ def create_index(
     index_jobs: list[IndexJob] = list()
     for study_name, study_path_str in tqdm(ia.studies, unit="studies"):
         study_path = UPath(study_path_str)
-        metadata_paths = list(study_path.rglob("chr1.metadata.yaml.gz"))
+        metadata_paths = sorted(study_path.rglob("*/chr1.metadata.yaml.gz"))
         if len(metadata_paths) == 0:
             logger.warning(
                 f'No metadata files found in "{study_path}". Skipping "{study_name}"'
