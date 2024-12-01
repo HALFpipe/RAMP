@@ -1,0 +1,63 @@
+package:
+  name: r-genomicsem
+  version: "0.0.5c"
+
+source:
+  git_url: https://github.com/GenomicSEM/GenomicSEM
+  git_depth: 1
+  patches:
+    - 0001-make-cluster-rscript-args.patch
+
+build:
+  script: "$R CMD INSTALL --build ."
+  rpaths:
+    - lib/R/lib/
+    - lib/
+  number: 1
+
+requirements:
+  host:
+    - r-base >=4.0
+    - r-data.table
+    - r-doparallel
+    - r-dplyr
+    - r-e1071
+    - r-foreach
+    - r-gdata
+    - r-iterators
+    - r-lavaan
+    - r-matrix
+    - r-mgsub
+    - r-plyr
+    - r-r.utils
+    - r-rcpp
+    - r-readr
+    - r-splitstackshape
+    - r-stringr
+  run:
+    - r-base >=4.0
+    - r-data.table
+    - r-doparallel
+    - r-dplyr
+    - r-e1071
+    - r-foreach
+    - r-gdata
+    - r-iterators
+    - r-lavaan
+    - r-matrix
+    - r-mgsub
+    - r-plyr
+    - r-r.utils
+    - r-rcpp
+    - r-readr
+    - r-splitstackshape
+    - r-stringr
+
+test:
+  commands:
+    - $R -e "library(\"GenomicSEM\"); warnings()"
+
+about:
+  home: https://github.com/GenomicSEM/GenomicSEM
+  license: GNU GPL
+  license_family: GPL3

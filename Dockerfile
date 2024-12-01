@@ -90,6 +90,11 @@ RUN --mount=source=recipes/raremetal,target=/raremetal \
     --mount=type=cache,target=/opt/conda/pkgs \
     retry conda build --no-anaconda-upload --numpy "2.0" --use-local "raremetal-debug"
 
+FROM builder AS r-genomicsem
+RUN --mount=source=recipes/r-genomicsem,target=/r-genomicsem \
+    --mount=type=cache,target=/opt/conda/pkgs \
+    retry conda build --no-anaconda-upload --numpy "2.0" --use-local "r-genomicsem"
+
 FROM builder AS r-gmmat
 RUN --mount=source=recipes/r-gmmat,target=/r-gmmat \
     --mount=type=cache,target=/opt/conda/pkgs \
@@ -127,6 +132,7 @@ RUN --mount=source=recipes/gwas,target=/gwas-protocol/recipes/gwas \
 # ================
 FROM conda AS install
 
+COPY --from=r-genomicsem /opt/conda/conda-bld /opt/conda/conda-bld
 COPY --from=gwas /opt/conda/conda-bld /opt/conda/conda-bld
 RUN --mount=type=cache,target=/opt/conda/pkgs \
     conda install --yes --use-local \
@@ -139,6 +145,7 @@ RUN --mount=type=cache,target=/opt/conda/pkgs \
     "gwas" && \
     conda create --yes --name "bgenix" "bgenix" && \
     conda create --yes --name "regenie" "regenie" && \
+    conda create --yes --name "r-genomicsem" "r-genomicsem" "r-qqman" && \
     conda create --yes --name "r-saige" "r-saige" && \
     sync && \
     rm -rf /opt/conda/conda-bld && \

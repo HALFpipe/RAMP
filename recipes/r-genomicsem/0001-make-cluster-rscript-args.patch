@@ -1,0 +1,80 @@
+diff --git a/R/commonfactorGWAS.R b/R/commonfactorGWAS.R
+index a1df07a..55595b8 100644
+--- a/R/commonfactorGWAS.R
++++ b/R/commonfactorGWAS.R
+@@ -213,11 +213,7 @@ output from ldsc (using covstruc = ...)  followed by the output from sumstats (u
+       registerDoParallel(cl)
+     } else {
+       ##specify the cores should have access to the local environment
+-      if (Operating != "Windows") {
+-        cl <- makeCluster(int, type="FORK")
+-      } else {
+-        cl <- makeCluster(int, type="PSOCK")
+-      }
++      cl <- makeCluster(int, type="FORK", rscript_args=c("--no-init-file", "--no-site-file", "--no-environ"))
+       registerDoParallel(cl)
+       on.exit(stopCluster(cl))
+     }
+diff --git a/R/munge.R b/R/munge.R
+index eaad377..22b392b 100644
+--- a/R/munge.R
++++ b/R/munge.R
+@@ -80,7 +80,7 @@ munge <- function(files,hm3,trait.names=NULL,N=NULL,info.filter = .9,maf.filter=
+     }
+     # Defaulting to PSOCK cluster as it should work on both Linux and Windows,
+     # and from my experience it's faster when not copying large ammounts of data
+-    cl <- makeCluster(int, type="PSOCK")
++    cl <- makeCluster(int, type="PSOCK", rscript_args=c("--no-init-file", "--no-site-file", "--no-environ"))
+     registerDoParallel(cl)
+     on.exit(stopCluster(cl))
+     #Util-functions have to be explicitly passed to the analysis function in PSOCK cluster
+@@ -106,4 +106,4 @@ munge <- function(files,hm3,trait.names=NULL,N=NULL,info.filter = .9,maf.filter=
+     
+   flush(log.file)
+   close(log.file)
+-}
+\ No newline at end of file
++}
+diff --git a/R/simLDSC.R b/R/simLDSC.R
+index ab8c036..e54d9e4 100644
+--- a/R/simLDSC.R
++++ b/R/simLDSC.R
+@@ -137,7 +137,7 @@ simLDSC <- function(covmat,N,seed,ld,rPheno=NULL,int=NULL,N_overlap=.99,r=1,gzip
+     }else{int<-cores}
+     
+     registerDoParallel(int)
+-    makeCluster(int, type="FORK")
++    makeCluster(int, type="FORK", rscript_args=c("--no-init-file", "--no-site-file", "--no-environ"))
+       foreach(r=1:r) %dopar% {
+       Z <- t(mapply(function(x, y) mvrnorm(n = 1, mu = x, Sigma=y), list(mu), Sigmalist))
+       sumstats <- list()
+diff --git a/R/sumstats.R b/R/sumstats.R
+index 5642b90..4bac3c4 100644
+--- a/R/sumstats.R
++++ b/R/sumstats.R
+@@ -104,7 +104,7 @@ sumstats <- function(files,ref,trait.names=NULL,se.logit,OLS=NULL,linprob=NULL,N
+     }
+     # Defaulting to PSOCK cluster as it should work on both Linux and Windows,
+     # and from my experience it's faster when not copying large ammounts of data
+-    cl <- makeCluster(int, type="PSOCK")
++    cl <- makeCluster(int, type="PSOCK", rscript_args=c("--no-init-file", "--no-site-file", "--no-environ"))
+     registerDoParallel(cl)
+     on.exit(stopCluster(cl))
+     #Util-functions have to be explicitly passed to the analysis function in PSOCK cluster
+diff --git a/R/userGWAS.R b/R/userGWAS.R
+index dc18462..f81748f 100644
+--- a/R/userGWAS.R
++++ b/R/userGWAS.R
+@@ -294,11 +294,7 @@ userGWAS <- function(covstruc=NULL, SNPs=NULL, estimation="DWLS", model="", prin
+       registerDoParallel(cl)
+     } else {
+       ##specify the cores should have access to the local environment
+-      if (Operating != "Windows") {
+-        cl <- makeCluster(int, type="FORK")
+-      } else {
+-        cl <- makeCluster(int, type="PSOCK")
+-      }
++      cl <- makeCluster(int, type="FORK", rscript_args=c("--no-init-file", "--no-site-file", "--no-environ"))
+       registerDoParallel(cl)
+       on.exit(stopCluster(cl))
+     }
