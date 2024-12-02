@@ -7,6 +7,7 @@ source:
   git_depth: 1
 
 build:
+  script: "$R CMD INSTALL --build ."
   rpaths:
     - lib/R/lib/
     - lib/
