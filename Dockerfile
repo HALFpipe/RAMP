@@ -28,7 +28,9 @@ RUN curl --silent --show-error --location \
     --output "conda.sh" && \
     bash "conda.sh" -b -p "/opt/conda" && \
     rm "conda.sh" && \
-    conda config --system  --set "solver" "libmamba" && \
+    conda config --system  \
+    --set "solver" "libmamba" \
+    --set "conda_build.pkg_format" "2" && \
     conda config --system --append "channels" "bioconda" && \
     sync && \
     conda clean --yes --all --force-pkgs-dirs
