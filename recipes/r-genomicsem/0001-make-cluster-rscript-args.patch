@@ -35,19 +35,6 @@ index eaad377..22b392b 100644
 -}
 \ No newline at end of file
 +}
-diff --git a/R/simLDSC.R b/R/simLDSC.R
-index ab8c036..e54d9e4 100644
---- a/R/simLDSC.R
-+++ b/R/simLDSC.R
-@@ -137,7 +137,7 @@ simLDSC <- function(covmat,N,seed,ld,rPheno=NULL,int=NULL,N_overlap=.99,r=1,gzip
-     }else{int<-cores}
-     
-     registerDoParallel(int)
--    makeCluster(int, type="FORK")
-+    makeCluster(int, type="FORK", rscript_args=c("--no-init-file", "--no-site-file", "--no-environ"))
-       foreach(r=1:r) %dopar% {
-       Z <- t(mapply(function(x, y) mvrnorm(n = 1, mu = x, Sigma=y), list(mu), Sigmalist))
-       sumstats <- list()
 diff --git a/R/sumstats.R b/R/sumstats.R
 index 5642b90..4bac3c4 100644
 --- a/R/sumstats.R
