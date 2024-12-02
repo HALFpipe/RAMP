@@ -179,6 +179,7 @@ class Summaries:
     beta: VariableSummary
     standard_error: VariableSummary
     r_squared: VariableSummary
+    variant_count: int
 
 
 def map_write(
@@ -207,22 +208,12 @@ def map_write(
                 )
             )
 
-    summaries = map(
+    beta, standard_error, r_squared = map(
         VariableSummary.from_array,
         map(np.concatenate, zip(*summary_values, strict=False)),
     )
-    return study, Summaries(*summaries)
-
-
-@dataclass(frozen=True, eq=True, slots=True)
-class Score:
-    chromosome: str
-    position: int
-    reference_allele: str
-    alternate_allele: str
-    alternate_allele_frequence: float
-    u_stat: float
-    v_stat: float
+    variant_count = sum(a.size for a, _, _ in summary_values)
+    return study, Summaries(beta, standard_error, r_squared, variant_count)
 
 
 def iterate_row_prefixes(

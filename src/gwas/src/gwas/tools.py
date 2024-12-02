@@ -36,3 +36,5 @@ saige_step1_fit_null_glmm: list[str] = [*conda_run("r-saige"), "step1_fitNULLGLM
 saige_step2_spa_tests: list[str] = [*conda_run("r-saige"), "step2_SPAtests.R"]
 
 bgenix: list[str] = [*conda_run("bgenix"), "bgenix"]
+
+r_genomicsem: list[str] = [*conda_run("r-genomicsem"), "R", "--vanilla"]

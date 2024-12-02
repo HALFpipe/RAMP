@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass
+from shutil import copyfile
 from subprocess import PIPE, STDOUT, run
 from tempfile import TemporaryDirectory
 
@@ -18,7 +19,9 @@ def get_ld_scores(cache_path: UPath) -> tuple[UPath, UPath, UPath]:
     return snplist_path, ld_scores_path, weights_path
 
 
-def run_ldsc(cache_path: UPath, data_frame: pl.DataFrame) -> tuple[str, str]:
+def run_ldsc(
+    cache_path: UPath, data_frame: pl.DataFrame, output_path: UPath
+) -> tuple[str, str]:
     snplist_path, ld_scores_path, weights_path = get_ld_scores(cache_path)
     snplist_frame = pl.read_csv(
         snplist_path,
@@ -56,7 +59,7 @@ def run_ldsc(cache_path: UPath, data_frame: pl.DataFrame) -> tuple[str, str]:
             n,
         ).select(["snp", "allele1", "allele2", "nstudy", "n", "p_value", "effect"])
         ldsc_frame = ldsc_frame.join(snplist_frame, on="snp", how="inner")
-        ldsc_frame.write_csv(sumstats_path, separator="\t")
+        ldsc_frame.write_csv(sumstats_path, separator="\t", quote_style="never")
 
         munge_sumstats_log = run(
             args=[
@@ -66,7 +69,7 @@ def run_ldsc(cache_path: UPath, data_frame: pl.DataFrame) -> tuple[str, str]:
                 "--merge-alleles",
                 str(snplist_path),
                 "--out",
-                str("munge"),
+                str("trait"),
             ],
             text=True,
             check=True,
@@ -76,11 +79,16 @@ def run_ldsc(cache_path: UPath, data_frame: pl.DataFrame) -> tuple[str, str]:
             timeout=1 * 60 * 60,  # one hour
         ).stdout
 
+        copyfile(
+            temporary_path / "trait.sumstats.gz",
+            output_path.with_suffix(".ldsc.sumstats.gz"),
+        )
+
         ldsc_log = run(
             args=[
                 *ldsc,
                 "--h2",
-                "munge.sumstats.gz",
+                "trait.sumstats.gz",
                 "--ref-ld-chr",
                 str(ld_scores_path),
                 "--w-ld-chr",

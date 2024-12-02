@@ -173,23 +173,41 @@ class PlotGenerator:
             p_value = p_value[mask]
             log_p_value = log_p_value[mask]
 
-            plot_path = get_file_path(self.output_directory, job.name)
-            figure, axes_array = plt.subplots(
-                nrows=1,
-                ncols=2,
-                width_ratios=(2, 1),
-                figsize=(18, 8),
-                constrained_layout=True,
+            make(
+                self.output_directory,
+                job.name,
+                chromosome_int,
+                position,
+                p_value,
+                log_p_value,
             )
-            if not isinstance(axes_array, np.ndarray):
-                raise ValueError("Expected axes_array to be a numpy array")
-            (manhattan_axes, qq_axes) = axes_array
-            figure.suptitle(job.name)
-
-            plot_manhattan(chromosome_int, position, log_p_value, manhattan_axes)
-            plot_q_q(p_value, log_p_value, qq_axes)
-
-            figure.savefig(plot_path)
-            plt.close(figure)
         except Exception as e:
             logger.error(f'Error while plotting "{job.name}"', exc_info=e)
+
+
+def make(
+    output_directory: UPath,
+    name: str,
+    chromosome_int: npt.NDArray[np.uint8],
+    position: npt.NDArray[np.int64],
+    p_value: npt.NDArray[np.float64],
+    log_p_value: npt.NDArray[np.float64],
+):
+    plot_path = get_file_path(output_directory, name)
+    figure, axes_array = plt.subplots(
+        nrows=1,
+        ncols=2,
+        width_ratios=(2, 1),
+        figsize=(18, 8),
+        constrained_layout=True,
+    )
+    if not isinstance(axes_array, np.ndarray):
+        raise ValueError("Expected axes_array to be a numpy array")
+    (manhattan_axes, qq_axes) = axes_array
+    figure.suptitle(name)
+
+    plot_manhattan(chromosome_int, position, log_p_value, manhattan_axes)
+    plot_q_q(p_value, log_p_value, qq_axes)
+
+    figure.savefig(plot_path)
+    plt.close(figure)
