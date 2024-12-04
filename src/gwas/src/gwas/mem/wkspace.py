@@ -274,7 +274,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
                 elif new_start > b.start:
                     raise ValueError(
                         f'Allocation "{name}" overlaps with preceding allocation '
-                        f'"{previous_name}"'
+                        f'"{previous_name}": {pformat(to_squash)}'
                     )
 
                 # Move memory up to start of previous allocation
