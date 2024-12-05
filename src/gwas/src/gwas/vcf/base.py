@@ -122,6 +122,10 @@ class VCFFile(AbstractContextManager):
     r_squared_cutoff: float = -np.inf
 
     @property
+    @abstractmethod
+    def engine(self) -> Engine: ...
+
+    @property
     def vcf_variants(self) -> pd.DataFrame:
         return self.shared_vcf_variants.to_pandas()
 
@@ -327,8 +331,13 @@ def load_vcf(
         vcf_file = VCFFile.load_from_cache(cache_path, vcf_path, sw)
     except ValueError:
         pass
-    if not hasattr(vcf_file, "shared_vcf_variants"):
-        vcf_file = None
+    if vcf_file is not None:
+        if not hasattr(vcf_file, "shared_vcf_variants"):
+            # detect outdated object
+            vcf_file = None
+        elif vcf_file.engine != engine:
+            # detect object created by other engine
+            vcf_file = None
     if vcf_file is None:
         vcf_file = VCFFile.from_path(vcf_path, sw, engine=engine)
         vcf_file.save_to_cache(cache_path, num_threads)

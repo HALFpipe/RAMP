@@ -7,7 +7,7 @@ from numpy import typing as npt
 
 from ..utils.genetics import chromosome_to_int
 from ._htslib import read_dosages, read_variants
-from .base import VCFFile
+from .base import Engine, VCFFile
 from .variant import Variant
 
 
@@ -35,6 +35,8 @@ def variant_from_htslib(
 
 @dataclass
 class HtslibVCFFile(VCFFile):
+    engine: Engine = Engine.htslib
+
     def __post_init__(self) -> None:
         variants, samples = read_variants(str(self.file_path), variant_from_htslib)
 

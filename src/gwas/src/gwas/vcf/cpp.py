@@ -8,7 +8,7 @@ from ..compression.arr._read_float import (
     create_vcf_float_reader,
     run_vcf_float_reader,
 )
-from .base import VCFFileReader
+from .base import Engine, VCFFileReader
 from .variant import Variant
 
 if TYPE_CHECKING:
@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class CppVCFFile(VCFFileReader):
+    engine: Engine = Engine.cpp
+
     def __post_init__(self) -> None:
         super().__post_init__()
 

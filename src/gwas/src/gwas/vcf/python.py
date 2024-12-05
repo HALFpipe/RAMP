@@ -5,12 +5,14 @@ import numpy as np
 from numpy import typing as npt
 
 from ..log import logger
-from .base import VCFFileReader
+from .base import Engine, VCFFileReader
 from .variant import Variant
 
 
 @dataclass
 class PyVCFFile(VCFFileReader):
+    engine: Engine = Engine.python
+
     def __post_init__(self) -> None:
         super().__post_init__()
 
