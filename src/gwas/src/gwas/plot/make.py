@@ -173,7 +173,7 @@ class PlotGenerator:
             p_value = p_value[mask]
             log_p_value = log_p_value[mask]
 
-            make(
+            plot(
                 self.output_directory,
                 job.name,
                 chromosome_int,
@@ -185,7 +185,7 @@ class PlotGenerator:
             logger.error(f'Error while plotting "{job.name}"', exc_info=e)
 
 
-def make(
+def plot(
     output_directory: UPath,
     name: str,
     chromosome_int: npt.NDArray[np.uint8],

@@ -3,7 +3,7 @@ from functools import partial
 from itertools import starmap
 from subprocess import PIPE, STDOUT, run
 from tempfile import TemporaryDirectory
-from typing import IO, Iterator
+from typing import IO, Iterator, NamedTuple
 
 import numpy as np
 import pyarrow as pa
@@ -16,8 +16,11 @@ from tqdm import tqdm
 from upath import UPath
 
 from ...compression.arr._write_float import write_float
+from ...hg19 import offset
 from ...log import logger
 from ...pheno import VariableSummary
+from ...plot.get import calculate_chi_squared_p_value
+from ...plot.make import get_file_path, plot
 from ...tools import metal
 from ...utils.genetics import make_variant_mask
 from ...utils.multiprocessing import make_pool_or_null_context
@@ -148,9 +151,12 @@ def make_table(path: UPath) -> pa.Table:
         convert_options=convert_options,
     )
 
-    # require at least 75 percent of samples to be present
+    # require at least 50 percent of samples to be present
     max_sample_count = pc.max(table["sample_count"])
-    table = table.filter(pc.field("sample_count") > max_sample_count.as_py() * 0.75)
+    table = table.filter(pc.field("sample_count") > max_sample_count.as_py() * 0.5)
+    # require more than one study
+    study_count: pc.Expression = pc.utf8_length(pc.field("direction"))
+    table = table.filter(study_count > 1)
 
     # only keep strand-ambiguous markers if the range of alternate allele
     # frequencies across samples does not span 0.5
@@ -187,9 +193,8 @@ def map_write(
 ) -> tuple[str, Summaries]:
     (study, ji), input_path = mi
 
-    summary_values: list[
-        tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]]
-    ] = list()
+    summary_inputs: list[SummaryInput] = list()
+    plot_inputs: list[PlotInput] = list()
     with input_path.open(mode="w") as phenotype_handle:
         phenotype_handle.write("\t".join(columns) + "\n")
         phenotype_handle.flush()
@@ -198,22 +203,47 @@ def map_write(
             score_path = UPath(score_path_str)
             if data_directory is not None:
                 score_path = data_directory / score_path
-            summary_values.append(
-                write(
-                    ji.phenotype,
-                    ji.variable_collection_name,
-                    ji.sample_count,
-                    score_path,
-                    phenotype_handle,
-                )
+
+            summary_input, plot_input = load_and_write(
+                ji.phenotype,
+                ji.variable_collection_name,
+                ji.sample_count,
+                score_path,
+                phenotype_handle,
+            )
+            summary_inputs.append(summary_input)
+            plot_inputs.append(plot_input)
+
+    arrays = map(np.concatenate, zip(*summary_inputs, strict=True))
+    beta, standard_error, r_squared = map(VariableSummary.from_array, arrays)
+    variant_count = sum(a.size for a, _, _ in summary_inputs)
+    summaries = Summaries(beta, standard_error, r_squared, variant_count)
+
+    score_path_str = ji.score_paths[0]
+    plot_directory = UPath(UPath(score_path_str).parts[0]) / "quality-control"
+    if data_directory is not None:
+        plot_directory = data_directory / plot_directory
+    if not plot_directory.is_dir():
+        logger.warning(
+            f'Did not find plot directory for study "{study}" at "{plot_directory}"'
+        )
+    else:
+        chromosome_int, position, u_stat, v_stat = map(
+            np.concatenate, zip(*plot_inputs, strict=True)
+        )
+        if not get_file_path(plot_directory, ji.phenotype).is_file() and u_stat.size > 0:
+            p_value, log_p_value = calculate_chi_squared_p_value(u_stat, v_stat)
+            position = offset[chromosome_int - 1] + position
+            plot(
+                plot_directory,
+                ji.phenotype,
+                chromosome_int,
+                position,
+                p_value,
+                log_p_value,
             )
 
-    beta, standard_error, r_squared = map(
-        VariableSummary.from_array,
-        map(np.concatenate, zip(*summary_values, strict=False)),
-    )
-    variant_count = sum(a.size for a, _, _ in summary_values)
-    return study, Summaries(beta, standard_error, r_squared, variant_count)
+    return study, summaries
 
 
 def iterate_row_prefixes(
@@ -230,39 +260,51 @@ def iterate_row_prefixes(
             yield prefix.encode()
 
 
-def write(
+class PlotInput(NamedTuple):
+    chromosome_int: npt.NDArray[np.uint8]
+    position: npt.NDArray[np.int64]
+    u_stat: npt.NDArray[np.float64]
+    v_stat: npt.NDArray[np.float64]
+
+
+class SummaryInput(NamedTuple):
+    beta: npt.NDArray[np.float64]
+    standard_error: npt.NDArray[np.float64]
+    r_squared: npt.NDArray[np.float64]
+
+
+def load_and_write(
     phenotype: str,
     variable_collection_name: str,
     sample_count: int,
     score_path: UPath,
     phenotype_handle: IO[str],
     use_threads: bool = True,
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    alternate_allele_frequency_column = (
-        f"{variable_collection_name}_alternate_allele_frequency"
-    )
+) -> tuple[SummaryInput, PlotInput]:
     columns = [
         "chromosome_int",
         "position",
         "reference_allele",
         "alternate_allele",
         "r_squared",
-        alternate_allele_frequency_column,
+        f"{variable_collection_name}_alternate_allele_frequency",
         f"{phenotype}_stat-u",
         f"{phenotype}_stat-v",
     ]
     parquet_file = pq.ParquetFile(score_path)
     table = parquet_file.read(columns=columns, use_threads=use_threads)
-
-    u_stat_array = table[f"{phenotype}_stat-u"]
-    r_squared_array = table["r_squared"]
-    alternate_allele_frequency_array = table[alternate_allele_frequency_column]
+    (_, _, _, _, r_squared_array, alternate_allele_frequency_array, u_stat_array, _) = (
+        table.columns
+    )
 
     # apply cutoffs
+    minor_allele_count_cutoff = 5
+    ploidy = 2
+    minor_allele_frequency_cutoff = minor_allele_count_cutoff / (ploidy * sample_count)
     mask = make_variant_mask(
         allele_frequencies=alternate_allele_frequency_array.to_pandas(),
         r_squared=r_squared_array.to_pandas(),
-        minor_allele_frequency_cutoff=0.01,
+        minor_allele_frequency_cutoff=minor_allele_frequency_cutoff,
         r_squared_cutoff=0.6,
     )
 
@@ -270,10 +312,10 @@ def write(
     u_stat: npt.NDArray[np.float64] = u_stat_array.to_numpy()
     np.logical_and(np.isfinite(u_stat), mask, out=mask)
     np.logical_and(np.logical_not(np.isclose(u_stat, 0)), mask, out=mask)
-
     (variant_indices,) = np.nonzero(mask)
-    table = table.take(variant_indices)
 
+    # extract filtered arrays
+    filtered_table = table.take(variant_indices)
     (
         chromosome_int_array,
         position_array,
@@ -283,8 +325,9 @@ def write(
         alternate_allele_frequency_array,
         u_stat_array,
         v_stat_array,
-    ) = table.columns
+    ) = filtered_table.columns
 
+    # write to file
     row_prefix_iterator = iterate_row_prefixes(
         (
             chromosome_int_array,
@@ -308,4 +351,12 @@ def write(
         phenotype_handle.fileno(),
     )
 
-    return beta, standard_error, r_squared_array.to_numpy()
+    # prepare arrays
+    r_squared = r_squared_array.to_numpy()
+    summary_inputs = SummaryInput(beta, standard_error, r_squared)
+
+    chromosome_int = filtered_table["chromosome_int"].to_numpy()
+    position = filtered_table["position"].to_numpy()
+    plot_inputs = PlotInput(chromosome_int, position, u_stat, v_stat)
+
+    return (summary_inputs, plot_inputs)

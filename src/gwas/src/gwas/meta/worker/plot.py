@@ -203,6 +203,10 @@ def plot_median_effect_size(
         )
     )
 
+    # drop missing values
+    is_finite = pl.col("sample_count", "median_standard_error").is_finite()
+    data_frame = data_frame.filter(pl.all_horizontal(is_finite))
+
     x = data_frame["sample_count"].sqrt()
     y = 1 / data_frame["median_standard_error"]
 

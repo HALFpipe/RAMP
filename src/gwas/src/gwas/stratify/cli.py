@@ -52,7 +52,7 @@ def parse_arguments(argv: list[str]) -> Namespace:
     argument_parser.add_argument(
         "--output-sample-ids",
         required=False,
-        choices=["fid", "iid", "both_with_underscore"],
+        choices=["fid", "iid", "both_with_underscore", "double_iid"],
         default="both_with_underscore",
     )
 
