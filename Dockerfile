@@ -120,6 +120,7 @@ COPY --from=metal /opt/conda/conda-bld /opt/conda/conda-bld
 COPY --from=qctool /opt/conda/conda-bld /opt/conda/conda-bld
 COPY --from=raremetal /opt/conda/conda-bld /opt/conda/conda-bld
 COPY --from=raremetal-debug /opt/conda/conda-bld /opt/conda/conda-bld
+COPY --from=r-genomicsem /opt/conda/conda-bld /opt/conda/conda-bld
 COPY --from=r-gmmat /opt/conda/conda-bld /opt/conda/conda-bld
 COPY --from=upload /opt/conda/conda-bld /opt/conda/conda-bld
 RUN conda index /opt/conda/conda-bld
@@ -134,10 +135,9 @@ RUN --mount=source=recipes/gwas,target=/gwas-protocol/recipes/gwas \
 # ================
 FROM conda AS install
 
-COPY --from=r-genomicsem /opt/conda/conda-bld /opt/conda/conda-bld
 COPY --from=gwas /opt/conda/conda-bld /opt/conda/conda-bld
 RUN --mount=type=cache,target=/opt/conda/pkgs \
-    conda install --yes --use-local \
+    conda install --yes --channel "/opt/conda/conda-bld" \
     "parallel" \
     "dosage-convertor" \
     "qctool" \
@@ -147,7 +147,7 @@ RUN --mount=type=cache,target=/opt/conda/pkgs \
     "gwas" && \
     conda create --yes --name "bgenix" "bgenix" && \
     conda create --yes --name "regenie" "regenie" && \
-    conda create --yes --name "r-genomicsem" "r-genomicsem" "r-qqman" && \
+    conda create --yes --channel "/opt/conda/conda-bld" --name "r-genomicsem" "r-genomicsem" "r-qqman" && \
     conda create --yes --name "r-saige" "r-saige" && \
     sync && \
     rm -rf /opt/conda/conda-bld && \
