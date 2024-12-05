@@ -34,12 +34,10 @@ path_patterns: list[str] = [
     "*std.nii.gz",
     "*contrast_matrix.tsv",
 ]
+base_path = UPath("/")
 
 
-def call_upload_client(arguments: Namespace, paths: set[UPath]) -> None:
-    base_path = UPath("/")
-    path_strs = sorted(f"{path.relative_to(base_path)}" for path in paths)
-
+def call_upload_client(arguments: Namespace, path_strs: list[str]) -> None:
     upload_executable = unwrap_which("upload")
     command: list[str] = [
         upload_executable,
@@ -66,7 +64,8 @@ def upload(arguments: Namespace) -> None:
             paths.update(input_directory.glob(f"**/{path_pattern}"))
 
         logger.info(f"Uploading {len(paths)} files")
-    call_upload_client(arguments, paths)
+    path_strs = sorted(f"{path.relative_to(base_path)}" for path in paths)
+    call_upload_client(arguments, path_strs)
 
 
 def parse_arguments(argv: list[str]) -> Namespace:

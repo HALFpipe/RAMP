@@ -22,8 +22,8 @@ def test_upload_score(tmp_path: UPath) -> None:
             error_action="raise",
         )
         call_upload_client.assert_called_once()
-        _, _, paths = call_upload_client.call_args.args
-        assert paths == {str(path).removeprefix("/") for path in input_paths}
+        _, paths = call_upload_client.call_args.args
+        assert set(paths) == {str(path).removeprefix("/") for path in input_paths}
 
 
 def test_upload_score_multiple(tmp_path: UPath) -> None:
@@ -49,5 +49,5 @@ def test_upload_score_multiple(tmp_path: UPath) -> None:
             error_action="raise",
         )
         call_upload_client.assert_called_once()
-        _, _, paths = call_upload_client.call_args.args
-        assert paths == {str(path).removeprefix("/") for path in input_paths}
+        _, paths = call_upload_client.call_args.args
+        assert set(paths) == {str(path).removeprefix("/") for path in input_paths}
