@@ -165,7 +165,6 @@ jobs:
           apptainer exec "${image_file}" score --help
           # Upload the container
           aws s3 mv \
-            --only-show-errors \
             --acl public-read \
             "${image_file}" \
             "s3://download-gwas-science/singularity/"
@@ -191,7 +190,6 @@ jobs:
           apptainer exec "${image_file}" score --help
           # Upload the container
           aws s3 mv \
-            --only-show-errors \
             --acl public-read \
             "${image_file}" \
             "s3://download-gwas-science/singularity/"
