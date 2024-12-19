@@ -186,6 +186,12 @@ class GwasCommand:
         base_samples: set[str] = set.intersection(
             *(set(vcf_file.samples) for vcf_file in vcf_files)
         )
+        if len(base_samples) == 0:
+            raise ValueError(
+                "No samples are shared between the VCF files. Please check if the "
+                "sample IDs match between your VCF files"
+            )
+
         for vcf_file in vcf_files:
             vcf_file.set_samples(base_samples)
         # Ensure that we have the samples in the correct order
