@@ -34,8 +34,7 @@ def convert(arguments: Namespace, sw: SharedWorkspace) -> None:
         output_path = input_path.parent / f"{name}{compression_method.suffix}"
         if output_path.is_file():
             logger.warning(
-                f'Not converting "{input_path}" because '
-                f'"{output_path}" already exists'
+                f'Not converting "{input_path}" because "{output_path}" already exists'
             )
         else:
             writer = FileArray.create(

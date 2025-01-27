@@ -31,7 +31,7 @@ def apply_num_threads(
         # Write a traceback to standard out every six hours
         faulthandler.dump_traceback_later(60 * 60 * 6, repeat=True)
 
-    xla_flags = f'{os.getenv("XLA_FLAGS", "")} --xla_cpu_enable_fast_math=false'
+    xla_flags = f"{os.getenv('XLA_FLAGS', '')} --xla_cpu_enable_fast_math=false"
     if num_threads is not None:
         threadpool_limits(limits=num_threads)
         for variable in num_threads_variables:
