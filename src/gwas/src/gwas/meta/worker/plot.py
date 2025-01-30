@@ -15,7 +15,7 @@ from ...pheno import VariableSummary
 from ...plot.make import dark_grey, light_grey, plot_manhattan, plot_q_q
 from ...utils.genetics import chromosome_to_int
 from ..base import Job
-from .ldsc import LDSCOutput, ValueSE
+from .ldsc import LDSCOutputCollection, ValueSE
 
 
 def plot_pre_meta(
@@ -52,7 +52,7 @@ def plot_post_meta(
     summaries: dict[str, dict[str, dict[str, float]]],
     data_frame: pl.DataFrame,
     reference_population: str,
-    ldsc_output: LDSCOutput,
+    ldsc: LDSCOutputCollection,
     output_path: UPath,
 ) -> None:
     split = data_frame["marker_name"].str.split(":")
@@ -121,21 +121,23 @@ def plot_post_meta(
     subfigure = subfigures["ldsc"]
     subfigure.suptitle("LD Score regression")
     _axes = subfigure.subplots(1, 1)
+    text = f"""munge-sumstats:
+Mean $\\chi^2$ = {ldsc.munge_sumstats.mean_chisq}
+$\\lambda_{{GC}}$ = {ldsc.munge_sumstats.lambda_gc}
+Max $\\chi^2$ = {ldsc.munge_sumstats.max_chisq}
+"""
+    for key, value in ldsc.data.items():
+        text += f"""ldsc {key}:
+Mean $\\chi^2$ = {value.mean_chisq}
+$\\lambda_{{GC}}$ = {value.lambda_gc}
+Intercept {format_value_and_se(value.intercept)}
+Ratio {format_value_and_se(value.ratio)}
+$h^2$ {format_value_and_se(value.total_observed_scale_h2)}
+"""
     _axes.text(
         0,
         1,
-        f"""munge-sumstats:
-    Mean $\\chi^2$ = {ldsc_output.munge_sumstats_mean_chisq}
-    $\\lambda_{{GC}}$ = {ldsc_output.munge_sumstats_lambda_gc}
-    Max $\\chi^2$ = {ldsc_output.munge_sumstats_max_chisq}
-
-    ldsc:
-    Mean $\\chi^2$ = {ldsc_output.ldsc_mean_chisq}
-    $\\lambda_{{GC}}$ = {ldsc_output.ldsc_lambda_gc}
-    Intercept {format_value_and_se(ldsc_output.ldsc_intercept)}
-    Ratio {format_value_and_se(ldsc_output.ldsc_ratio)}
-    $h^2$ {format_value_and_se(ldsc_output.ldsc_total_observed_scale_h2)}
-    """,
+        text,
         horizontalalignment="left",
         verticalalignment="top",
         transform=_axes.transAxes,

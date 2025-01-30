@@ -48,8 +48,8 @@ def worker(job: Job, output_directory: UPath, arguments: Namespace) -> None:
     )
 
     output_path = make_output_path(output_directory / "munge", job, tags)
-    ldsc_munge_sumstats_log, ldsc_log = run_ldsc(cache_path, data_frame, output_path)
-    ldsc_output = parse_logs(ldsc_munge_sumstats_log, ldsc_log)
+    ldsc_munge_sumstats_log, ldsc_logs = run_ldsc(cache_path, data_frame, output_path)
+    ldsc_output = parse_logs(ldsc_munge_sumstats_log, ldsc_logs)
 
     genomic_sem_munge_log = run_genomic_sem_munge(cache_path, data_frame, output_path)
 
@@ -69,6 +69,7 @@ def worker(job: Job, output_directory: UPath, arguments: Namespace) -> None:
     table = data_frame.to_arrow()
     summaries_json = json.dumps(summaries)
     ldsc_output_json = json.dumps(asdict(ldsc_output))
+    ldsc_logs_json = json.dumps(ldsc_logs)
 
     output_path = make_output_path(output_directory / "parquet", job, tags)
     parquet_path = output_path.with_suffix(".parquet")
@@ -82,7 +83,7 @@ def worker(job: Job, output_directory: UPath, arguments: Namespace) -> None:
                 summaries=summaries_json,
                 metal_log=metal_log,
                 ldsc_munge_sumstats_log=ldsc_munge_sumstats_log,
-                ldsc_log=ldsc_log,
+                ldsc_logs=ldsc_logs_json,
                 ldsc=ldsc_output_json,
                 genomic_sem_munge_log=genomic_sem_munge_log,
             )

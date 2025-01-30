@@ -10,19 +10,19 @@ from upath import UPath
 from ...tools import ldsc, ldsc_munge_sumstats
 
 
-def get_ld_scores(cache_path: UPath) -> tuple[UPath, UPath, UPath]:
+def get_ld_scores(cache_path: UPath) -> tuple[UPath, list[UPath], UPath]:
     # TODO
     snplist_path = cache_path / "w_hm3.snplist"
-    ld_scores_path = cache_path / "baselineLD_v2.3" / "baselineLD."
+    ld_score_paths = [cache_path / "eur_ancestry", cache_path / "mixed_ancestry"]
     weights_path = cache_path / "1000G_Phase3_weights_hm3_no_MHC" / "weights.hm3_noMHC."
 
-    return snplist_path, ld_scores_path, weights_path
+    return snplist_path, ld_score_paths, weights_path
 
 
 def run_ldsc(
     cache_path: UPath, data_frame: pl.DataFrame, output_path: UPath
-) -> tuple[str, str]:
-    snplist_path, ld_scores_path, weights_path = get_ld_scores(cache_path)
+) -> tuple[str, list[str]]:
+    snplist_path, ld_score_paths, weights_path = get_ld_scores(cache_path)
     snplist_frame = pl.read_csv(
         snplist_path,
         separator="\t",
@@ -83,28 +83,32 @@ def run_ldsc(
             temporary_path / "trait.sumstats.gz",
             output_path.with_suffix(".ldsc.sumstats.gz"),
         )
+        ldsc_logs = [
+            run(
+                args=[
+                    *ldsc,
+                    "--h2",
+                    "trait.sumstats.gz",
+                    "--ref-ld-chr",
+                    f"{ld_score_path}/"
+                    if ld_score_path.is_dir()
+                    else f"{ld_score_path}",
+                    "--w-ld-chr",
+                    str(weights_path),
+                    "--out",
+                    "ldsc",
+                ],
+                text=True,
+                check=True,
+                stdout=PIPE,
+                stderr=STDOUT,
+                cwd=temporary_path,
+                timeout=1 * 60 * 60,  # one hour
+            ).stdout
+            for ld_score_path in ld_score_paths
+        ]
 
-        ldsc_log = run(
-            args=[
-                *ldsc,
-                "--h2",
-                "trait.sumstats.gz",
-                "--ref-ld-chr",
-                str(ld_scores_path),
-                "--w-ld-chr",
-                str(weights_path),
-                "--out",
-                "ldsc",
-            ],
-            text=True,
-            check=True,
-            stdout=PIPE,
-            stderr=STDOUT,
-            cwd=temporary_path,
-            timeout=1 * 60 * 60,  # one hour
-        ).stdout
-
-        return munge_sumstats_log, ldsc_log
+        return munge_sumstats_log, ldsc_logs
 
 
 @dataclass
@@ -114,19 +118,28 @@ class ValueSE:
 
 
 @dataclass
+class MungeSumstatsOutput:
+    mean_chisq: float
+    lambda_gc: float
+    max_chisq: float
+
+
+@dataclass
 class LDSCOutput:
-    munge_sumstats_mean_chisq: float
-    munge_sumstats_lambda_gc: float
-    munge_sumstats_max_chisq: float
-
-    ldsc_mean_chisq: float
-    ldsc_lambda_gc: float
-    ldsc_intercept: ValueSE
-    ldsc_ratio: ValueSE | str
-    ldsc_total_observed_scale_h2: ValueSE
+    mean_chisq: float
+    lambda_gc: float
+    intercept: ValueSE
+    ratio: ValueSE | str
+    total_observed_scale_h2: ValueSE
 
 
-def parse_logs(munge_sumstats_log: str, ldsc_log: str) -> LDSCOutput:
+@dataclass
+class LDSCOutputCollection:
+    munge_sumstats: MungeSumstatsOutput
+    data: dict[str, LDSCOutput]
+
+
+def parse_logs(munge_sumstats_log: str, ldsc_logs: list[str]) -> LDSCOutputCollection:
     def get_value(key: str, log: str) -> str:
         match = re.search(
             rf"^{re.escape(key)} ?[=:]? ?(?P<value>.+?)\.?$",
@@ -137,41 +150,47 @@ def parse_logs(munge_sumstats_log: str, ldsc_log: str) -> LDSCOutput:
             raise ValueError
         return match.group("value")
 
-    munge_sumstats_mean_chisq = float(get_value("Mean chi^2", munge_sumstats_log))
-    munge_sumstats_lambda_gc = float(get_value("Lambda GC", munge_sumstats_log))
-    munge_sumstats_max_chisq = float(get_value("Max chi^2", munge_sumstats_log))
+    mean_chisq = float(get_value("Mean chi^2", munge_sumstats_log))
+    lambda_gc = float(get_value("Lambda GC", munge_sumstats_log))
+    max_chisq = float(get_value("Max chi^2", munge_sumstats_log))
 
-    ldsc_mean_chisq = float(get_value("Mean Chi^2", ldsc_log))
-    ldsc_lambda_gc = float(get_value("Lambda GC", ldsc_log))
+    munge_sumstats_output = MungeSumstatsOutput(mean_chisq, lambda_gc, max_chisq)
 
-    def parse_value_se(value_se: str) -> ValueSE:
-        match = re.match(r"^(?P<value>.+) \((?P<se>.+)\)$", value_se)
+    ldsc_outputs: dict[str, LDSCOutput] = dict()
+    for ldsc_log in ldsc_logs:
+        match = re.search(
+            r"^--ref-ld-chr (?P<value>.+?) \\$", ldsc_log, flags=re.MULTILINE
+        )
         if match is None:
             raise ValueError
-        value = float(match.group("value"))
-        se = float(match.group("se"))
-        return ValueSE(value, se)
+        key = UPath(match.group("value")).name
 
-    ldsc_intercept = parse_value_se(get_value("Intercept", ldsc_log))
-    ldsc_ratio_str = get_value("Ratio", ldsc_log)
-    if ldsc_ratio_str in {
-        "< 0 (usually indicates GC correction)",
-        "NA (mean chi^2 < 1)",
-    }:
-        ldsc_ratio: ValueSE | str = ldsc_ratio_str
-    else:
-        ldsc_ratio = parse_value_se(ldsc_ratio_str)
-    ldsc_total_observed_scale_h2 = parse_value_se(
-        get_value("Total Observed scale h2", ldsc_log)
-    )
+        mean_chisq = float(get_value("Mean Chi^2", ldsc_log))
+        lambda_gc = float(get_value("Lambda GC", ldsc_log))
 
-    return LDSCOutput(
-        munge_sumstats_mean_chisq=munge_sumstats_mean_chisq,
-        munge_sumstats_lambda_gc=munge_sumstats_lambda_gc,
-        munge_sumstats_max_chisq=munge_sumstats_max_chisq,
-        ldsc_mean_chisq=ldsc_mean_chisq,
-        ldsc_lambda_gc=ldsc_lambda_gc,
-        ldsc_intercept=ldsc_intercept,
-        ldsc_ratio=ldsc_ratio,
-        ldsc_total_observed_scale_h2=ldsc_total_observed_scale_h2,
-    )
+        def parse_value_se(value_se: str) -> ValueSE:
+            match = re.match(r"^(?P<value>.+) \((?P<se>.+)\)$", value_se)
+            if match is None:
+                raise ValueError
+            value = float(match.group("value"))
+            se = float(match.group("se"))
+            return ValueSE(value, se)
+
+        intercept = parse_value_se(get_value("Intercept", ldsc_log))
+        ratio_str = get_value("Ratio", ldsc_log)
+        if ratio_str in {
+            "< 0 (usually indicates GC correction)",
+            "NA (mean chi^2 < 1)",
+        }:
+            ratio: ValueSE | str = ratio_str
+        else:
+            ratio = parse_value_se(ratio_str)
+        total_observed_scale_h2 = parse_value_se(
+            get_value("Total Observed scale h2", ldsc_log)
+        )
+
+        ldsc_outputs[key] = LDSCOutput(
+            mean_chisq, lambda_gc, intercept, ratio, total_observed_scale_h2
+        )
+
+    return LDSCOutputCollection(munge_sumstats_output, ldsc_outputs)

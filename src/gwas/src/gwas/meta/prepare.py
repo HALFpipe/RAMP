@@ -1,8 +1,11 @@
 from argparse import Namespace
 from collections import Counter, defaultdict
 from dataclasses import asdict, fields
+from filecmp import cmp
 from functools import partial
 from operator import attrgetter, itemgetter
+from shutil import copyfile
+from tempfile import TemporaryDirectory
 from typing import Any, Iterator, Mapping
 
 import yaml
@@ -146,16 +149,25 @@ def write_group(
     p.mkdir(parents=True, exist_ok=True)
 
     data: Any = asdict(job)
-    with CompressedTextWriter(
-        p / f"{job.name}.yaml.gz", num_threads=num_threads
-    ) as file_handle:
-        yaml.dump(
-            data=data,
-            stream=file_handle,
-            Dumper=yaml.CDumper,
-            width=2**16 - 1,
-            sort_keys=False,
-        )
+
+    output_path = p / f"{job.name}.yaml.gz"
+
+    with TemporaryDirectory() as temporary_directory:
+        temporary_path = UPath(temporary_directory) / output_path.name
+        with CompressedTextWriter(
+            temporary_path, num_threads=num_threads
+        ) as file_handle:
+            yaml.dump(
+                data=data,
+                stream=file_handle,
+                Dumper=yaml.CDumper,
+                width=2**16 - 1,
+                sort_keys=False,
+            )
+        if not output_path.is_file() or not cmp(
+            output_path, temporary_path, shallow=False
+        ):
+            copyfile(temporary_path, output_path)
 
 
 def get_paths(
