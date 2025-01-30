@@ -119,7 +119,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         else:
             return SharedArray(name, self)
 
-    def get_allocation_start(self, allocation_size: int, item_size: int) -> int:
+    def get_allocation_start(self, allocation_size: int, alignment_size: int) -> int:
         with get_global_lock():
             allocations = self.allocations
             allocations_list = sorted(allocations.values(), key=attrgetter("start"))
@@ -128,7 +128,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
 
             def add_candidate(free_start: int, free_end: int) -> None:
                 # make sure the start is aligned
-                free_start = round_up(free_start, item_size)
+                free_start = round_up(free_start, alignment_size)
                 free_size = free_end - free_start
                 if free_size >= allocation_size:
                     candidates.append(Candidate(free_size, free_start))
@@ -159,12 +159,20 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
 
     @overload
     def alloc(
-        self, name: str, *shape: int, dtype: type[np.float64] | None = None
+        self,
+        name: str,
+        *shape: int,
+        dtype: type[np.float64] | None = None,
+        alignment_size: int | None = None,
     ) -> "SharedArray": ...
 
     @overload
     def alloc(
-        self, name: str, *shape: int, dtype: "type[ScalarType] | np.dtype[ScalarType]"
+        self,
+        name: str,
+        *shape: int,
+        dtype: "type[ScalarType] | np.dtype[ScalarType]",
+        alignment_size: int | None = None,
     ) -> "SharedArray[ScalarType]": ...
 
     def alloc(
@@ -172,6 +180,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         name: str,
         *shape: int,
         dtype: "type[ScalarType] | np.dtype[ScalarType] | None" = None,
+        alignment_size: int | None = None,
     ) -> "SharedArray[ScalarType]":
         """alloc.
 
@@ -206,8 +215,11 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             itemsize = numpy_dtype.itemsize
             size = int(np.prod(shape) * itemsize)
 
+            if alignment_size is None:
+                alignment_size = itemsize
+
             # Calculate start
-            start = self.get_allocation_start(size, itemsize)
+            start = self.get_allocation_start(size, alignment_size)
             allocations[name] = Allocation(start, size, shape, numpy_dtype)
 
             end = max(a.end for a in allocations.values())
