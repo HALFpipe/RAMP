@@ -150,12 +150,11 @@ class GwasCommand:
         if self.vcf_by_chromosome is None:
             raise RuntimeError
         # Update the VCF file allele frequencies based on variable collections
-        for chromosome in tqdm(
-            self.selected_chromosomes,
+        for vcf_file in tqdm(
+            self.vcf_by_chromosome.values(),
             desc="calculating allele frequencies",
             unit="chromosomes",
         ):
-            vcf_file = self.vcf_by_chromosome[chromosome]
             if calc_mean(
                 vcf_file,
                 variable_collections,
