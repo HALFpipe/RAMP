@@ -208,8 +208,7 @@ class FileArrayWriter(
             self.column_names = metadata
             if len(metadata) != column_count:
                 raise ValueError(
-                    "Column names do not match shape: "
-                    f"{len(metadata)} != {column_count}"
+                    f"Column names do not match shape: {len(metadata)} != {column_count}"
                 )
 
     @abstractmethod

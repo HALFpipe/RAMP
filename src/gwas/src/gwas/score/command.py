@@ -85,8 +85,7 @@ def split_by_missing_values(
         )
         if len(pattern_samples) == 0:
             logger.warning(
-                f"Phenotypes {pattern_phenotypes} are missing for all samples. "
-                "Skipping"
+                f"Phenotypes {pattern_phenotypes} are missing for all samples. Skipping"
             )
             continue
         if len(pattern_phenotypes) == 0:

@@ -137,8 +137,7 @@ def fit(
         for phenotype_indices in batched(range(vc.phenotype_count), chunksize)
     ]
     logger.debug(
-        f"Running {len(optimize_jobs)} optimize jobs "
-        f"for {phenotype_count} phenotypes"
+        f"Running {len(optimize_jobs)} optimize jobs for {phenotype_count} phenotypes"
     )
 
     pool, iterator = make_pool_or_null_context(
