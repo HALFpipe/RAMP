@@ -356,8 +356,7 @@ def test_score(
         is_ok = is_ok and has_no_log_pvalue_bias
     else:
         logger.info(
-            f"log likelihood is {log_likelihood} "
-            f"(rmw is {rmw_debug.log_likelihood_hat})"
+            f"log likelihood is {log_likelihood} (rmw is {rmw_debug.log_likelihood_hat})"
         )
     if not is_ok:
         title = f"OpenSNP (n={sample_count})"
