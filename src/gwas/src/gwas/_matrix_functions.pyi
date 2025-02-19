@@ -13,6 +13,9 @@ def set_triu(
     a: npt.NDArray[np.float64],
     alpha: float = 0,
 ) -> None: ...
+def copy_triu_tril(
+    a: npt.NDArray[np.float64],
+) -> None: ...
 def dgesvdq(
     a: npt.NDArray[np.float64],
     s: npt.NDArray[np.float64],

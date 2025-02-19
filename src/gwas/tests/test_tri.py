@@ -65,7 +65,7 @@ def test_tri(
     genotypes_array: npt.NDArray[np.float64],
     numpy_tri: npt.NDArray[np.float64],
 ) -> None:
-    log_size = 30  # 1 gigabyte.
+    log_size = 30  # 1 gigabyte
     sw = SharedWorkspace.create(size=2**log_size)
 
     vcf_file.set_variants_from_cutoffs(
@@ -74,7 +74,7 @@ def test_tri(
     assert genotypes_array.shape[0] == vcf_file.variant_count
 
     # Check that we cannot use a direct algorithm because we would
-    # run out of memory.
+    # run out of memory
     with pytest.raises(MemoryError):
         sw.alloc("a", vcf_file.variant_count, vcf_file.sample_count)
 

@@ -8,6 +8,7 @@ from tqdm.auto import tqdm
 from upath import UPath
 
 from ..covar import calc_covariance
+from ..log import logger
 from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
 from ..utils.multiprocessing import IterationOrder, make_pool_or_null_context
@@ -153,14 +154,21 @@ def load(
     with pool:
         consume(tqdm(iterator, unit="files", total=len(sumstats_paths)))
 
+    logger.debug("Rotating marginal effects")
     for p, marginal_effects, rotated_effects in zip(
-        pieces,
+        tqdm(pieces, unit="pieces"),
         np.split(marginal_effect_array.to_numpy(), snp_indices, axis=1),
         np.split(rotated_effect_array.to_numpy(), eig_indices, axis=1),
         strict=True,
     ):
         eigenvectors = p.eigenvector_array.to_numpy()
-        np.einsum("se, ps -> pe", eigenvectors, marginal_effects, out=rotated_effects)
+        np.einsum(
+            "se, ps -> pe",
+            eigenvectors,
+            marginal_effects,
+            out=rotated_effects,
+            optimize=True,
+        )
 
     for p in pieces:
         p.eigenvector_array.free()
@@ -170,7 +178,14 @@ def load(
 
     covariance_matrix = covariance_array.to_numpy()
     factor = np.power(np.diag(covariance_matrix), -0.5)
-    np.einsum("ij, i, j -> ij", covariance_matrix, factor, factor, out=covariance_matrix)
+    np.einsum(
+        "ij, i, j -> ij",
+        covariance_matrix,
+        factor,
+        factor,
+        out=covariance_matrix,
+        optimize=True,
+    )
     correlation_array = covariance_array
 
     sw.squash()

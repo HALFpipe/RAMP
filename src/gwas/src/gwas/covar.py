@@ -6,6 +6,7 @@ import scipy
 from numpy import typing as npt
 from upath import UPath
 
+from ._matrix_functions import copy_triu_tril
 from .compression.arr.base import CompressionMethod, FileArray, FileArrayWriter
 from .log import logger
 from .mem.arr import SharedArray
@@ -68,11 +69,10 @@ def calc_covariance(
     scipy.linalg.blas.dsyrk(
         alpha=1.0, a=a, trans=1, c=degrees_of_freedom, overwrite_c=True
     )
-    np.subtract(degrees_of_freedom, 1, out=degrees_of_freedom)
+    np.subtract(degrees_of_freedom, 1.0, out=degrees_of_freedom)
 
     # Set lower triangle to 1 to avoid division by zero
-    x, y = np.tril_indices_from(degrees_of_freedom, k=-1)
-    degrees_of_freedom[(x, y)] = 1
+    degrees_of_freedom[degrees_of_freedom <= 0.0] = 1.0
 
     a[:] = data
     with warnings.catch_warnings():
@@ -87,5 +87,5 @@ def calc_covariance(
     np.divide(covariance, degrees_of_freedom, out=covariance)
     degrees_of_freedom_array.free()
 
-    covariance[(x, y)] = covariance[(y, x)]
+    copy_triu_tril(covariance)
     return covariance_array

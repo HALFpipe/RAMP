@@ -80,6 +80,11 @@ cdef extern:
         size_t n,
         size_t m,
     )
+    void c_copy_upper_to_lower_triangle(
+        double *a,
+        size_t n,
+        size_t m,
+    )
 
 
 def set_tril(
@@ -104,6 +109,17 @@ def set_triu(
     cdef size_t m = a.shape[1]
 
     c_set_upper_triangle(&a[0, 0], alpha, n, m)
+
+
+def copy_triu_tril(
+    np.ndarray[double, ndim=2, mode="fortran"] a,
+) -> None:
+    cdef size_t n = a.shape[0]
+    check_strides(a, n)
+
+    cdef size_t m = a.shape[1]
+
+    c_copy_upper_to_lower_triangle(&a[0, 0], n, m)
 
 
 cdef extern from "mkl_lapacke.h":
