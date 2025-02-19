@@ -1,6 +1,7 @@
 from argparse import Namespace
 from operator import attrgetter
 
+from ..log import logger
 from ..mem.wkspace import SharedWorkspace
 from ..utils.jax import setup_jax
 from .calc import HDL
@@ -21,6 +22,7 @@ def hdl(sw: SharedWorkspace, arguments: Namespace) -> None:
     )
 
     data = load(sw, ld_path, sumstats_paths, arguments.num_threads)
+    logger.debug(f"Loaded {len(sumstats_paths)} sumstats files")
     hdl = HDL(data, arguments.output_path, arguments.num_threads)
 
     hdl.calc_piecewise()

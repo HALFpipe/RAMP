@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from functools import partial
 from itertools import batched, product
-from typing import Callable, Literal, Sequence, TypeVar
+from typing import Callable, Iterator, Literal, Sequence, TypeVar
 
 import jax
 import jax.experimental
@@ -16,6 +16,7 @@ from numpy import typing as npt
 from tqdm.auto import tqdm
 from upath import UPath
 
+from ..log import logger
 from ..utils.multiprocessing import make_pool_or_null_context
 from .base import Reference, Sample1, Sample2
 from .load import Data
@@ -48,6 +49,7 @@ def get_indices1(
         .ravel()
     )
     index = np.setdiff1d(np.arange(phenotype_count), existing)
+
     return list(index)
 
 
@@ -307,15 +309,20 @@ class HDL:
         )
         parquet_writer.write_batch(record_batch)
 
-    def run(self, jobs: list[J], callable: Callable[[J], Result1 | Result2]) -> None:
+    def run(
+        self, jobs: Iterator[J], size: int, callable: Callable[[J], Result1 | Result2]
+    ) -> None:
+        logger.debug(f"Running {size} jobs")
         pool, iterator = make_pool_or_null_context(
-            jobs, callable, num_threads=self.num_threads, chunksize=None, is_jax=True
+            jobs,
+            callable,
+            num_threads=self.num_threads,
+            size=size,
+            chunksize=None,
+            is_jax=True,
         )
-
         with pq.ParquetWriter(self.get_chunk_path(), schema) as parquet_writer, pool:
-            for results in batched(
-                tqdm(iterator, unit="jobs", total=len(jobs)), n=10_000
-            ):
+            for results in batched(tqdm(iterator, unit="jobs", total=size), n=10_000):
                 self.write(parquet_writer, results)
 
     def calc_piecewise(self) -> None:
@@ -332,13 +339,14 @@ class HDL:
 
         dataset = ds.dataset(self.path, schema=schema, format="parquet")
         index = get_indices1(phenotype_count, dataset, "piecewise")
-        jobs: list[Job1] = [
+        logger.debug(f"Calculating piecewise estimates for {len(index)} phenotypes")
+        jobs = (
             Job1(np.array([piece_index]), phenotype_index)
             for piece_index, phenotype_index in product(range(piece_count), index)
-        ]
+        )
 
         callable = partial(get1, self.data)
-        self.run(jobs, callable)
+        self.run(jobs=jobs, callable=callable, size=piece_count * len(index))
 
     def calc_jackknife1(self) -> None:
         phenotype_count = self.data.phenotype_count
@@ -358,17 +366,17 @@ class HDL:
         )
         initial_params = np.column_stack([initial_slope, np.ones_like(initial_slope)])
 
-        jobs: list[Job1] = [
+        jobs = (
             Job1(
                 piece_indices=np.setdiff1d(np.arange(piece_count), piece_index),
                 phenotype_index=phenotype_index,
                 initial_params=initial_params[phenotype_index],
             )
             for piece_index, phenotype_index in product(range(-1, piece_count), index)
-        ]
+        )
 
         callable = partial(get1, self.data)
-        self.run(jobs, callable)
+        self.run(jobs=jobs, callable=callable, size=(piece_count + 1) * len(index))
 
     def calc_piecewise2(self) -> None:
         phenotype_count = self.data.phenotype_count
@@ -382,7 +390,7 @@ class HDL:
             .to_pandas()
             .set_index(["phenotype_index", "piecewise_index"])
         )
-        jobs: list[Job2] = [
+        jobs = (
             Job2(
                 np.array([piece_index]),
                 phenotype_index1,
@@ -393,10 +401,10 @@ class HDL:
             for piece_index, (phenotype_index1, phenotype_index2) in product(
                 range(piece_count), zip(index1, index2, strict=True)
             )
-        ]
+        )
 
         callable = partial(get2, self.data)
-        self.run(jobs, callable)
+        self.run(jobs=jobs, callable=callable, size=piece_count * len(index1))
 
     def calc_jackknife2(self) -> None:
         phenotype_count = self.data.phenotype_count
@@ -431,7 +439,7 @@ class HDL:
         )
         initial_params = np.column_stack([initial_slope, np.ones_like(initial_slope)])
 
-        jobs: list[Job2] = [
+        jobs = (
             Job2(
                 np.setdiff1d(np.arange(piece_count), piece_index),
                 phenotype_index1,
@@ -443,7 +451,7 @@ class HDL:
             for piece_index, (k, (phenotype_index1, phenotype_index2)) in product(
                 range(-1, piece_count), enumerate(zip(index1, index2, strict=True))
             )
-        ]
+        )
 
         callable = partial(get2, self.data)
-        self.run(jobs, callable)
+        self.run(jobs=jobs, callable=callable, size=(piece_count + 1) * len(index1))
