@@ -33,7 +33,7 @@ def run(argv: list[str], error_action: Literal["raise", "ignore"] = "ignore") ->
 
     from ..log import logger, setup_logging
 
-    setup_logging(level=arguments.log_level)
+    setup_logging(level=arguments.log_level, path=arguments.output_path)
 
     from ..utils.threads import apply_num_threads, cpu_count
 
