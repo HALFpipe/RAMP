@@ -46,7 +46,7 @@ def apply_num_threads(
     os.environ["OMP_WAIT_POLICY"] = "PASSIVE"
     os.environ["MKL_DYNAMIC"] = "FALSE"
     os.environ["XLA_FLAGS"] = xla_flags
-    # os.environ["JAX_PLATFORMS"] = "cpu"
+    os.environ["JAX_PLATFORMS"] = "cpu"
 
     from ..log import logger
 
