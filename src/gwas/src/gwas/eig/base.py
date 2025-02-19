@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from functools import partial
-from math import sqrt
 from operator import attrgetter
 from typing import Self, Sequence
 
@@ -57,7 +56,7 @@ class Eigendecomposition(SharedArray):
 
     @property
     def sqrt_eigenvalues(self) -> npt.NDArray[np.float64]:
-        sqrt_variant_count = sqrt(self.variant_count)
+        sqrt_variant_count = np.sqrt(self.variant_count)
         return self.singular_values / sqrt_variant_count
 
     @property

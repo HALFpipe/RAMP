@@ -58,6 +58,9 @@ class SharedArray(Generic[ScalarType]):
     def to_file_name(self) -> str:
         raise NotImplementedError
 
+    def __getitem__(self, key: Any) -> npt.NDArray[ScalarType]:
+        return self.to_numpy()[key]
+
     def __setitem__(self, key: Any, value: npt.NDArray[ScalarType]) -> None:
         numpy_array = self.to_numpy()
         numpy_array[key] = value
@@ -273,6 +276,9 @@ class SharedArray(Generic[ScalarType]):
             # calculate size in bytes
             itemsize = np.dtype(a.dtype).itemsize
             size = int(np.prod(shape) * itemsize)
+
+            if size > a.size:
+                raise ValueError("Cannot resize to larger size")
 
             allocations[self.name] = Allocation(a.start, size, shape, a.dtype)
             self.sw.allocations = allocations

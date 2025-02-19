@@ -25,7 +25,7 @@ def apply(
 ) -> None:
     genotypes_matrix = genotypes_array.to_numpy(shape=shape)
     alternate_allele_frequency = alternate_allele_frequency_arrays[i].to_numpy()
-    sample_boolean_vector = sample_boolean_array.to_numpy()[:, i, np.newaxis]
+    sample_boolean_vector = sample_boolean_array[:, i, np.newaxis]
 
     mean = alternate_allele_frequency[variant_slice]
     logger.debug(f"Calculating sum for variants {variant_slice}")
@@ -144,7 +144,7 @@ def calc_mean(
             # Remove already read variant indices
             progress_bar.update(vcf_file.variant_count)
             variant_offset += vcf_file.variant_count
-            variant_indices = variant_indices[variant_count:]
+            variant_indices = variant_indices[variant_count:]  # type: ignore[assignment]
 
     genotypes_array.free()
     sample_boolean_array.free()

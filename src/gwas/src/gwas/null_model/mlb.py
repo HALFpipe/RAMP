@@ -24,11 +24,6 @@ OptimizeInput: TypeAlias = tuple[
 ]
 
 
-def setup_jax() -> None:
-    jax.config.update("jax_enable_x64", True)
-    jax.config.update("jax_platforms", "cpu")
-
-
 class OptimizeResult(NamedTuple):
     x: npt.NDArray[np.float64]
     fun: float

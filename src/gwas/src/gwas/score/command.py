@@ -13,7 +13,7 @@ from ..compression.arr.base import (
     TextCompressionMethod,
     compression_methods,
 )
-from ..covar import calc_covariance
+from ..covar import calc_and_save_covariance
 from ..log import logger
 from ..mean import calc_mean
 from ..mem.wkspace import SharedWorkspace
@@ -235,7 +235,7 @@ class GwasCommand:
             vcf_file.clear_allele_frequency_columns()
         self.sw.squash()
         with threadpool_limits(limits=self.arguments.num_threads):
-            calc_covariance(
+            calc_and_save_covariance(
                 base_variable_collection,
                 self.output_directory / "covariance",
                 compression_methods[self.arguments.compression_method],

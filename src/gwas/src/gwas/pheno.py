@@ -204,14 +204,16 @@ class VariableCollection(SharedArray[np.float64]):
         # Apply missing value strategy.
         if missing_value_strategy == "complete_samples":
             # Remove samples with any missing values.
-            criterion = np.isfinite(phenotypes).all(axis=1) & np.isfinite(
-                covariates
-            ).all(axis=1)
+            criterion = np.logical_and(
+                np.isfinite(phenotypes).all(axis=1),
+                np.isfinite(covariates).all(axis=1),
+            )
         elif missing_value_strategy == "listwise_deletion":
             # Only remove samples with all-missing values.
-            criterion = np.isfinite(phenotypes).any(axis=1) | np.isfinite(
-                covariates
-            ).any(axis=1)
+            criterion = np.logical_or(
+                np.isfinite(phenotypes).any(axis=1),
+                np.isfinite(covariates).any(axis=1),
+            )
         else:
             raise ValueError(f"Unknown missing value strategy: {missing_value_strategy}")
 

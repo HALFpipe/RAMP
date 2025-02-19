@@ -44,6 +44,7 @@ def numpy_tri(genotypes_array: npt.NDArray[np.float64]) -> npt.NDArray[np.float6
     return r
 
 
+@pytest.mark.filterwarnings("ignore")
 @pytest.mark.parametrize("sample_size_label", ["small"], indirect=True)
 @pytest.mark.parametrize("chromosome", [22], indirect=True)
 def test_zero_variance(

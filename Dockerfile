@@ -170,7 +170,7 @@ COPY --from=builder --chown=ubuntu:ubuntu /opt/libfakeintel.so /opt/libfakeintel
 FROM final AS test
 
 RUN conda install --yes \
-    "mypy" "pytest-benchmark" \
+    "mypy" "pytest-benchmark" "cython" \
     "gcc>=13.1" "gxx>=13.1" "binutils" \
     "mkl-include" "zlib" \
     "sysroot_linux-64>=2.17" && \
