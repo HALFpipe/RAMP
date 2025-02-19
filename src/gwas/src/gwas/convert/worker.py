@@ -29,8 +29,15 @@ def update_row_metadata_dtypes(
             row_metadata[column] = row_metadata[column].astype(np.float64)
         data_frame = row_metadata
     elif name.endswith("covariance"):
+        if isinstance(row_metadata, pd.DataFrame):
+            if len(row_metadata.columns) == 1:
+                row_metadata = row_metadata.iloc[:, 0]
         if isinstance(row_metadata, pd.Series):
             data_frame = pd.DataFrame(dict(variable=row_metadata), dtype="string")
+        else:
+            raise ValueError(
+                f"Expected a series of row metadata, received {row_metadata}"
+            )
     else:
         raise ValueError(f"Unknown file type: {name}")
     return data_frame

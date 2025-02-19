@@ -52,9 +52,10 @@ class InitArgs(NamedTuple):
     logging_queue: SimpleQueue[LogRecord] | None
     log_level: int | str
     lock: RLock
+    is_jax: bool
 
 
-def get_initargs(num_threads: int | None = None) -> InitArgs:
+def get_initargs(num_threads: int | None = None, is_jax: bool = False) -> InitArgs:
     from ..log import logger, logging_queue
 
     sched_affinity: set[int] | None = None
@@ -69,6 +70,7 @@ def get_initargs(num_threads: int | None = None) -> InitArgs:
         logging_queue,
         logger.getEffectiveLevel(),
         get_global_lock(),
+        is_jax,
     )
     logger.debug(f"Initializer arguments for child process are: {pformat(initargs)}")
     return initargs
@@ -80,6 +82,7 @@ def initializer(
     logging_queue: SimpleQueue[LogRecord] | None,
     log_level: int | str,
     lock: RLock,
+    is_jax: bool,
 ) -> None:
     if logging_queue is None:
         raise ValueError("Trying to initialize process without logging queue")
@@ -97,6 +100,11 @@ def initializer(
     _global_lock = lock
 
     logger.debug(f'Finished initializer for process "{mp.current_process().name}"')
+
+    if is_jax:
+        from .jax import setup_jax
+
+        setup_jax()
 
 
 def soft_kill(proc: mp.Process) -> None:
@@ -121,8 +129,9 @@ class Pool(mp_pool.Pool):
         processes: int | None = None,
         maxtasksperchild: int | None = None,
         num_threads: int = 1,
+        is_jax: bool = False,
     ) -> None:
-        initargs = get_initargs(num_threads=num_threads)
+        initargs = get_initargs(num_threads=num_threads, is_jax=is_jax)
         super().__init__(
             processes, initializer, initargs, maxtasksperchild, multiprocessing_context
         )
@@ -247,6 +256,7 @@ def make_pool_or_null_context(
     size: int | None = None,
     chunksize: int | None = 1,
     iteration_order: IterationOrder = IterationOrder.UNORDERED,
+    is_jax: bool = False,
 ) -> tuple[ContextManager[Any], Iterator[S]]:
     if num_threads < 2:
         return nullcontext(), map(callable, iterable)
@@ -266,7 +276,7 @@ def make_pool_or_null_context(
     if chunksize is None:
         chunksize = 1
 
-    pool = Pool(processes=processes, num_threads=num_threads // processes)
+    pool = Pool(processes=processes, num_threads=num_threads // processes, is_jax=is_jax)
     if iteration_order is IterationOrder.ORDERED:
         map_function = pool.imap
     elif iteration_order is IterationOrder.UNORDERED:

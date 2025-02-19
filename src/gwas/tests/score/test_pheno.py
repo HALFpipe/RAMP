@@ -14,7 +14,7 @@ from gwas.compression.arr.base import (
     FileArray,
     compression_methods,
 )
-from gwas.covar import calc_covariance
+from gwas.covar import calc_and_save_covariance
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.pheno import VariableCollection
 from gwas.utils.threads import cpu_count
@@ -226,7 +226,7 @@ def test_covariance(
     request.addfinalizer(variable_collection.free)
 
     covariance_path = tmp_path / "covariance.tsv"
-    covariance_path = calc_covariance(
+    covariance_path = calc_and_save_covariance(
         variable_collection, covariance_path, compression_method, num_threads=cpu_count()
     )
     reader = FileArray.from_file(covariance_path, np.float64, num_threads=cpu_count())

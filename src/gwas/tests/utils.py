@@ -1,4 +1,5 @@
 from functools import partial
+from typing import Any
 
 import numpy as np
 import scipy
@@ -8,7 +9,7 @@ from typeguard import typechecked as typechecker
 
 from gwas.log import logger
 
-check_types = partial(jaxtyped, typechecker=typechecker)
+check_types: Any = partial(jaxtyped, typechecker=typechecker)
 
 
 def regress(
@@ -36,14 +37,13 @@ def regress(
 
     x = np.hstack([np.ones_like(a), a])
 
-    sum_residuals: float | npt.NDArray[np.float64] = np.inf
     (intercept, slope), sum_residuals, _, _ = np.linalg.lstsq(x, b, rcond=None)
 
     if sum_residuals.size == 0:
-        sum_residuals = np.inf
+        sum_residuals = np.array(np.inf)
     else:
-        sum_residuals = float(sum_residuals[0])
-    mean_residuals = sum_residuals / a.size
+        sum_residuals = sum_residuals[0]
+    mean_residuals = sum_residuals.item() / a.size
 
     return float(intercept.item()), float(slope.item()), mean_residuals, missing_overlap
 

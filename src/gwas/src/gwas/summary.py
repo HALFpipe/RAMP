@@ -26,7 +26,7 @@ def parse_obj_as(cls: Type[T], data: Any) -> T:
     """
     if is_dataclass(cls):
         return cls(
-            **{f.name: parse_obj_as(f.type, data.get(f.name)) for f in fields(cls)}
+            **{f.name: parse_obj_as(f.type, data.get(f.name)) for f in fields(cls)}  # type: ignore
         )  # type: ignore
 
     origin = get_origin(cls)

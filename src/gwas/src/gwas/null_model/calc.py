@@ -55,12 +55,10 @@ def apply(optimize_job: OptimizeJob) -> int:
 
     from .fastlmm import FaSTLMM
     from .ml import MaximumLikelihood
-    from .mlb import OptimizeInput, setup_jax
+    from .mlb import OptimizeInput
     from .mpl import MaximumPenalizedLikelihood
     from .pml import ProfileMaximumLikelihood
     from .reml import RestrictedMaximumLikelihood
-
-    setup_jax()
 
     ml_classes: Mapping[str, Type[ProfileMaximumLikelihood]] = {
         "fastlmm": FaSTLMM,
@@ -137,8 +135,7 @@ def fit(
         for phenotype_indices in batched(range(vc.phenotype_count), chunksize)
     ]
     logger.debug(
-        f"Running {len(optimize_jobs)} optimize jobs "
-        f"for {phenotype_count} phenotypes"
+        f"Running {len(optimize_jobs)} optimize jobs for {phenotype_count} phenotypes"
     )
 
     pool, iterator = make_pool_or_null_context(
@@ -146,6 +143,7 @@ def fit(
         apply,
         num_threads=num_threads,
         iteration_order=IterationOrder.UNORDERED,
+        is_jax=True,
     )
     progress_bar = tqdm(
         desc="fitting null models",

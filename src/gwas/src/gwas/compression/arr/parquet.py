@@ -55,7 +55,7 @@ class ParquetFileArrayWriter(FileArrayWriter[ScalarType]):
                 name = f"column-{i}"
             fields.append(pa.field(name, self.arrow_type))
 
-        metadata: dict[bytes, bytes] = dict()
+        metadata: dict[bytes | str, bytes | str] = dict()
         for key, value in self.extra_metadata.items():
             metadata[key.encode()] = json.dumps(value).encode()
 

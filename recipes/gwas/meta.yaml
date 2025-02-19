@@ -38,8 +38,11 @@ requirements:
     - jax
     - jaxtyping
     - chex
+    - optax
+    - polars
     - "python-flatbuffers"
     - psutil
+    - rpy2
     - threadpoolctl
     - tqdm
     - pyyaml

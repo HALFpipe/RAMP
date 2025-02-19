@@ -24,6 +24,7 @@ dependencies = [
 [project.scripts]
 benchmark = "gwas.benchmark.cli:main"
 convert = "gwas.convert.cli:main"
+hdl = "gwas.hdl.cli:main"
 meta-prepare = "gwas.meta.cli:prepare"
 meta-worker = "gwas.meta.cli:worker"
 meta-merge = "gwas.meta.cli:merge"

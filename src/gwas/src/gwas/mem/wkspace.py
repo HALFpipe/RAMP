@@ -17,6 +17,7 @@ from numpy import typing as npt
 from psutil import virtual_memory
 
 from ..log import logger
+from ..utils.math import round_up
 from ..utils.multiprocessing import get_global_lock, get_lock_name
 from ._os import c_memfd_create
 
@@ -42,27 +43,6 @@ class Allocation:
     @property
     def end(self) -> int:
         return self.start + self.size
-
-
-def round_up(number_to_round: int, multiple: int) -> int:
-    """
-    Rounds up a number to the nearest multiple.
-    Adapted from https://stackoverflow.com/a/3407254
-
-    Args:
-        number_to_round (int): The number to be rounded up.
-        multiple (int): The multiple to round up to.
-
-    Returns:
-        int: The rounded up number.
-
-    """
-    if multiple == 0:
-        return number_to_round
-    remainder = number_to_round % multiple
-    if remainder == 0:
-        return number_to_round
-    return number_to_round + multiple - remainder
 
 
 shared_workspaces: dict[tuple[int, int], "SharedWorkspace"] = dict()
