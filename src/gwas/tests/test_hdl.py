@@ -91,7 +91,10 @@ def test_hdl(
 ) -> None:
     dataset_path = tmp_path / "dataset"
     dataset_path.mkdir()
-    hdl = HDL(data=data, path=dataset_path, num_threads=cpu_count())
+    phenotypes = [sumstats_path.name.split(".")[0] for sumstats_path in sumstats_paths]
+    hdl = HDL(
+        phenotypes=phenotypes, data=data, path=dataset_path, num_threads=cpu_count()
+    )
 
     hdl.calc_piecewise()
     if type == "jackknife":
@@ -108,26 +111,32 @@ def test_hdl(
     group_by = (
         pl.scan_pyarrow_dataset(dataset)
         .filter(*filters)
-        .group_by(pl.col("phenotype_index1"), pl.col("phenotype_index2"))
+        .select(
+            pl.col("phenotype1").map_elements(
+                lambda phenotype: phenotypes.index(phenotype)
+            ),
+            pl.col("phenotype2").map_elements(
+                lambda phenotype: phenotypes.index(phenotype)
+            ),
+            pl.col("slope"),
+            pl.col("intercept"),
+        )
+        .group_by(pl.col("phenotype1"), pl.col("phenotype2"))
     )
 
-    slope_frame = group_by.agg(pl.col("slope").sum()).collect()
+    data_frame = group_by.agg(pl.col("slope").sum()).collect()
     _slope = np.zeros((len(sumstats_paths), len(sumstats_paths)))
-    _slope[slope_frame["phenotype_index1"], slope_frame["phenotype_index2"]] = (
-        slope_frame["slope"]
-    )
-    _slope[slope_frame["phenotype_index2"], slope_frame["phenotype_index1"]] = (
-        slope_frame["slope"]
-    )
+    _slope[data_frame["phenotype1"], data_frame["phenotype2"]] = data_frame["slope"]
+    _slope[data_frame["phenotype2"], data_frame["phenotype1"]] = data_frame["slope"]
 
-    intercept_frame = group_by.agg(pl.col("intercept").mean()).collect()
+    data_frame = group_by.agg(pl.col("intercept").mean()).collect()
     _intercept = np.zeros((len(sumstats_paths), len(sumstats_paths)))
-    _intercept[
-        intercept_frame["phenotype_index1"], intercept_frame["phenotype_index2"]
-    ] = intercept_frame["intercept"]
-    _intercept[
-        intercept_frame["phenotype_index2"], intercept_frame["phenotype_index1"]
-    ] = intercept_frame["intercept"]
+    _intercept[data_frame["phenotype1"], data_frame["phenotype2"]] = data_frame[
+        "intercept"
+    ]
+    _intercept[data_frame["phenotype2"], data_frame["phenotype1"]] = data_frame[
+        "intercept"
+    ]
 
     assert np.isfinite(_slope).all()
     assert np.isfinite(_intercept).all()
@@ -171,7 +180,7 @@ save(hdl, file = "{rdata_name}")
             group_by.agg((pl.col("slope").sum() - pl.col("slope")).var())
             .collect()
             .to_pandas()
-            .set_index(["phenotype_index1", "phenotype_index2"])
+            .set_index(["phenotype1", "phenotype2"])
             .loc[indices]
             * data.piece_count
         )

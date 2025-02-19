@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from functools import partial
-from itertools import batched, product
+from itertools import batched, combinations, product
 from typing import Callable, Iterator, Literal, Sequence, TypeVar
 
 import jax
@@ -24,8 +24,8 @@ from .ml import eig_count as eig_count
 from .ml import estimate1, estimate2
 
 fields: list[pa.Field] = [
-    pa.field("phenotype_index1", pa.uint32(), nullable=False),
-    pa.field("phenotype_index2", pa.uint32(), nullable=False),
+    pa.field("phenotype1", pa.string(), nullable=False),
+    pa.field("phenotype2", pa.string(), nullable=False),
     pa.field("piecewise_index", pa.uint8(), nullable=True),
     pa.field("jackknife_index", pa.uint8(), nullable=True),
     pa.field("slope", pa.float64(), nullable=False),
@@ -34,50 +34,45 @@ fields: list[pa.Field] = [
 schema = pa.schema(fields)
 
 
-def get_indices1(
-    phenotype_count: int, dataset: ds.Dataset, type: Literal["piecewise", "jackknife"]
-) -> list[int]:
-    existing = (
+def get_phenotypes1(
+    phenotypes: list[str], dataset: ds.Dataset, type: Literal["piecewise", "jackknife"]
+) -> list[str]:
+    logger.debug(f"Getting phenotypes for {type} variance estimates")
+    existing_phenotypes = set(
         pl.scan_pyarrow_dataset(dataset)
         .filter(
-            pl.col("phenotype_index1").eq(pl.col("phenotype_index2")),
+            pl.col("phenotype1").eq(pl.col("phenotype2")),
             pl.col(f"{type}_index").is_not_null(),
         )
-        .select(pl.col("phenotype_index1"))
-        .collect()
-        .to_numpy()
-        .ravel()
+        .select(pl.col("phenotype1"))
+        .collect()["phenotype1"]
+        .to_list()
     )
-    index = np.setdiff1d(np.arange(phenotype_count), existing)
-
-    return list(index)
+    return list(set(phenotypes) - existing_phenotypes)
 
 
-def get_indices2(
-    phenotype_count: int, dataset: ds.Dataset, type: Literal["piecewise", "jackknife"]
-) -> tuple[list[int], list[int]]:
-    existing = (
+def get_phenotypes2(
+    phenotypes: list[str], dataset: ds.Dataset, type: Literal["piecewise", "jackknife"]
+) -> tuple[list[str], list[str]]:
+    logger.debug(f"Getting phenotypes for {type} covariance estimates")
+    existing_frame = (
         pl.scan_pyarrow_dataset(dataset)
         .filter(
-            pl.col("phenotype_index1").ne(pl.col("phenotype_index2")),
+            pl.col("phenotype1").ne(pl.col("phenotype2")),
             pl.col(f"{type}_index").is_not_null(),
         )
-        .select(pl.col("phenotype_index1"), pl.col("phenotype_index2"))
+        .select(pl.col("phenotype1"), pl.col("phenotype2"))
         .collect()
     )
-    existing1 = existing["phenotype_index1"].to_numpy()
-    existing2 = existing["phenotype_index2"].to_numpy()
+    existing1 = existing_frame["phenotype1"].to_list()
+    existing2 = existing_frame["phenotype2"].to_list()
+    existing: set[tuple[str, str]] = set(zip(existing1, existing2, strict=True))
 
-    existing1d = np.ravel_multi_index(
-        (existing1, existing2), (phenotype_count, phenotype_count)
-    )
+    p = set(combinations(phenotypes, 2))
+    p -= existing
 
-    index1, index2 = np.triu_indices(phenotype_count, k=1)
-    index1d = np.ravel_multi_index((index1, index2), (phenotype_count, phenotype_count))
-    index1d = np.setdiff1d(index1d, existing1d)
-    index1, index2 = np.unravel_index(index1d, (phenotype_count, phenotype_count))
-
-    return list(index1), list(index2)
+    phenotype1, phenotype2 = map(list, zip(*p, strict=True))
+    return phenotype1, phenotype2
 
 
 @dataclass
@@ -234,18 +229,18 @@ def get2(
 
 
 def get_estimates(
-    dataset: ds.Dataset, index: list[int], type: Literal["piecewise", "jackknife"]
+    dataset: ds.Dataset, phenotypes: list[str], type: Literal["piecewise", "jackknife"]
 ) -> pl.DataFrame:
     other_type = dict(piecewise="jackknife", jackknife="piecewise")[type]
     return (
         pl.scan_pyarrow_dataset(dataset)
         .filter(
-            pl.col("phenotype_index1").eq(pl.col("phenotype_index2")),
-            pl.col("phenotype_index1").is_in(np.array(index)),
+            pl.col("phenotype1").eq(pl.col("phenotype2")),
+            pl.col("phenotype1").is_in(phenotypes),
             pl.col(f"{other_type}_index").is_null(),
         )
         .select(
-            pl.col("phenotype_index1").alias("phenotype_index"),
+            pl.col("phenotype1").alias("phenotype"),
             pl.col(f"{type}_index"),
             pl.col("slope"),
             pl.col("intercept"),
@@ -259,6 +254,7 @@ J = TypeVar("J", Job1, Job2)
 
 @dataclass
 class HDL:
+    phenotypes: list[str]
     data: Data
     path: UPath
 
@@ -279,12 +275,8 @@ class HDL:
     def write(
         self, parquet_writer: pq.ParquetWriter, results: Sequence[Result1 | Result2]
     ) -> None:
-        phenotype_index1 = np.fromiter(
-            (r.phenotype_index1 for r in results), dtype=np.uint32
-        )
-        phenotype_index2 = np.fromiter(
-            (r.phenotype_index2 for r in results), dtype=np.uint32
-        )
+        phenotype1 = (self.phenotypes[r.phenotype_index1] for r in results)
+        phenotype2 = (self.phenotypes[r.phenotype_index2] for r in results)
 
         piecewise_index, piecewise_mask, jackknife_index, jackknife_mask = map(
             np.array,
@@ -298,8 +290,8 @@ class HDL:
         intercept = np.fromiter((r.params[1].item() for r in results), dtype=np.float64)
         record_batch = pa.RecordBatch.from_arrays(
             arrays=[
-                pa.array(phenotype_index1),
-                pa.array(phenotype_index2),
+                pa.array(phenotype1),
+                pa.array(phenotype2),
                 pa.array(piecewise_index, mask=piecewise_mask),
                 pa.array(jackknife_index, mask=jackknife_mask),
                 pa.array(np.array(slope).ravel()),
@@ -334,34 +326,37 @@ class HDL:
         self.calc_jackknife2()
 
     def calc_piecewise1(self) -> None:
-        phenotype_count = self.data.phenotype_count
         piece_count = self.data.piece_count
 
         dataset = ds.dataset(self.path, schema=schema, format="parquet")
-        index = get_indices1(phenotype_count, dataset, "piecewise")
-        logger.debug(f"Calculating piecewise estimates for {len(index)} phenotypes")
+        phenotypes = get_phenotypes1(self.phenotypes, dataset, "piecewise")
+        if not phenotypes:
+            return
+        logger.debug(f"Calculating piecewise estimates for {len(phenotypes)} phenotypes")
+
         jobs = (
-            Job1(np.array([piece_index]), phenotype_index)
-            for piece_index, phenotype_index in product(range(piece_count), index)
+            Job1(np.array([piece_index]), self.phenotypes.index(phenotype))
+            for piece_index, phenotype in product(range(piece_count), phenotypes)
         )
 
         callable = partial(get1, self.data)
-        self.run(jobs=jobs, callable=callable, size=piece_count * len(index))
+        self.run(jobs=jobs, callable=callable, size=piece_count * len(phenotypes))
 
     def calc_jackknife1(self) -> None:
-        phenotype_count = self.data.phenotype_count
         piece_count = self.data.piece_count
 
         dataset = ds.dataset(self.path, schema=schema, format="parquet")
-        index = get_indices1(phenotype_count, dataset, "jackknife")
+        phenotypes = get_phenotypes1(self.phenotypes, dataset, "jackknife")
+        if not phenotypes:
+            return
 
-        piecewise1_frame = get_estimates(dataset, index, "piecewise")
+        piecewise1_frame = get_estimates(dataset, phenotypes, "piecewise")
         initial_slope = (
-            piecewise1_frame.group_by("phenotype_index")
+            piecewise1_frame.group_by("phenotype")
             .agg(pl.col("slope").sum())
             .to_pandas()
-            .set_index("phenotype_index")
-            .loc[np.array(index)]
+            .set_index("phenotype")
+            .loc[phenotypes]
             .to_numpy()
         )
         initial_params = np.column_stack([initial_slope, np.ones_like(initial_slope)])
@@ -369,72 +364,79 @@ class HDL:
         jobs = (
             Job1(
                 piece_indices=np.setdiff1d(np.arange(piece_count), piece_index),
-                phenotype_index=phenotype_index,
-                initial_params=initial_params[phenotype_index],
+                phenotype_index=self.phenotypes.index(phenotype),
+                initial_params=initial_params[k],
             )
-            for piece_index, phenotype_index in product(range(-1, piece_count), index)
+            for piece_index, (k, phenotype) in product(
+                range(-1, piece_count), enumerate(phenotypes)
+            )
         )
 
         callable = partial(get1, self.data)
-        self.run(jobs=jobs, callable=callable, size=(piece_count + 1) * len(index))
+        self.run(jobs=jobs, callable=callable, size=(piece_count + 1) * len(phenotypes))
 
     def calc_piecewise2(self) -> None:
-        phenotype_count = self.data.phenotype_count
         piece_count = self.data.piece_count
 
         dataset = ds.dataset(self.path, schema=schema, format="parquet")
-        index1, index2 = get_indices2(phenotype_count, dataset, "piecewise")
+        phenotypes1, phenotypes2 = get_phenotypes2(self.phenotypes, dataset, "piecewise")
+        if not phenotypes1 or not phenotypes2:
+            return
 
+        phenotypes = list(set(phenotypes1) | set(phenotypes2))
         piecewise1_frame = (
-            get_estimates(dataset, list(set(index1) | set(index2)), "piecewise")
+            get_estimates(dataset, phenotypes, "piecewise")
             .to_pandas()
-            .set_index(["phenotype_index", "piecewise_index"])
+            .set_index(["phenotype", "piecewise_index"])
         )
         jobs = (
             Job2(
                 np.array([piece_index]),
-                phenotype_index1,
-                phenotype_index2,
-                piecewise1_frame.loc[(phenotype_index1, piece_index)].to_numpy(),  # type: ignore[arg-type,union-attr]
-                piecewise1_frame.loc[(phenotype_index2, piece_index)].to_numpy(),  # type: ignore[arg-type,union-attr]
+                self.phenotypes.index(phenotype1),
+                self.phenotypes.index(phenotype2),
+                piecewise1_frame.loc[(phenotype1, piece_index)].to_numpy(),  # type: ignore[arg-type,union-attr]
+                piecewise1_frame.loc[(phenotype2, piece_index)].to_numpy(),  # type: ignore[arg-type,union-attr]
             )
-            for piece_index, (phenotype_index1, phenotype_index2) in product(
-                range(piece_count), zip(index1, index2, strict=True)
+            for piece_index, (phenotype1, phenotype2) in product(
+                range(piece_count), zip(phenotypes1, phenotypes2, strict=True)
             )
         )
 
         callable = partial(get2, self.data)
-        self.run(jobs=jobs, callable=callable, size=piece_count * len(index1))
+        self.run(jobs=jobs, callable=callable, size=piece_count * len(phenotypes1))
 
     def calc_jackknife2(self) -> None:
-        phenotype_count = self.data.phenotype_count
         piece_count = self.data.piece_count
 
         dataset = ds.dataset(self.path, schema=schema, format="parquet")
-        index1, index2 = get_indices2(phenotype_count, dataset, "jackknife")
+        phenotypes1, phenotypes2 = get_phenotypes2(self.phenotypes, dataset, "jackknife")
+        if not phenotypes1 or not phenotypes2:
+            return
+
+        phenotypes = list(set(phenotypes1) | set(phenotypes2))
         jackknife1_frame = (
-            get_estimates(dataset, list(set(index1) | set(index2)), "jackknife")
+            get_estimates(dataset, phenotypes, "jackknife")
             .fill_null(-1)
             .to_pandas()
-            .set_index(["phenotype_index", "jackknife_index"])
+            .set_index(["phenotype", "jackknife_index"])
         )
 
-        index_expr = pl.col("phenotype_index1") * phenotype_count + pl.col(
-            "phenotype_index2"
+        combined_expr = pl.concat_str(
+            pl.col("phenotype1"), pl.col("phenotype2"), separator=":"
         )
-        index = np.array(index1) * phenotype_count + np.array(index2)
+        combined = list(map(":".join, zip(phenotypes1, phenotypes2, strict=True)))
         piecewise2_frame = (
             pl.scan_pyarrow_dataset(dataset)
-            .filter(index_expr.is_in(index), pl.col("jackknife_index").is_null())
-            .select(index_expr.alias("index"), pl.col("slope"))
+            .filter(combined_expr.is_in(combined), pl.col("jackknife_index").is_null())
+            .select(combined_expr.alias("combined"), pl.col("slope"))
             .collect()
         )
         initial_slope = (
-            piecewise2_frame.group_by("index")
+            piecewise2_frame.group_by("combined")
             .agg(pl.col("slope").sum())
             .to_pandas()
-            .set_index("index")
-            .loc[index]
+            .set_index("combined")
+            .loc[combined]
             .to_numpy()
         )
         initial_params = np.column_stack([initial_slope, np.ones_like(initial_slope)])
@@ -442,16 +444,17 @@ class HDL:
         jobs = (
             Job2(
                 np.setdiff1d(np.arange(piece_count), piece_index),
-                phenotype_index1,
-                phenotype_index2,
-                jackknife1_frame.loc[(phenotype_index1, piece_index)].to_numpy(),  # type: ignore[arg-type,union-attr]
-                jackknife1_frame.loc[(phenotype_index2, piece_index)].to_numpy(),  # type: ignore[arg-type,union-attr]
+                self.phenotypes.index(phenotype1),
+                self.phenotypes.index(phenotype2),
+                jackknife1_frame.loc[(phenotype1, piece_index)].to_numpy(),  # type: ignore[arg-type,union-attr]
+                jackknife1_frame.loc[(phenotype2, piece_index)].to_numpy(),  # type: ignore[arg-type,union-attr]
                 initial_params=initial_params[k],
             )
-            for piece_index, (k, (phenotype_index1, phenotype_index2)) in product(
-                range(-1, piece_count), enumerate(zip(index1, index2, strict=True))
+            for piece_index, (k, (phenotype1, phenotype2)) in product(
+                range(-1, piece_count),
+                enumerate(zip(phenotypes1, phenotypes2, strict=True)),
             )
         )
 
         callable = partial(get2, self.data)
-        self.run(jobs=jobs, callable=callable, size=(piece_count + 1) * len(index1))
+        self.run(jobs=jobs, callable=callable, size=(piece_count + 1) * len(phenotypes1))
