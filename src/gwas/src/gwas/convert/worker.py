@@ -4,10 +4,7 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
-from ..compression.arr.base import (
-    FileArrayReader,
-    FileArrayWriter,
-)
+from ..compression.arr.base import FileArrayReader, FileArrayWriter
 from ..log import logger
 from ..mem.arr import SharedArray
 from ..vcf.base import VCFFile, base_allele_frequency_columns
@@ -26,7 +23,7 @@ def update_row_metadata_dtypes(
             if any(column.endswith(s) for s in base_allele_frequency_columns):
                 float_columns.add(column)
         for column in float_columns:
-            row_metadata[column] = row_metadata[column].astype(np.float64)
+            row_metadata[column] = pd.to_numeric(row_metadata[column], errors="coerce")
         data_frame = row_metadata
     elif name.endswith("covariance"):
         if isinstance(row_metadata, pd.DataFrame):
