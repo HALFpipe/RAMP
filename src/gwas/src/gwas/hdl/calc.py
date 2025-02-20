@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from functools import partial
 from itertools import batched, combinations, product
 from typing import Callable, Iterator, Literal, Sequence, TypeVar
+from uuid import uuid4
 
 import jax
 import jax.experimental
@@ -17,6 +18,7 @@ from tqdm.auto import tqdm
 from upath import UPath
 
 from ..log import logger
+from ..utils.hash import hex_digest
 from ..utils.multiprocessing import make_pool_or_null_context
 from .base import Reference, Sample1, Sample2
 from .load import Data
@@ -260,17 +262,21 @@ class HDL:
 
     num_threads: int = 1
 
+    def get_dataset(self):
+        paths = list(
+            filter(
+                lambda path: path.stat().st_size > 8,
+                self.path.glob("chunk-*.parquet"),
+            )
+        )
+        dataset = ds.dataset(paths, schema=schema, format="parquet")
+        return dataset
+
     def get_chunk_path(self) -> UPath:
         prefix = "chunk-"
         suffix = ".parquet"
-        k = max(
-            (
-                int(path.stem.removeprefix(prefix))
-                for path in self.path.glob(f"{prefix}*{suffix}")
-            ),
-            default=-1,
-        )
-        return self.path / f"{prefix}{k + 1:03d}{suffix}"
+        digest = hex_digest([self.phenotypes, uuid4().hex])
+        return self.path / f"{prefix}{digest}{suffix}"
 
     def write(
         self, parquet_writer: pq.ParquetWriter, results: Sequence[Result1 | Result2]
@@ -310,7 +316,7 @@ class HDL:
             callable,
             num_threads=self.num_threads,
             size=size,
-            chunksize=None,
+            chunksize=1 << 10,
             is_jax=True,
         )
         with pq.ParquetWriter(self.get_chunk_path(), schema) as parquet_writer, pool:
@@ -328,7 +334,7 @@ class HDL:
     def calc_piecewise1(self) -> None:
         piece_count = self.data.piece_count
 
-        dataset = ds.dataset(self.path, schema=schema, format="parquet")
+        dataset = self.get_dataset()
         phenotypes = get_phenotypes1(self.phenotypes, dataset, "piecewise")
         if not phenotypes:
             return
@@ -345,7 +351,7 @@ class HDL:
     def calc_jackknife1(self) -> None:
         piece_count = self.data.piece_count
 
-        dataset = ds.dataset(self.path, schema=schema, format="parquet")
+        dataset = self.get_dataset()
         phenotypes = get_phenotypes1(self.phenotypes, dataset, "jackknife")
         if not phenotypes:
             return
@@ -378,7 +384,7 @@ class HDL:
     def calc_piecewise2(self) -> None:
         piece_count = self.data.piece_count
 
-        dataset = ds.dataset(self.path, schema=schema, format="parquet")
+        dataset = self.get_dataset()
         phenotypes1, phenotypes2 = get_phenotypes2(self.phenotypes, dataset, "piecewise")
         if not phenotypes1 or not phenotypes2:
             return
@@ -408,7 +414,7 @@ class HDL:
     def calc_jackknife2(self) -> None:
         piece_count = self.data.piece_count
 
-        dataset = ds.dataset(self.path, schema=schema, format="parquet")
+        dataset = self.get_dataset()
         phenotypes1, phenotypes2 = get_phenotypes2(self.phenotypes, dataset, "jackknife")
         if not phenotypes1 or not phenotypes2:
             return
