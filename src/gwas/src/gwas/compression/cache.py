@@ -42,10 +42,11 @@ def save_to_cache(
     key: str,
     value: Any,
     num_threads: int,
+    compression_level: int | None = None,
 ) -> None:
     cache_path.mkdir(parents=True, exist_ok=True)
     with CompressedBytesWriter(
-        cache_path / f"{key}{cache_suffix}", num_threads
+        cache_path / f"{key}{cache_suffix}", num_threads, compression_level
     ) as file_handle:
         SharedArrayPickler(file_handle, protocol=pickle.HIGHEST_PROTOCOL).dump(value)
 
