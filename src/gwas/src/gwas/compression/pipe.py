@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from subprocess import PIPE, Popen
+from subprocess import DEVNULL, PIPE, Popen
 from types import TracebackType
 from typing import IO, Literal, Mapping, Type, TypeVar
 
@@ -13,7 +13,6 @@ from ..utils.shutil import unwrap_which
 decompress_commands: Mapping[str, list[str]] = {
     ".zst": [
         "zstd",
-        "--long=31",
         "--decompress",
         "--stdout",
         "--no-progress",
@@ -53,14 +52,13 @@ class CompressedReader(AbstractContextManager[IO[T]]):
 
         executable = unwrap_which(decompress_command[0])
         decompress_command[0] = executable
-
-        self.input_file_handle = self.file_path.open(mode="rb")
+        decompress_command.append(str(self.file_path))
 
         bufsize = 1 if self.is_text else -1
         self.process_handle = Popen(
             decompress_command,
             stderr=PIPE,
-            stdin=self.input_file_handle,
+            stdin=DEVNULL,
             stdout=PIPE,
             text=self.is_text,
             bufsize=bufsize,
