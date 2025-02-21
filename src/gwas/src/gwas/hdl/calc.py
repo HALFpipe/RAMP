@@ -395,7 +395,7 @@ class HDL:
         with pool:
             for results in batched(
                 chain.from_iterable(tqdm(iterator, unit="jobs", total=size)),
-                n=10_000_000,
+                n=100_000_000,
             ):
                 with pq.ParquetWriter(
                     self.get_chunk_path(),
