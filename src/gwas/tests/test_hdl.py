@@ -113,10 +113,10 @@ def test_hdl(
         .filter(*filters)
         .select(
             pl.col("phenotype1").map_elements(
-                lambda phenotype: phenotypes.index(phenotype)
+                lambda phenotype: phenotypes.index(phenotype), return_dtype=pl.UInt32
             ),
             pl.col("phenotype2").map_elements(
-                lambda phenotype: phenotypes.index(phenotype)
+                lambda phenotype: phenotypes.index(phenotype), return_dtype=pl.UInt32
             ),
             pl.col("slope"),
             pl.col("intercept"),
