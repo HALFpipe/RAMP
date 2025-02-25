@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from functools import partial
-from itertools import batched, chain, combinations, product
+from itertools import batched, combinations, product
 from typing import Callable, Iterator, Literal, NamedTuple, Sequence, TypeVar
 from uuid import uuid4
 
@@ -9,7 +9,6 @@ import jax.experimental
 import numpy as np
 import polars as pl
 import pyarrow as pa
-import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 from jax import numpy as jnp
 from jaxtyping import Array, Float64, Integer
@@ -39,85 +38,86 @@ schema = pa.schema(fields)
 
 def get_phenotypes1(
     phenotypes: list[str],
-    dataset: ds.Dataset,
-    piece_count: int,
+    paths: list[UPath],
+    piece_index: int | None,
     type: Literal["piecewise", "jackknife"],
-) -> list[str]:
-    logger.debug(f"Getting phenotypes for {type} variance estimates")
-
-    match type:
-        case "piecewise":
-            count = piece_count
-        case "jackknife":
-            count = piece_count + 1
-        case _:
-            raise ValueError(f"Invalid type: {type}")
-
-    existing_phenotypes = set(
-        pl.scan_pyarrow_dataset(dataset)
-        .filter(
-            pl.col("phenotype1").eq(pl.col("phenotype2")),
-            pl.col(f"{type}_index").is_not_null(),
-        )
-        .select(pl.col("phenotype1"))
-        .group_by(pl.col("phenotype1"))
-        .len(name="count")
-        .filter(pl.col("count").eq(count))
-        .collect()["phenotype1"]
-        .to_list()
+) -> set[str]:
+    logger.debug(
+        f"Getting phenotypes for {type} variance estimates at piece index {piece_index}"
     )
-    return list(set(phenotypes) - existing_phenotypes)
+
+    if piece_index is not None:
+        piece_filter = pl.col(f"{type}_index").eq(piece_index)
+    else:
+        piece_filter = pl.col(f"{type}_index").is_null()
+
+    existing_phenotypes: set[str] = set()
+    for path in paths:
+        if not path.stem.endswith("1"):
+            continue
+        existing_phenotypes.update(
+            pl.scan_parquet(path)
+            .filter(
+                pl.col("phenotype1").eq(pl.col("phenotype2")),
+                piece_filter,
+            )
+            .select(pl.col("phenotype1"))
+            .collect()["phenotype1"]
+            .to_list()
+        )
+    return set(phenotypes) - existing_phenotypes
 
 
 def get_phenotypes2(
     phenotypes: list[str],
-    dataset: ds.Dataset,
-    piece_count: int,
+    paths: list[UPath],
+    piece_index: int | None,
     type: Literal["piecewise", "jackknife"],
-) -> tuple[list[str], list[str]]:
-    logger.debug(f"Getting phenotypes for {type} covariance estimates")
-
-    match type:
-        case "piecewise":
-            count = piece_count
-        case "jackknife":
-            count = piece_count + 1
-        case _:
-            raise ValueError(f"Invalid type: {type}")
-
-    existing_frame = (
-        pl.scan_pyarrow_dataset(dataset)
-        .filter(
-            pl.col("phenotype1").ne(pl.col("phenotype2")),
-            pl.col(f"{type}_index").is_not_null(),
-        )
-        .select(pl.col("phenotype1"), pl.col("phenotype2"))
-        .group_by(pl.col("phenotype1"), pl.col("phenotype2"))
-        .len(name="count")
-        .filter(pl.col("count").eq(count))
-        .collect()
+) -> set[tuple[str, str]]:
+    logger.debug(
+        f"Getting phenotypes for {type} covariance estimates "
+        f"at piece index {piece_index}"
     )
-    existing1 = existing_frame["phenotype1"].to_list()
-    existing2 = existing_frame["phenotype2"].to_list()
-    existing: set[tuple[str, str]] = set(zip(existing1, existing2, strict=True))
 
-    p = set(combinations(phenotypes, 2))
-    p -= existing
+    if piece_index is not None:
+        piece_filter = pl.col(f"{type}_index").eq(piece_index)
+    else:
+        piece_filter = pl.col(f"{type}_index").is_null()
 
-    phenotype1, phenotype2 = map(list, zip(*p, strict=True))
-    return phenotype1, phenotype2
+    existing: set[tuple[str, str]] = set()
+    for path in paths:
+        if not path.stem.endswith("2"):
+            continue
+        existing_frame = (
+            pl.scan_parquet(path)
+            .filter(
+                pl.col("phenotype1").ne(pl.col("phenotype2")),
+                pl.col("phenotype1").is_in(phenotypes),
+                pl.col("phenotype2").is_in(phenotypes),
+                piece_filter,
+            )
+            .select(pl.col("phenotype1"), pl.col("phenotype2"))
+            .collect()
+        )
+        existing1 = existing_frame["phenotype1"].to_list()
+        existing2 = existing_frame["phenotype2"].to_list()
+        existing.update(zip(existing1, existing2, strict=True))
+
+    return set(combinations(phenotypes, 2)) - existing
 
 
 @dataclass(frozen=True, slots=True)
 class Job1:
-    piece_indices: npt.NDArray[np.uint8]
+    type: Literal["piecewise", "jackknife"]
+    piece_index: int
     phenotype_index: int
-    initial_params: npt.NDArray[np.float64] | None = None
+    initial_params_index: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class Job2:
     type: Literal["piecewise", "jackknife"]
+    piece_index: int
     phenotype_index1: int
     phenotype_index2: int
     initial_params_index: int | None = None
@@ -183,31 +183,41 @@ class Result(NamedTuple):
 
 def get1(
     data: Data,
+    initial_params_array: SharedArray[np.float64] | None,
     job: Job1,
     n_ref: Integer[Array, ""] | None = None,
     limit: Float64[Array, ""] | None = None,
-) -> list[Result]:
+) -> Result:
+    match job.type:
+        case "piecewise":
+            piecewise_index: np.uint8 = np.uint8(job.piece_index)
+            piecewise_mask: np.bool_ = np.bool_(False)
+            jackknife_index: np.uint8 = np.uint8(0)
+            jackknife_mask: np.bool_ = np.bool_(True)
+            piece_indices = np.array([job.piece_index])
+        case "jackknife":
+            piecewise_index = np.uint8(0)
+            piecewise_mask = np.bool_(True)
+            jackknife_index = np.uint8(max(job.piece_index, 0))
+            jackknife_mask = np.bool_(job.piece_index < 0)
+            piece_indices = np.setdiff1d(np.arange(data.piece_count), [job.piece_index])
+        case _:
+            raise ValueError(f"Invalid type: {job.type}")
+
+    initial_params: Float64[Array, " 2"] | None = None
+    if job.initial_params_index is not None and initial_params_array is not None:
+        initial_params = jnp.array(initial_params_array[job.initial_params_index])
+
     key = jax.random.key(0)
-    snp_indices, eig_indices = get_indices(data, job.piece_indices)
-    r = get_reference(data, job.piece_indices, snp_indices, eig_indices)
+    snp_indices, eig_indices = get_indices(data, piece_indices)
+    r = get_reference(data, piece_indices, snp_indices, eig_indices)
     s = get_sample1(data, job.phenotype_index, snp_indices, eig_indices)
     _, params = estimate1(
-        s, r, key, initial_params=job.initial_params, n_ref=n_ref, limit=limit
+        s, r, key, initial_params=initial_params, n_ref=n_ref, limit=limit
     )
     slope, intercept = params
 
-    piecewise_mask = np.bool_(job.piece_indices.size > 1)
-    piecewise_index = (
-        np.uint8(job.piece_indices.item()) if not piecewise_mask else np.uint8(0)
-    )
-    jackknife_mask = np.bool_(job.piece_indices.size != data.piece_count - 1)
-    jackknife_index = (
-        np.uint8(np.setdiff1d(np.arange(data.piece_count), job.piece_indices).item())
-        if not jackknife_mask
-        else np.uint8(0)
-    )
-
-    result = Result(
+    return Result(
         np.uint32(job.phenotype_index),
         np.uint32(job.phenotype_index),
         piecewise_index,
@@ -217,7 +227,6 @@ def get1(
         np.float64(slope.item()),
         np.float64(intercept.item()),
     )
-    return [result]
 
 
 def get2(
@@ -227,91 +236,83 @@ def get2(
     job: Job2,
     n_ref: Integer[Array, ""] | None = None,
     limit: Float64[Array, ""] | None = None,
-) -> list[Result]:
-    results: list[Result] = list()
-
+) -> Result:
     match job.type:
         case "piecewise":
-            piece_indices = np.arange(data.piece_count)
+            k = job.piece_index
+            piecewise_index: np.uint8 = np.uint8(job.piece_index)
+            piecewise_mask: np.bool_ = np.bool_(False)
+            jackknife_index: np.uint8 = np.uint8(0)
+            jackknife_mask: np.bool_ = np.bool_(True)
+            piece_indices = np.array([job.piece_index])
         case "jackknife":
-            piece_indices = np.arange(-1, data.piece_count)
+            k = job.piece_index + 1
+            piecewise_index = np.uint8(0)
+            piecewise_mask = np.bool_(True)
+            jackknife_index = np.uint8(max(job.piece_index, 0))
+            jackknife_mask = np.bool_(job.piece_index < 0)
+            piece_indices = np.setdiff1d(np.arange(data.piece_count), [job.piece_index])
         case _:
             raise ValueError(f"Invalid type: {job.type}")
 
-    for k, piece_index in enumerate(piece_indices):
-        match job.type:
-            case "piecewise":
-                piecewise_index: np.uint8 = np.uint8(piece_index)
-                piecewise_mask: np.bool_ = np.bool_(False)
-                jackknife_index: np.uint8 = np.uint8(0)
-                jackknife_mask: np.bool_ = np.bool_(True)
-                _piece_indices = piece_index[np.newaxis]
-            case "jackknife":
-                piecewise_index = np.uint8(0)
-                piecewise_mask = np.bool_(True)
-                jackknife_index = np.uint8(max(k, 0))
-                jackknife_mask = np.bool_(k < 0)
-                _piece_indices = np.setdiff1d(np.arange(data.piece_count), piece_index)
-            case _:
-                raise ValueError(f"Invalid type: {job.type}")
+    initial_params: Float64[Array, " 2"] | None = None
+    if job.initial_params_index is not None and initial_params_array is not None:
+        initial_params = jnp.array(initial_params_array[job.initial_params_index])
 
-        initial_params: Float64[Array, " 2"] | None = None
-        if job.initial_params_index is not None and initial_params_array is not None:
-            initial_params = jnp.array(initial_params_array[job.initial_params_index])
+    params1 = params_array[job.phenotype_index1, k]
+    params2 = params_array[job.phenotype_index2, k]
 
-        params1 = params_array[job.phenotype_index1, k]
-        params2 = params_array[job.phenotype_index2, k]
+    key = jax.random.key(0)
+    snp_indices, eig_indices = get_indices(data, piece_indices)
+    r = get_reference(data, piece_indices, snp_indices, eig_indices)
+    correlation = data.correlation_array[job.phenotype_index1, job.phenotype_index2]
+    s = Sample2(
+        sample1=get_sample1(data, job.phenotype_index1, snp_indices, eig_indices),
+        sample2=get_sample1(data, job.phenotype_index2, snp_indices, eig_indices),
+        params1=jnp.array(params1),
+        params2=jnp.array(params2),
+        correlation=jnp.array(correlation),
+    )
+    _, params = estimate2(
+        s, r, key, initial_params=initial_params, n_ref=n_ref, limit=limit
+    )
+    slope, intercept = params
 
-        key = jax.random.key(0)
-        snp_indices, eig_indices = get_indices(data, _piece_indices)
-        r = get_reference(data, _piece_indices, snp_indices, eig_indices)
-        correlation = data.correlation_array[job.phenotype_index1, job.phenotype_index2]
-        s = Sample2(
-            sample1=get_sample1(data, job.phenotype_index1, snp_indices, eig_indices),
-            sample2=get_sample1(data, job.phenotype_index2, snp_indices, eig_indices),
-            params1=jnp.array(params1),
-            params2=jnp.array(params2),
-            correlation=jnp.array(correlation),
-        )
-        _, params = estimate2(
-            s, r, key, initial_params=initial_params, n_ref=n_ref, limit=limit
-        )
-        slope, intercept = params
-
-        results.append(
-            Result(
-                np.uint32(job.phenotype_index1),
-                np.uint32(job.phenotype_index2),
-                piecewise_index,
-                piecewise_mask,
-                jackknife_index,
-                jackknife_mask,
-                np.float64(slope.item()),
-                np.float64(intercept.item()),
-            )
-        )
-    return results
+    return Result(
+        np.uint32(job.phenotype_index1),
+        np.uint32(job.phenotype_index2),
+        piecewise_index,
+        piecewise_mask,
+        jackknife_index,
+        jackknife_mask,
+        np.float64(slope.item()),
+        np.float64(intercept.item()),
+    )
 
 
 def get_estimates(
-    dataset: ds.Dataset, phenotypes: list[str], type: Literal["piecewise", "jackknife"]
+    paths: list[UPath], phenotypes: list[str], type: Literal["piecewise", "jackknife"]
 ) -> pl.DataFrame:
     other_type = dict(piecewise="jackknife", jackknife="piecewise")[type]
-    return (
-        pl.scan_pyarrow_dataset(dataset)
-        .filter(
-            pl.col("phenotype1").eq(pl.col("phenotype2")),
-            pl.col("phenotype1").is_in(phenotypes),
-            pl.col(f"{other_type}_index").is_null(),
-        )
-        .select(
-            pl.col("phenotype1").alias("phenotype"),
-            pl.col(f"{type}_index"),
-            pl.col("slope"),
-            pl.col("intercept"),
-        )
-        .collect()
-    )
+    data_frame = pl.concat(
+        [
+            pl.scan_parquet(path)
+            .filter(
+                pl.col("phenotype1").eq(pl.col("phenotype2")),
+                pl.col("phenotype1").is_in(phenotypes),
+                pl.col(f"{other_type}_index").is_null(),
+            )
+            .select(
+                pl.col("phenotype1").alias("phenotype"),
+                pl.col(f"{type}_index"),
+                pl.col("slope"),
+                pl.col("intercept"),
+            )
+            for path in paths
+            if path.stem.endswith("1")
+        ]
+    ).collect()
+    return data_frame
 
 
 J = TypeVar("J", Job1, Job2)
@@ -325,21 +326,19 @@ class HDL:
 
     num_threads: int = 1
 
-    def get_dataset(self):
-        paths = list(
+    def get_paths(self) -> list[UPath]:
+        return list(
             filter(
                 lambda path: path.stat().st_size > 8,
                 self.path.glob("chunk-*.parquet"),
             )
         )
-        dataset = ds.dataset(paths, schema=schema, format="parquet")
-        return dataset
 
-    def get_chunk_path(self) -> UPath:
+    def get_chunk_path(self, k: int) -> UPath:
         prefix = "chunk-"
         suffix = ".parquet"
         digest = hex_digest([self.phenotypes, uuid4().hex])
-        return self.path / f"{prefix}{digest}{suffix}"
+        return self.path / f"{prefix}{digest}-{k}{suffix}"
 
     def write(
         self,
@@ -379,8 +378,9 @@ class HDL:
     def run(
         self,
         jobs: Iterator[J],
+        k: int,
         size: int,
-        callable: Callable[[J], Sequence[Result]],
+        callable: Callable[[J], Result],
     ) -> None:
         logger.debug(f"Running {size} jobs")
         chunksize = 1 << 7
@@ -394,11 +394,11 @@ class HDL:
         )
         with pool:
             for results in batched(
-                chain.from_iterable(tqdm(iterator, unit="jobs", total=size)),
-                n=100_000_000,
+                tqdm(iterator, unit="jobs", total=size),
+                n=10_000_000,
             ):
                 with pq.ParquetWriter(
-                    self.get_chunk_path(),
+                    self.get_chunk_path(k),
                     schema,
                     compression="zstd",
                     compression_level=9,
@@ -417,58 +417,71 @@ class HDL:
     def calc_piecewise1(self) -> None:
         piece_count = self.data.piece_count
 
-        dataset = self.get_dataset()
-        phenotypes = get_phenotypes1(self.phenotypes, dataset, piece_count, "piecewise")
-        if not phenotypes:
-            return
-        logger.debug(f"Calculating piecewise estimates for {len(phenotypes)} phenotypes")
+        def generate_jobs() -> Iterator[Job1]:
+            for piece_index in range(piece_count):
+                phenotypes = get_phenotypes1(
+                    self.phenotypes, self.get_paths(), piece_index, "piecewise"
+                )
+                for phenotype in phenotypes:
+                    yield Job1(
+                        "piecewise", piece_index, self.phenotypes.index(phenotype)
+                    )
 
-        piece_indices = np.arange(piece_count)
-        jobs = (
-            Job1(piece_index[np.newaxis], self.phenotypes.index(phenotype))
-            for piece_index, phenotype in product(piece_indices, phenotypes)
+        logger.debug(
+            f"Calculating piecewise estimates for {len(self.phenotypes)} phenotypes"
         )
 
-        callable = partial(get1, self.data)
-        self.run(jobs=jobs, callable=callable, size=piece_count * len(phenotypes))
+        callable = partial(get1, self.data, None)
+        jobs = generate_jobs()
+        self.run(
+            k=1, jobs=jobs, callable=callable, size=piece_count * len(self.phenotypes)
+        )
 
     def calc_jackknife1(self) -> None:
+        sw = self.data.marginal_effect_array.sw
         piece_count = self.data.piece_count
 
-        dataset = self.get_dataset()
-        phenotypes = get_phenotypes1(self.phenotypes, dataset, piece_count, "jackknife")
-        if not phenotypes:
-            return
-
-        piecewise1_frame = get_estimates(dataset, phenotypes, "piecewise")
+        paths = self.get_paths()
+        piecewise1_frame = get_estimates(paths, self.phenotypes, "piecewise")
         initial_slope = (
             piecewise1_frame.group_by("phenotype")
             .agg(pl.col("slope").sum())
             .to_pandas()
             .set_index("phenotype")
-            .loc[phenotypes]
+            .loc[self.phenotypes]
             .to_numpy()
         )
         initial_params = np.column_stack([initial_slope, np.ones_like(initial_slope)])
+        initial_params_array = SharedArray.from_numpy(initial_params, sw)
 
-        piece_indices = np.arange(-1, piece_count)
-        jobs = (
-            Job1(
-                piece_indices=np.setdiff1d(np.arange(piece_count), piece_index),
-                phenotype_index=self.phenotypes.index(phenotype),
-                initial_params=initial_params[k],
-            )
-            for piece_index, (k, phenotype) in product(
-                piece_indices, enumerate(phenotypes)
-            )
+        def generate_jobs() -> Iterator[Job1]:
+            for piece_index in range(-1, piece_count):
+                phenotypes = get_phenotypes1(
+                    self.phenotypes, paths, piece_index, "jackknife"
+                )
+                for phenotype in phenotypes:
+                    phenotype_index = self.phenotypes.index(phenotype)
+                    yield Job1(
+                        "jackknife",
+                        piece_index,
+                        phenotype_index,
+                        phenotype_index,
+                    )
+
+        callable = partial(get1, self.data, initial_params_array)
+        jobs = generate_jobs()
+        self.run(
+            k=1,
+            jobs=jobs,
+            callable=callable,
+            size=(piece_count + 1) * len(self.phenotypes),
         )
 
-        callable = partial(get1, self.data)
-        self.run(jobs=jobs, callable=callable, size=(piece_count + 1) * len(phenotypes))
+        initial_params_array.free()
 
     def get_params_array(
         self,
-        dataset: ds.Dataset,
+        paths: list[UPath],
         phenotypes: list[str],
         type: Literal["piecewise", "jackknife"],
     ) -> tuple[dict[str, int], SharedArray[np.float64]]:
@@ -478,7 +491,7 @@ class HDL:
             map(reversed, enumerate(self.phenotypes))  # type: ignore[arg-type]
         )
 
-        params_frame = get_estimates(dataset, phenotypes, type).fill_null(-1).to_pandas()
+        params_frame = get_estimates(paths, phenotypes, type).fill_null(-1).to_pandas()
         params_frame["phenotype_index"] = params_frame["phenotype"].map(
             indices_by_phenotype
         )
@@ -501,30 +514,31 @@ class HDL:
 
     def calc_piecewise2(self) -> None:
         piece_count = self.data.piece_count
+        phenotype_count = len(self.phenotypes)
+        pairs_count = phenotype_count * (phenotype_count - 1) // 2
 
-        dataset = self.get_dataset()
-        phenotypes1, phenotypes2 = get_phenotypes2(
-            self.phenotypes, dataset, piece_count, "piecewise"
-        )
-        if not phenotypes1 or not phenotypes2:
-            return
+        paths = self.get_paths()
 
-        phenotypes = list(set(phenotypes1) | set(phenotypes2))
         indices_by_phenotype, params_array = self.get_params_array(
-            dataset, phenotypes, "piecewise"
+            paths, self.phenotypes, "piecewise"
         )
 
-        jobs = (
-            Job2(
-                "piecewise",
-                indices_by_phenotype[phenotype1],
-                indices_by_phenotype[phenotype2],
-            )
-            for phenotype1, phenotype2 in zip(phenotypes1, phenotypes2, strict=True)
-        )
+        def generate_jobs() -> Iterator[Job2]:
+            for piece_index in range(piece_count):
+                phenotypes = get_phenotypes2(
+                    self.phenotypes, paths, piece_index, "piecewise"
+                )
+                for phenotype1, phenotype2 in phenotypes:
+                    yield Job2(
+                        "piecewise",
+                        piece_index,
+                        indices_by_phenotype[phenotype1],
+                        indices_by_phenotype[phenotype2],
+                    )
 
         callable = partial(get2, self.data, params_array, None)
-        self.run(jobs=jobs, callable=callable, size=len(phenotypes1))
+        jobs = generate_jobs()
+        self.run(k=2, jobs=jobs, callable=callable, size=piece_count * pairs_count)
 
         params_array.free()
 
@@ -532,28 +546,33 @@ class HDL:
         sw = self.data.marginal_effect_array.sw
         piece_count = self.data.piece_count
 
-        dataset = self.get_dataset()
+        paths = self.get_paths()
         phenotypes1, phenotypes2 = get_phenotypes2(
-            self.phenotypes, dataset, piece_count, "jackknife"
+            self.phenotypes, paths, piece_count, "jackknife"
         )
         if not phenotypes1 or not phenotypes2:
             return
 
         phenotypes = list(set(phenotypes1) | set(phenotypes2))
         indices_by_phenotype, params_array = self.get_params_array(
-            dataset, phenotypes, "jackknife"
+            paths, phenotypes, "jackknife"
         )
 
         combined_expr = pl.concat_str(
             pl.col("phenotype1"), pl.col("phenotype2"), separator=":"
         )
         combined = list(map(":".join, zip(phenotypes1, phenotypes2, strict=True)))
-        piecewise2_frame = (
-            pl.scan_pyarrow_dataset(dataset)
-            .filter(combined_expr.is_in(combined), pl.col("jackknife_index").is_null())
-            .select(combined_expr.alias("combined"), pl.col("slope"))
-            .collect()
-        )
+        piecewise2_frame = pl.concat(
+            [
+                pl.scan_parquet(path)
+                .filter(
+                    combined_expr.is_in(combined), pl.col("jackknife_index").is_null()
+                )
+                .select(combined_expr.alias("combined"), pl.col("slope"))
+                for path in paths
+                if path.stem.endswith("2")
+            ]
+        ).collect()
         initial_slope = (
             piecewise2_frame.group_by("combined")
             .agg(pl.col("slope").sum())
@@ -568,17 +587,24 @@ class HDL:
         jobs = (
             Job2(
                 "jackknife",
+                piece_index,
                 indices_by_phenotype[phenotype1],
                 indices_by_phenotype[phenotype2],
-                initial_params_index=k,
+                initial_params_index,
             )
-            for k, (phenotype1, phenotype2) in enumerate(
-                zip(phenotypes1, phenotypes2, strict=True)
+            for piece_index, (
+                initial_params_index,
+                (phenotype1, phenotype2),
+            ) in product(
+                range(-1, piece_count),
+                enumerate(zip(phenotypes1, phenotypes2, strict=True)),
             )
         )
 
         callable = partial(get2, self.data, params_array, initial_params_array)
-        self.run(jobs=jobs, callable=callable, size=len(phenotypes1))
+        self.run(
+            k=2, jobs=jobs, callable=callable, size=(piece_count + 1) * len(phenotypes1)
+        )
 
         params_array.free()
         initial_params_array.free()
