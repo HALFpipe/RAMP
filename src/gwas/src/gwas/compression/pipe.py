@@ -48,7 +48,7 @@ class CompressedReader(AbstractContextManager[IO[T]]):
         suffix = self.file_path.suffix
         if suffix not in decompress_commands:
             raise ValueError(f'Compression for file suffix "{suffix}" is not supported')
-        decompress_command: list[str] = decompress_commands[suffix]
+        decompress_command: list[str] = decompress_commands[suffix].copy()
 
         executable = unwrap_which(decompress_command[0])
         decompress_command[0] = executable
