@@ -224,7 +224,7 @@ def apply_classes_to_phenotypes(
             continue
         else:
             logger.info(
-                f"Will output group {class_info} with " f"{len(class_samples)} samples"
+                f"Will output group {class_info} with {len(class_samples)} samples"
             )
 
         # Remove samples not in the class.
