@@ -87,5 +87,7 @@ def hdl(sw: SharedWorkspace, arguments: Namespace) -> None:
     logger.debug(f"Loaded {len(sumstats_paths)} sumstats files")
     hdl = HDL(phenotypes, data, arguments.output_path, arguments.num_threads)
 
-    hdl.calc_piecewise()
-    hdl.calc_jackknife()
+    if "piecewise" in arguments.steps:
+        hdl.calc_piecewise()
+    if "jackknife" in arguments.steps:
+        hdl.calc_jackknife()

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from functools import partial
-from itertools import batched, combinations, product
+from itertools import batched, combinations
 from typing import Callable, Iterator, Literal, NamedTuple, Sequence, TypeVar
 from uuid import uuid4
 
@@ -487,9 +487,9 @@ class HDL:
     ) -> tuple[dict[str, int], SharedArray[np.float64]]:
         piece_count = self.data.piece_count
         phenotype_count = len(phenotypes)
-        indices_by_phenotype: dict[str, int] = dict(
-            map(reversed, enumerate(self.phenotypes))  # type: ignore[arg-type]
-        )
+        indices_by_phenotype: dict[str, int] = {
+            phenotype: i for i, phenotype in enumerate(self.phenotypes)
+        }
 
         params_frame = get_estimates(paths, phenotypes, type).fill_null(-1).to_pandas()
         params_frame["phenotype_index"] = params_frame["phenotype"].map(
@@ -545,66 +545,61 @@ class HDL:
     def calc_jackknife2(self) -> None:
         sw = self.data.marginal_effect_array.sw
         piece_count = self.data.piece_count
+        phenotype_count = len(self.phenotypes)
+        pairs_count = phenotype_count * (phenotype_count - 1) // 2
 
         paths = self.get_paths()
-        phenotypes1, phenotypes2 = get_phenotypes2(
-            self.phenotypes, paths, piece_count, "jackknife"
-        )
-        if not phenotypes1 or not phenotypes2:
-            return
 
-        phenotypes = list(set(phenotypes1) | set(phenotypes2))
         indices_by_phenotype, params_array = self.get_params_array(
-            paths, phenotypes, "jackknife"
+            paths, self.phenotypes, "jackknife"
         )
 
-        combined_expr = pl.concat_str(
+        pair_expr = pl.concat_str(
             pl.col("phenotype1"), pl.col("phenotype2"), separator=":"
-        )
-        combined = list(map(":".join, zip(phenotypes1, phenotypes2, strict=True)))
-        piecewise2_frame = pl.concat(
-            [
-                pl.scan_parquet(path)
-                .filter(
-                    combined_expr.is_in(combined), pl.col("jackknife_index").is_null()
-                )
-                .select(combined_expr.alias("combined"), pl.col("slope"))
-                for path in paths
-                if path.stem.endswith("2")
-            ]
-        ).collect()
-        initial_slope = (
-            piecewise2_frame.group_by("combined")
+        ).alias("pair")
+        piecewise2_frame = (
+            pl.concat(
+                [
+                    pl.scan_parquet(path)
+                    .filter(pl.col("jackknife_index").is_null())
+                    .select(pair_expr, pl.col("slope"))
+                    for path in paths
+                    if path.stem.endswith("2")
+                ]
+            )
+            .group_by("pair")
             .agg(pl.col("slope").sum())
+            .collect()
             .to_pandas()
-            .set_index("combined")
-            .loc[combined]
-            .to_numpy()
         )
+
+        initial_slope = piecewise2_frame["slope"].to_numpy()
         initial_params = np.column_stack([initial_slope, np.ones_like(initial_slope)])
         initial_params_array = SharedArray.from_numpy(initial_params, sw)
 
-        jobs = (
-            Job2(
-                "jackknife",
-                piece_index,
-                indices_by_phenotype[phenotype1],
-                indices_by_phenotype[phenotype2],
-                initial_params_index,
-            )
-            for piece_index, (
-                initial_params_index,
-                (phenotype1, phenotype2),
-            ) in product(
-                range(-1, piece_count),
-                enumerate(zip(phenotypes1, phenotypes2, strict=True)),
-            )
-        )
+        initial_params_indices: dict[str, int] = {
+            pair: i for i, pair in enumerate(piecewise2_frame["pair"])
+        }
+
+        def generate_jobs() -> Iterator[Job2]:
+            for piece_index in range(-1, piece_count):
+                phenotypes = get_phenotypes2(
+                    self.phenotypes, paths, piece_count, "jackknife"
+                )
+                for phenotype1, phenotype2 in phenotypes:
+                    pair = f"{phenotype1}:{phenotype2}"
+                    initial_params_index = initial_params_indices[pair]
+                    yield Job2(
+                        "jackknife",
+                        piece_index,
+                        indices_by_phenotype[phenotype1],
+                        indices_by_phenotype[phenotype2],
+                        initial_params_index,
+                    )
 
         callable = partial(get2, self.data, params_array, initial_params_array)
-        self.run(
-            k=2, jobs=jobs, callable=callable, size=(piece_count + 1) * len(phenotypes1)
-        )
+        jobs = generate_jobs()
+        self.run(k=2, jobs=jobs, callable=callable, size=(piece_count + 1) * pairs_count)
 
         params_array.free()
         initial_params_array.free()
