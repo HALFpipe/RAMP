@@ -311,8 +311,7 @@ def unpack_key(
         raise ValueError("Cannot write partial rows to file: column start must be 0")
     if col_stop != shape[1]:
         raise ValueError(
-            "Cannot write partial rows to file: "
-            f"column stop must be {shape[1]}: {key}"
+            f"Cannot write partial rows to file: column stop must be {shape[1]}: {key}"
         )
 
     return row_start, row_stop, col_start, col_stop

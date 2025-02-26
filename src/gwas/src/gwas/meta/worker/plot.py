@@ -78,7 +78,7 @@ def plot_post_meta(
         figsize=(18, 10),
         layout="constrained",
     )
-    figure.suptitle(f"{job.name.replace("_", " ")} (n = {sample_count})")
+    figure.suptitle(f"{job.name.replace('_', ' ')} (n = {sample_count})")
 
     subfigures: dict[str, SubFigure] = dict()
     for key, _axes in axes.items():

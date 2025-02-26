@@ -276,7 +276,7 @@ class Scorefile:
             cls.write_header(file_handle, header)
             cls.write_names(file_handle, np.empty((0,)))
             for record in tqdm(array, leave=False):
-                file_handle.write("\t".join(map(to_str, record)) + "\n")
+                file_handle.write("\t".join(map(to_str, record)) + "\n")  # type: ignore[call-overload]
 
     @staticmethod
     def make_header(

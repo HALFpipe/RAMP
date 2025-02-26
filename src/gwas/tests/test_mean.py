@@ -5,6 +5,7 @@ import pytest
 
 from gwas.log import logger
 from gwas.mean import apply, calc_mean, make_sample_boolean_array
+from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.pheno import VariableCollection
 from gwas.testing.simulate import generate_missing_value_patterns
@@ -114,7 +115,9 @@ def test_apply(sw: SharedWorkspace, request: pytest.FixtureRequest) -> None:
     sample_count = 687
     variant_count = 3363695
     genotypes_array = sw.alloc("apply-genotypes", sample_count, variant_count)
-    sample_boolean_array = sw.alloc("apply-sample", sample_count, 1, dtype=np.bool_)
+    sample_boolean_array: SharedArray[np.bool_] = sw.alloc(
+        "apply-sample", sample_count, 1, dtype=np.bool_
+    )
     alternate_allele_frequency_array = sw.alloc("apply-mean", variant_count + 1)
     new_allocation_names.add(genotypes_array.name)
     new_allocation_names.add(sample_boolean_array.name)
