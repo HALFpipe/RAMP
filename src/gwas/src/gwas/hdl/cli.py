@@ -14,6 +14,10 @@ def parse_arguments(argv: list[str]) -> Namespace:
     argument_parser.add_argument("--ld-path", type=UPath, required=True)
     argument_parser.add_argument("--output-path", type=UPath, required=True)
 
+    argument_parser.add_argument(
+        "--steps", choices=["piecewise", "jackknife"], nargs="+", required=True
+    )
+
     argument_parser.add_argument("--debug", action="store_true", default=False)
     argument_parser.add_argument(
         "--log-level", choices=logging.getLevelNamesMapping().keys(), default="INFO"
