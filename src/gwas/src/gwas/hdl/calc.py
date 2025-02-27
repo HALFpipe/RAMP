@@ -53,7 +53,7 @@ def get_phenotypes1(
 
     existing_phenotypes: set[str] = set()
     for path in paths:
-        if not path.stem.endswith("1"):
+        if not path.stem.endswith(f"{type}1"):
             continue
         existing_phenotypes.update(
             pl.scan_parquet(path)
@@ -86,7 +86,7 @@ def get_phenotypes2(
 
     existing: set[tuple[str, str]] = set()
     for path in paths:
-        if not path.stem.endswith("2"):
+        if not path.stem.endswith(f"{type}2"):
             continue
         existing_frame = (
             pl.scan_parquet(path)
@@ -309,7 +309,7 @@ def get_estimates(
                 pl.col("intercept"),
             )
             for path in paths
-            if path.stem.endswith("1")
+            if path.stem.endswith(f"{type}1")
         ]
     ).collect()
     return data_frame
@@ -334,7 +334,7 @@ class HDL:
             )
         )
 
-    def get_chunk_path(self, k: int) -> UPath:
+    def get_chunk_path(self, k: str) -> UPath:
         prefix = "chunk-"
         suffix = ".parquet"
         digest = hex_digest([self.phenotypes, uuid4().hex])
@@ -378,7 +378,7 @@ class HDL:
     def run(
         self,
         jobs: Iterator[J],
-        k: int,
+        k: str,
         size: int,
         callable: Callable[[J], Result],
     ) -> None:
@@ -416,30 +416,33 @@ class HDL:
 
     def calc_piecewise1(self) -> None:
         piece_count = self.data.piece_count
+        type: Literal["piecewise", "jackknife"] = "piecewise"
 
         def generate_jobs() -> Iterator[Job1]:
             for piece_index in range(piece_count):
                 phenotypes = get_phenotypes1(
-                    self.phenotypes, self.get_paths(), piece_index, "piecewise"
+                    self.phenotypes, self.get_paths(), piece_index, type
                 )
                 for phenotype in phenotypes:
-                    yield Job1(
-                        "piecewise", piece_index, self.phenotypes.index(phenotype)
-                    )
+                    yield Job1(type, piece_index, self.phenotypes.index(phenotype))
 
         logger.debug(
-            f"Calculating piecewise estimates for {len(self.phenotypes)} phenotypes"
+            f"Calculating {type} estimates for {len(self.phenotypes)} phenotypes"
         )
 
         callable = partial(get1, self.data, None)
         jobs = generate_jobs()
         self.run(
-            k=1, jobs=jobs, callable=callable, size=piece_count * len(self.phenotypes)
+            k=f"{type}1",
+            jobs=jobs,
+            callable=callable,
+            size=piece_count * len(self.phenotypes),
         )
 
     def calc_jackknife1(self) -> None:
         sw = self.data.marginal_effect_array.sw
         piece_count = self.data.piece_count
+        type: Literal["piecewise", "jackknife"] = "jackknife"
 
         paths = self.get_paths()
         piecewise1_frame = get_estimates(paths, self.phenotypes, "piecewise")
@@ -456,13 +459,11 @@ class HDL:
 
         def generate_jobs() -> Iterator[Job1]:
             for piece_index in range(-1, piece_count):
-                phenotypes = get_phenotypes1(
-                    self.phenotypes, paths, piece_index, "jackknife"
-                )
+                phenotypes = get_phenotypes1(self.phenotypes, paths, piece_index, type)
                 for phenotype in phenotypes:
                     phenotype_index = self.phenotypes.index(phenotype)
                     yield Job1(
-                        "jackknife",
+                        type,
                         piece_index,
                         phenotype_index,
                         phenotype_index,
@@ -471,7 +472,7 @@ class HDL:
         callable = partial(get1, self.data, initial_params_array)
         jobs = generate_jobs()
         self.run(
-            k=1,
+            k=f"{type}1",
             jobs=jobs,
             callable=callable,
             size=(piece_count + 1) * len(self.phenotypes),
@@ -516,6 +517,7 @@ class HDL:
         piece_count = self.data.piece_count
         phenotype_count = len(self.phenotypes)
         pairs_count = phenotype_count * (phenotype_count - 1) // 2
+        type: Literal["piecewise", "jackknife"] = "piecewise"
 
         paths = self.get_paths()
 
@@ -525,12 +527,10 @@ class HDL:
 
         def generate_jobs() -> Iterator[Job2]:
             for piece_index in range(piece_count):
-                phenotypes = get_phenotypes2(
-                    self.phenotypes, paths, piece_index, "piecewise"
-                )
+                phenotypes = get_phenotypes2(self.phenotypes, paths, piece_index, type)
                 for phenotype1, phenotype2 in phenotypes:
                     yield Job2(
-                        "piecewise",
+                        type,
                         piece_index,
                         indices_by_phenotype[phenotype1],
                         indices_by_phenotype[phenotype2],
@@ -538,7 +538,9 @@ class HDL:
 
         callable = partial(get2, self.data, params_array, None)
         jobs = generate_jobs()
-        self.run(k=2, jobs=jobs, callable=callable, size=piece_count * pairs_count)
+        self.run(
+            k=f"{type}2", jobs=jobs, callable=callable, size=piece_count * pairs_count
+        )
 
         params_array.free()
 
@@ -547,6 +549,7 @@ class HDL:
         piece_count = self.data.piece_count
         phenotype_count = len(self.phenotypes)
         pairs_count = phenotype_count * (phenotype_count - 1) // 2
+        type: Literal["piecewise", "jackknife"] = "jackknife"
 
         paths = self.get_paths()
 
@@ -561,10 +564,13 @@ class HDL:
             pl.concat(
                 [
                     pl.scan_parquet(path)
-                    .filter(pl.col("jackknife_index").is_null())
+                    .filter(
+                        pl.col("piecewise_index").is_not_null(),
+                        pl.col("jackknife_index").is_null(),
+                    )
                     .select(pair_expr, pl.col("slope"))
                     for path in paths
-                    if path.stem.endswith("2")
+                    if path.stem.endswith("piecewise2")
                 ]
             )
             .group_by("pair")
@@ -583,14 +589,12 @@ class HDL:
 
         def generate_jobs() -> Iterator[Job2]:
             for piece_index in range(-1, piece_count):
-                phenotypes = get_phenotypes2(
-                    self.phenotypes, paths, piece_count, "jackknife"
-                )
+                phenotypes = get_phenotypes2(self.phenotypes, paths, piece_count, type)
                 for phenotype1, phenotype2 in phenotypes:
                     pair = f"{phenotype1}:{phenotype2}"
                     initial_params_index = initial_params_indices[pair]
                     yield Job2(
-                        "jackknife",
+                        type,
                         piece_index,
                         indices_by_phenotype[phenotype1],
                         indices_by_phenotype[phenotype2],
@@ -599,7 +603,12 @@ class HDL:
 
         callable = partial(get2, self.data, params_array, initial_params_array)
         jobs = generate_jobs()
-        self.run(k=2, jobs=jobs, callable=callable, size=(piece_count + 1) * pairs_count)
+        self.run(
+            k=f"{type}2",
+            jobs=jobs,
+            callable=callable,
+            size=(piece_count + 1) * pairs_count,
+        )
 
         params_array.free()
         initial_params_array.free()
