@@ -13,6 +13,7 @@ from ..compression.arr.base import (
     TextCompressionMethod,
     compression_methods,
 )
+from ..compression.cache import get_last_modified, load_from_cache, save_to_cache
 from ..covar import calc_and_save_covariance
 from ..log import logger
 from ..mean import calc_mean
@@ -21,6 +22,7 @@ from ..pheno import VariableCollection
 from ..score.job import JobCollection
 from ..tri.calc import calc_tri
 from ..utils.genetics import chromosome_to_int, parse_chromosome
+from ..utils.hash import hex_digest
 from ..vcf.base import VCFFile, calc_vcf
 
 
@@ -130,18 +132,54 @@ class GwasCommand:
             chromosomes = map(parse_chromosome, self.arguments.chromosome)
         return sorted(chromosomes, key=chromosome_to_int)
 
-    def get_variable_collection(self) -> VariableCollection:
+    def get_variable_collections(
+        self,
+    ) -> tuple[VariableCollection, list[VariableCollection]]:
         if self.phenotype_paths is None:
             raise RuntimeError
         if self.covariate_paths is None:
             raise RuntimeError
-        return VariableCollection.from_txt(
-            self.phenotype_paths,
-            self.covariate_paths,
-            self.sw,
-            samples=self.vcf_samples,
-            missing_value_strategy=self.arguments.missing_value_strategy,
+
+        digest = hex_digest(
+            dict(
+                phenotypes=[
+                    (phenotype_path, get_last_modified(phenotype_path))
+                    for phenotype_path in self.phenotype_paths
+                ],
+                covariates=[
+                    (covariate_path, get_last_modified(covariate_path))
+                    for covariate_path in self.covariate_paths
+                ],
+                vcf_samples=self.vcf_samples,
+                missing_value_strategy=self.arguments.missing_value_strategy,
+            )
         )
+        cache_key = f"variable-collections-{digest}"
+        v: tuple[VariableCollection, list[VariableCollection]] | None = load_from_cache(
+            self.output_directory, cache_key, self.sw
+        )
+        if v is None:
+            base_variable_collection = VariableCollection.from_txt(
+                self.phenotype_paths,
+                self.covariate_paths,
+                self.sw,
+                samples=self.vcf_samples,
+                missing_value_strategy=self.arguments.missing_value_strategy,
+            )
+            # Split into missing value chunks
+            variable_collections = split_by_missing_values(
+                base_variable_collection, self.variable_collection_prefix
+            )
+            v = base_variable_collection, variable_collections
+
+            save_to_cache(
+                self.output_directory,
+                cache_key,
+                v,
+                num_threads=self.arguments.num_threads,
+                compression_level=9,
+            )
+        return v
 
     def update_allele_frequencies(
         self, variable_collections: list[VariableCollection]
@@ -196,11 +234,8 @@ class GwasCommand:
         self.vcf_samples = vcf_files[0].samples
 
         # Load phenotypes and covariates
-        base_variable_collection = self.get_variable_collection()
-        # Split into missing value chunks
-        variable_collections: list[VariableCollection] = split_by_missing_values(
-            base_variable_collection, self.variable_collection_prefix
-        )
+        base_variable_collection, variable_collections = self.get_variable_collections()
+
         self.sw.squash()
         if len(variable_collections) == 0:
             raise ValueError(
