@@ -185,6 +185,7 @@ class Summaries:
     beta: VariableSummary
     standard_error: VariableSummary
     r_squared: VariableSummary
+    log_p_value: VariableSummary
     variant_count: int
 
 
@@ -214,10 +215,24 @@ def map_write(
             summary_inputs.append(summary_input)
             plot_inputs.append(plot_input)
 
+    chromosome_int, position, u_stat, v_stat = map(
+        np.concatenate, zip(*plot_inputs, strict=True)
+    )
+    p_value, log_p_value = calculate_chi_squared_p_value(u_stat, v_stat)
+    log_p_value_summary = VariableSummary.from_array(log_p_value)
+
     arrays = map(np.concatenate, zip(*summary_inputs, strict=True))
-    beta, standard_error, r_squared = map(VariableSummary.from_array, arrays)
+    beta_summary, standard_error_summary, r_squared_summary = map(
+        VariableSummary.from_array, arrays
+    )
     variant_count = sum(a.size for a, _, _ in summary_inputs)
-    summaries = Summaries(beta, standard_error, r_squared, variant_count)
+    summaries = Summaries(
+        beta_summary,
+        standard_error_summary,
+        r_squared_summary,
+        log_p_value_summary,
+        variant_count,
+    )
 
     score_path_str = ji.score_paths[0]
     plot_directory = UPath(UPath(score_path_str).parts[0]) / "quality-control"
@@ -228,11 +243,7 @@ def map_write(
             f'Did not find plot directory for study "{study}" at "{plot_directory}"'
         )
     else:
-        chromosome_int, position, u_stat, v_stat = map(
-            np.concatenate, zip(*plot_inputs, strict=True)
-        )
         if not get_file_path(plot_directory, ji.phenotype).is_file() and u_stat.size > 0:
-            p_value, log_p_value = calculate_chi_squared_p_value(u_stat, v_stat)
             position = offset[chromosome_int - 1] + position
             plot(
                 plot_directory,
