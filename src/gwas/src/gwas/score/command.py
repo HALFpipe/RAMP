@@ -192,19 +192,15 @@ class GwasCommand:
             desc="calculating allele frequencies",
             unit="chromosomes",
         ):
-            if calc_mean(
-                vcf_file,
-                variable_collections,
-                self.arguments.num_threads,
-            ):
+            if calc_mean(vcf_file, variable_collections, self.arguments.num_threads):
                 vcf_file.save_to_cache(self.output_directory, self.arguments.num_threads)
 
     def setup_variable_collections(self) -> list[VariableCollection]:
         # Convert command line arguments to `UPath` objects
         vcf_paths: list[UPath] = [UPath(p) for p in self.arguments.vcf]
         tri_paths: list[UPath] = [UPath(p) for p in self.arguments.tri]
-        self.phenotype_paths: list[UPath] = [UPath(p) for p in self.arguments.phenotypes]
-        self.covariate_paths: list[UPath] = [UPath(p) for p in self.arguments.covariates]
+        self.phenotype_paths = [UPath(p) for p in self.arguments.phenotypes]
+        self.covariate_paths = [UPath(p) for p in self.arguments.covariates]
 
         # Load VCF file metadata and cache it
         vcf_files = calc_vcf(
