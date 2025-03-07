@@ -47,7 +47,7 @@ class TallSkinnyQR:
     @staticmethod
     def triangularize(shared_array: SharedArray, pivoting: bool = True) -> None:
         """Triangularize the given array to a lower triangular matrix"""
-        _, sample_count = shared_array.shape
+        variant_count, sample_count = shared_array.shape
         # Triangularize to upper triangle
         if pivoting:
             pivot = shared_array.triangularize(pivoting=True)
@@ -58,7 +58,7 @@ class TallSkinnyQR:
 
         # Transpose and reshape to lower triangle
         shared_array.transpose()
-        shared_array.resize(sample_count, sample_count)
+        shared_array.resize(sample_count, min(variant_count, sample_count))
         logger.debug(f"Triangularized to a dimension of {sample_count}")
 
     def map(self) -> Triangular:
