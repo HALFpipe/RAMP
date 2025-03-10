@@ -26,10 +26,24 @@ from ..compression.arr.base import (
 )
 from ..log import logger
 from ..utils.multiprocessing import get_global_lock
-from ..utils.numpy import invert_pivot
 from .wkspace import Allocation, SharedWorkspace
 
 ScalarType = TypeVar("ScalarType", bound=np.generic)
+
+
+def invert_pivot(pivot: npt.NDArray[np.uint32]) -> npt.NDArray[np.uint32]:
+    """Calculates the inverse of a pivot array. Taken from
+    https://stackoverflow.com/a/25535723
+
+    Args:
+        pivot (npt.NDArray[np.integer]): The pivot array.
+
+    Returns:
+        npt.NDArray[np.integer]: The inverse.
+    """
+    inverse = np.zeros_like(pivot)
+    inverse[pivot] = np.arange(pivot.size)
+    return inverse
 
 
 @dataclass
@@ -449,4 +463,4 @@ class SharedArray(Generic[ScalarType]):
     def apply_inverse_pivot(self, jpvt: npt.NDArray[np.uint32]) -> None:
         # Apply the inverse pivot to the columns
         matrix = self.to_numpy()
-        matrix[:] = matrix[:, invert_pivot(jpvt)]
+        matrix.take(invert_pivot(jpvt), axis=1, out=matrix, mode="raise")

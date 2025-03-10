@@ -1,9 +1,6 @@
-import tracemalloc
-
 import numpy as np
 import pytest
 
-from gwas.log import logger
 from gwas.mean import apply, calc_mean, make_sample_boolean_array
 from gwas.mem.arr import SharedArray
 from gwas.mem.wkspace import SharedWorkspace
@@ -13,7 +10,7 @@ from gwas.utils.threads import cpu_count
 from gwas.vcf.base import VCFFile
 
 from .conftest import ReadResult
-from .utils import check_bias
+from .utils import check_bias, check_memory_leaks
 
 
 @pytest.mark.parametrize("chromosome", [22], indirect=True)
@@ -141,34 +138,17 @@ def test_apply(sw: SharedWorkspace, request: pytest.FixtureRequest) -> None:
         p=[1 - missing_value_rate, missing_value_rate],
     )
 
-    tracemalloc.clear_traces()
-    tracemalloc.start()
-    apply(
-        genotypes_array,
-        [alternate_allele_frequency_array],
-        sample_boolean_array,
-        (sample_count, variant_count),
-        slice(0, variant_count),
-        0,
-    )
-    snapshot = tracemalloc.take_snapshot()
-    tracemalloc.stop()
+    with check_memory_leaks():
+        apply(
+            genotypes_array,
+            [alternate_allele_frequency_array],
+            sample_boolean_array,
+            (sample_count, variant_count),
+            slice(0, variant_count),
+            0,
+        )
 
     assert np.all(np.isfinite(alternate_allele_frequency[:-1]))
     assert np.isnan(alternate_allele_frequency[-1])
-
-    # Ensure that we did not leak memory
-    domain = np.lib.tracemalloc_domain
-    domain_filter = tracemalloc.DomainFilter(inclusive=True, domain=domain)
-    snapshot = snapshot.filter_traces([domain_filter])
-
-    size = 0
-    for trace in snapshot.traces:
-        size += trace.size
-        traceback = trace.traceback
-        logger.info(f"allocation size {trace.size}: {'\n'.join(traceback.format())}")
-    assert size == 0
-
-    tracemalloc.clear_traces()
 
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)

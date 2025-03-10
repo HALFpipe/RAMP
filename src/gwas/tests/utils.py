@@ -1,3 +1,5 @@
+import tracemalloc
+from contextlib import contextmanager
 from functools import partial
 from typing import Any
 
@@ -89,3 +91,29 @@ def assert_both_close(
     criterion = atol + rtol * scale
     assert np.abs(genetic_variance - rmw_genetic_variance) <= criterion
     assert np.abs(error_variance - rmw_error_variance) <= (atol + rtol * scale)
+
+
+@contextmanager
+def check_memory_leaks(target: int = 0):
+    tracemalloc.clear_traces()
+    tracemalloc.start()
+
+    yield
+
+    snapshot = tracemalloc.take_snapshot()
+    tracemalloc.stop()
+
+    # Ensure that we did not leak memory
+    domain = np.lib.tracemalloc_domain
+    domain_filter = tracemalloc.DomainFilter(inclusive=True, domain=domain)
+    snapshot = snapshot.filter_traces([domain_filter])
+
+    size = 0
+    for trace in snapshot.traces:
+        size += trace.size
+        traceback = trace.traceback
+        logger.info(f"allocation size {trace.size}: {'\n'.join(traceback.format())}")
+
+    tracemalloc.clear_traces()
+
+    assert size <= target

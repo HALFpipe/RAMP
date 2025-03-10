@@ -1,31 +1,34 @@
 import numpy as np
 import pytest
-from pytest import FixtureRequest
 from upath import UPath
 
-from gwas.mem.arr import SharedArray
+from gwas.mem.arr import SharedArray, invert_pivot
 from gwas.mem.wkspace import SharedWorkspace
 from gwas.utils.multiprocessing import get_global_lock
 
-shape = (5, 7)
+from .utils import check_memory_leaks
 
 
-@pytest.fixture(scope="function")
-def shared_array(request: FixtureRequest, sw: SharedWorkspace) -> SharedArray:
+@pytest.fixture(scope="function", params=[(5, 7), (5000, 7000)])
+def shared_array(request: pytest.FixtureRequest, sw: SharedWorkspace) -> SharedArray:
+    rng = np.random.default_rng(0)
+
+    shape = request.param
     with get_global_lock():
         shared_array = sw.alloc(SharedArray.get_name(sw), *shape)
     request.addfinalizer(shared_array.free)
 
     a = shared_array.to_numpy()
-    a[:] = np.random.rand(*shape)
+    for i in range(shape[0]):
+        a[i, :] = rng.normal(size=shape[1])
 
     return shared_array
 
 
 def test_include_trailing(shared_array: SharedArray) -> None:
     a = shared_array.to_numpy(include_trailing_free_memory=True)
-    assert a.shape[0] == shape[0]
-    assert a.shape[1] > shape[1]
+    assert a.shape[0] == shared_array.shape[0]
+    assert a.shape[1] > shared_array.shape[1]
 
 
 def test_io(shared_array: SharedArray, tmp_path: UPath) -> None:
@@ -42,7 +45,8 @@ def test_io(shared_array: SharedArray, tmp_path: UPath) -> None:
 def test_transpose(shared_array: SharedArray) -> None:
     b = shared_array.to_numpy().copy()
 
-    shared_array.transpose()
+    with check_memory_leaks():
+        shared_array.transpose()
     a = shared_array.to_numpy()
     np.testing.assert_allclose(a, b.transpose())
 
@@ -51,7 +55,8 @@ def test_compress_rows(shared_array: SharedArray) -> None:
     b = shared_array.to_numpy().copy()
 
     indices = np.array([0, 3, 4], dtype=np.uint32)
-    shared_array.compress(indices)
+    with check_memory_leaks():
+        shared_array.compress(indices)
     a = shared_array.to_numpy()
     np.testing.assert_allclose(b[indices, :], a)
 
@@ -60,7 +65,8 @@ def test_compress_columns(shared_array: SharedArray) -> None:
     b = shared_array.to_numpy().copy()
 
     indices = np.array([0, 3, 4], dtype=np.uint32)
-    shared_array.compress(indices, axis=1)
+    with check_memory_leaks():
+        shared_array.compress(indices, axis=1)
     a = shared_array.to_numpy()
     np.testing.assert_allclose(b[:, indices], a)
 
@@ -68,9 +74,24 @@ def test_compress_columns(shared_array: SharedArray) -> None:
 def test_resize(shared_array: SharedArray) -> None:
     b = shared_array.to_numpy().copy()
 
-    m = min(shape)
+    m = min(shared_array.shape)
     shared_array.resize(m, m)
 
     a = shared_array.to_numpy()
     assert a.shape == (m, m)
     np.testing.assert_allclose(b[:, :m], a)
+
+
+def test_apply_inverse_pivot(shared_array: SharedArray) -> None:
+    pivot_size = shared_array.shape[1] * 4
+    with check_memory_leaks(target=pivot_size):
+        pivot = shared_array.triangularize(pivoting=True)
+
+    a = shared_array.to_numpy().copy()
+    a = a[:, invert_pivot(pivot)]
+
+    with check_memory_leaks():
+        shared_array.apply_inverse_pivot(pivot)
+
+    b = shared_array.to_numpy()
+    np.testing.assert_allclose(b, a)

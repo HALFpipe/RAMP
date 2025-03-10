@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 import pandas as pd
+import pytest
 from pytest import FixtureRequest, LogCaptureFixture
 from upath import UPath
 
@@ -13,6 +14,8 @@ from gwas.log import (
 )
 from gwas.utils.genetics import greater_or_close, make_variant_mask
 from gwas.utils.multiprocessing import Process
+
+from .utils import check_memory_leaks
 
 
 class LogProcess(Process):
@@ -62,3 +65,12 @@ def test_make_variant_mask() -> None:
         )
         == [False, False, True, True, True]
     )
+
+
+def test_check_memory_leaks() -> None:
+    rng = np.random.default_rng(0)
+
+    with pytest.raises(AssertionError):
+        with check_memory_leaks():
+            a = rng.uniform(size=(300, 500))
+    assert np.sum(a * a) > 0
