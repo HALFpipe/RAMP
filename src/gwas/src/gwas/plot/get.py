@@ -54,7 +54,7 @@ class LoadPValueJob:
 def calculate_chi_squared_p_value(
     u_stat: npt.NDArray[np.float64], v_stat: npt.NDArray[np.float64]
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    import scipy
+    import scipy.stats
 
     """
     Calculates the p-value from U-statistic and V-statistic using the chi-square test

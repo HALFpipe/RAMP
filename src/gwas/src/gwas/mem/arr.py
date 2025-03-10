@@ -14,7 +14,7 @@ from typing import (
 )
 
 import numpy as np
-import scipy
+import scipy.linalg
 from numpy import typing as npt
 from upath import UPath
 

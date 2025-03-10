@@ -2,12 +2,12 @@ from dataclasses import dataclass
 
 import matplotlib
 import numpy as np
+import scipy.stats
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.collections import LineCollection
 from matplotlib.colors import BoundaryNorm, LinearSegmentedColormap
 from numpy import typing as npt
-from scipy import stats
 from upath import UPath
 
 from gwas.mem.arr import SharedArray
@@ -102,8 +102,8 @@ def plot_q_q(
     axes.set_xlabel(r"Expected $-log_{10}{(p)}$")
     axes.set_ylabel(r"Observed $-log_{10}{(p)}$")
 
-    expected_median = stats.chi2.ppf(0.5, 1)
-    observed_median = np.median(stats.norm.ppf(1 - p_value / 2) ** 2)
+    expected_median = scipy.stats.chi2.ppf(0.5, 1)
+    observed_median = np.median(scipy.stats.norm.ppf(1 - p_value / 2) ** 2)
     lambda_value = observed_median / expected_median
     axes.set_title(f"$\\lambda = {lambda_value:.3f}$")
 

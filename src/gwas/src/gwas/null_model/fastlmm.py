@@ -4,7 +4,7 @@ from typing import override
 
 import jax
 import numpy as np
-import scipy
+import scipy.optimize
 from chex import register_dataclass_type_with_jax_tree_util
 from jax import numpy as jnp
 from jaxtyping import Array, Float
