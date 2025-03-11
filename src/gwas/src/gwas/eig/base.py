@@ -135,7 +135,7 @@ class Eigendecomposition(SharedArray):
         s = eig.singular_values
         v = eig.eigenvectors
 
-        s[:] = np.sqrt(eigenvalues * variant_count)
+        np.sqrt(eigenvalues * variant_count, out=s)
         v[:] = eigenvectors
         return eig
 
