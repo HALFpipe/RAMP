@@ -35,10 +35,6 @@ requirements:
     - pandas
     - matplotlib
     - seaborn
-    - jax
-    - jaxtyping
-    - chex
-    - optax
     - polars
     - "python-flatbuffers"
     - psutil
@@ -51,6 +47,13 @@ requirements:
     - more-itertools
     - tabulate
     - adjusttext
+    # linear algebra
+    - jax
+    - jaxtyping
+    - chex
+    - optax
+    - etils
+    - importlib_resources
     # compression tools
     - zstd
     - htslib
