@@ -463,4 +463,6 @@ class SharedArray(Generic[ScalarType]):
     def apply_inverse_pivot(self, jpvt: npt.NDArray[np.uint32]) -> None:
         # Apply the inverse pivot to the columns
         matrix = self.to_numpy()
-        matrix.take(invert_pivot(jpvt), axis=1, out=matrix, mode="raise")
+        ipvt = invert_pivot(jpvt)
+        for row in matrix:
+            row.take(ipvt, out=row, mode="raise")
