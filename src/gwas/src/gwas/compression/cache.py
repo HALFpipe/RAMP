@@ -26,15 +26,15 @@ def load_from_cache(
         logger.debug(f'Cache entry "{file_path}" not found')
         return None
 
-    with CompressedBytesReader(file_path) as file_handle:
-        try:
+    try:
+        with CompressedBytesReader(file_path) as file_handle:
             if sw is None:
                 return pickle.load(file_handle)
             else:
                 return SharedArrayUnpickler(sw, file_handle).load()
-        except (pickle.UnpicklingError, EOFError) as error:
-            logger.warning(f'Failed to load "{file_path}"', exc_info=error)
-            return None
+    except (pickle.UnpicklingError, EOFError, ValueError) as error:
+        logger.warning(f'Failed to load "{file_path}"', exc_info=error)
+        return None
 
 
 def save_to_cache(
