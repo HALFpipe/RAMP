@@ -179,19 +179,6 @@ def finalize_sample_classes(
     # Remove small samples
     prune_classes(sample_classes, arguments.minimum_sample_size)
 
-    # Create non-main ancestry group
-    sample_populations = sample_classes["population"]
-    if arguments.by_population:
-        main = arguments.main_population
-    elif arguments.by_super_population:
-        main = arguments.main_super_population
-    else:
-        raise ValueError
-    if main in sample_populations and len(sample_populations) > 1:
-        mixed = set.union(*sample_populations.values())
-        non_main = mixed - sample_populations[main]
-        sample_populations[f"non{main}"] = non_main
-
 
 def apply_classes_to_phenotypes(
     arguments: Namespace,
@@ -222,10 +209,6 @@ def apply_classes_to_phenotypes(
                 f"{arguments.minimum_sample_size}"
             )
             continue
-        else:
-            logger.info(
-                f"Will output group {class_info} with {len(class_samples)} samples"
-            )
 
         # Remove samples not in the class.
         class_phenotype_array = phenotype_array.copy()
@@ -233,6 +216,11 @@ def apply_classes_to_phenotypes(
             if sample not in class_samples:
                 class_phenotype_array[i, :] = np.nan
         phenotype_arrays.append(class_phenotype_array)
+
+        logger.info(
+            f"Will output group {class_info} with {len(class_samples)} samples "
+            f"for {len(phenotype_names_base)} phenotypes"
+        )
 
         prefix = "_".join(
             f"{variable}-{value}"

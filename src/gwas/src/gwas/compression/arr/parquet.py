@@ -67,7 +67,9 @@ class ParquetFileArrayWriter(FileArrayWriter[ScalarType]):
             schema=self.schema,
             use_dictionary=False,
             compression="zstd",
-            compression_level=9,
+            compression_level=17,
+            write_batch_size=16384,
+            data_page_size=1 << 26,  # 64 MB
         )
         return self
 

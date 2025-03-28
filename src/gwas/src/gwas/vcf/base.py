@@ -202,7 +202,11 @@ class VCFFile(AbstractContextManager):
             for column in self.shared_vcf_variants.columns
             if column.name not in columns_to_remove
         ]
-
+        self.allele_frequency_columns = [
+            column
+            for column in self.allele_frequency_columns
+            if column not in columns_to_remove
+        ]
         return len(columns_to_remove)
 
     def free(self) -> None:

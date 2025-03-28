@@ -2,6 +2,7 @@ from itertools import batched
 
 import numpy as np
 import pandas as pd
+from numpy import typing as npt
 from tqdm.auto import tqdm
 
 from ..compression.arr.base import FileArrayReader, FileArrayWriter
@@ -42,11 +43,12 @@ def update_row_metadata_dtypes(
 
 def copy(
     reader: FileArrayReader,
+    column_indices: npt.NDArray[np.uint32],
     writer: FileArrayWriter,
     array: SharedArray[np.float64],
 ) -> None:
-    row_count, column_count = reader.shape
-    column_indices = np.arange(column_count, dtype=np.uint32)
+    row_count, _ = reader.shape
+    column_count = column_indices.size
     row_chunk_size = array.size // column_count
 
     logger.debug(f'Converting "{reader.file_path}" with shape {reader.shape}')
@@ -82,13 +84,14 @@ def copy(
 
 def verify(
     reader1: FileArrayReader,
+    column_indices: npt.NDArray[np.uint32],
     reader2: FileArrayReader,
     array: SharedArray[np.float64],
 ) -> None:
     logger.debug(f'Verifying "{reader2.file_path}" with shape {reader2.shape}')
 
-    row_count, column_count = reader1.shape
-    column_indices = np.arange(column_count, dtype=np.uint32)
+    row_count, _ = reader1.shape
+    column_count = column_indices.size
     row_chunk_size = array.size // column_count // 2
 
     row_chunks = [
@@ -108,8 +111,16 @@ def verify(
             data1 = data[: len(row_indices), :]
             data2 = data[len(row_indices) :, :]
 
-            reader1.read_indices(row_indices, column_indices, data1)
-            reader2.read_indices(row_indices, column_indices, data2)
+            reader1.read_indices(
+                row_indices,
+                column_indices,
+                data1,
+            )
+            reader2.read_indices(
+                row_indices,
+                np.arange(column_count, dtype=np.uint32),
+                data2,
+            )
 
             np.testing.assert_array_equal(
                 data1,

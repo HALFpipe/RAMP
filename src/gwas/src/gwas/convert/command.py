@@ -8,6 +8,7 @@ from ..compression.arr.base import FileArray
 from ..log import logger
 from ..mem.arr import SharedArray
 from ..mem.wkspace import SharedWorkspace
+from ..meta.index import parse
 from ..utils.multiprocessing import (
     get_global_lock,
 )
@@ -28,7 +29,21 @@ def convert(arguments: Namespace, sw: SharedWorkspace) -> None:
         logger.debug(f'Reading metadata for "{input_path}"')
 
         reader = FileArray.from_file(input_path, dtype, num_threads=num_threads)
-        row_count, column_count = reader.shape
+
+        if reader.column_names is None:
+            raise ValueError(f'File "{input_path}" does not have column names')
+
+        column_indices = np.fromiter(
+            (
+                i
+                for i, column_name in enumerate(reader.column_names)
+                if dict(parse(column_name)).get("population") != "nonEUR"
+            ),
+            dtype=np.uint32,
+        )
+
+        row_count, _ = reader.shape
+        column_count = column_indices.size
 
         name = input_path.name.removesuffix(reader.compression_method.suffix)
         output_path = input_path.parent / f"{name}{compression_method.suffix}"
@@ -54,14 +69,16 @@ def convert(arguments: Namespace, sw: SharedWorkspace) -> None:
 
                 writer.set_axis_metadata(0, row_metadata)
             if reader.column_names is not None:
-                writer.set_axis_metadata(1, reader.column_names)
+                column_names = reader.column_names
+                column_names = [column_names[i] for i in column_indices]
+                writer.set_axis_metadata(1, column_names)
 
-            copy(reader, writer, array)
+            copy(reader, column_indices, writer, array)
 
         converted_reader = FileArray.from_file(
             output_path, dtype, num_threads=num_threads
         )
-        verify(reader, converted_reader, array)
+        verify(reader, column_indices, converted_reader, array)
     except Exception as exception:
         logger.error(f'Error converting "{input_path}": {exception}', exc_info=True)
         if arguments.debug:

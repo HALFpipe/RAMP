@@ -74,3 +74,14 @@ def test_check_memory_leaks() -> None:
         with check_memory_leaks():
             a = rng.uniform(size=(300, 500))
     assert np.sum(a * a) > 0
+
+
+def test_chromosome_from_int() -> None:
+    import pyarrow as pa
+
+    from gwas.utils.genetics import chromosome_from_int
+
+    assert chromosome_from_int(1) == 1
+    assert chromosome_from_int(np.intp(1)) == 1
+    assert chromosome_from_int(pa.scalar(1)) == 1
+    assert chromosome_from_int(23) == "X"

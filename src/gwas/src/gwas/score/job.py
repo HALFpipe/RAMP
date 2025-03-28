@@ -144,10 +144,9 @@ class JobCollection:
                 unit="collections",
             ):
                 # Extract the matrices we actually need from the null model
-                (
-                    inverse_variance_array,
-                    scaled_residuals_array,
-                ) = nm.get_arrays_for_score_calc()
+                (inverse_variance_array, scaled_residuals_array) = (
+                    nm.get_arrays_for_score_calc()
+                )
                 inverse_variance_arrays.append(inverse_variance_array)
                 scaled_residuals_arrays.append(scaled_residuals_array)
                 # Free the null model collection

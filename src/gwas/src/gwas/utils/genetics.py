@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 import pandas as pd
 from numpy import typing as npt
@@ -26,13 +28,13 @@ def chromosome_to_int(chromosome: int | str) -> int:
     raise ValueError(f'Unknown chromsome "{chromosome}"')
 
 
-def chromosome_from_int(chromosome_int: int) -> int | str:
+def chromosome_from_int(chromosome_int: Any) -> int | str:
     if hasattr(chromosome_int, "as_py"):  # handle pyarrow
         chromosome_int = chromosome_int.as_py()
     if chromosome_int == 23:
         return "X"
     else:
-        return chromosome_int
+        return int(chromosome_int)
 
 
 def chromosomes_list() -> list[int | str]:

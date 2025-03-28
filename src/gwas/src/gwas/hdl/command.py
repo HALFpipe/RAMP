@@ -65,10 +65,10 @@ def save_fields(arguments: Namespace, cache_key: str, data: Data) -> None:
 
 
 def hdl(sw: SharedWorkspace, arguments: Namespace) -> None:
+    setup_jax()
+
     ld_path: UPath = arguments.ld_path
     input_path: UPath = arguments.input_path
-
-    setup_jax()
 
     sumstats_paths = sorted(
         input_path.rglob(f"*genomic-sem{suffix}"), key=attrgetter("stem")
