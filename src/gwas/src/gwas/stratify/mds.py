@@ -20,6 +20,7 @@ def classify_samples_by_mds(
     arguments: Namespace,
     mds: MDS,
     sample_classes: dict[str, dict[str, set[SampleID]]],
+    output_directory: UPath,
 ) -> None:
     samples, sample_components, reference_components = mds
 
@@ -66,6 +67,7 @@ def classify_samples_by_mds(
             reference_components,
             sample_components,
             sample_populations,
+            output_directory,
         )
 
 

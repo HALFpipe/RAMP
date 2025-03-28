@@ -5,6 +5,7 @@ import numpy as np
 import scipy
 from matplotlib.artist import Artist
 from numpy import typing as npt
+from upath import UPath
 
 from .base import SampleID
 
@@ -62,6 +63,7 @@ def plot_populations(
     reference_components: dict[str, npt.NDArray[np.float64]],
     sample_components: npt.NDArray[np.float64],
     sample_populations: dict[str, set[SampleID]],
+    output_directory: UPath,
 ) -> None:
     """Save a pairplot of the populations.
 
@@ -164,7 +166,7 @@ def plot_populations(
         fontsize="xx-large",
     )
 
-    figure.savefig("populations.pdf")
+    figure.savefig(output_directory / "populations.pdf")
     plt.close("all")
 
 

@@ -36,7 +36,7 @@ def stratify(arguments: Namespace, output_directory: UPath) -> None:
 
     # Parse the MDS file
     mds = parse_mds(arguments, sample_renamer.rename_sample)
-    classify_samples_by_mds(arguments, mds, sample_classes)
+    classify_samples_by_mds(arguments, mds, sample_classes, output_directory)
 
     if arguments.phenotypes is None or arguments.covariates is None:
         logger.warning("No phenotypes or covariates specified")
