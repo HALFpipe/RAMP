@@ -9,6 +9,7 @@ import pytest
 import scipy
 from upath import UPath
 
+from gwas._matrix_functions import dgesvdq
 from gwas.defaults import (
     default_kinship_minor_allele_frequency_cutoff,
     default_kinship_r_squared_cutoff,
@@ -355,3 +356,29 @@ def test_eig_multiple(
         assert np.isfinite(eig.eigenvectors).all()
 
     assert set(sw.allocations.keys()) <= (allocation_names | new_allocation_names)
+
+
+def test_dgesvdq() -> None:
+    rng = np.random.default_rng(seed=0)
+
+    a = rng.standard_normal((100, 10))
+
+    _, numpy_s, numpy_vt = np.linalg.svd(a, full_matrices=False)
+    numpy_v = numpy_vt.transpose()
+    np.testing.assert_allclose(
+        a.transpose() @ a,
+        (numpy_v @ np.diag(np.square(numpy_s))) @ numpy_v.transpose(),
+    )
+
+    s = np.zeros((10,))
+    vt = np.zeros((10, 10), order="F")
+
+    dgesvdq(np.asfortranarray(a.copy()), s, vt)
+    v = vt.transpose()
+
+    np.testing.assert_allclose(numpy_s, s)
+    np.testing.assert_allclose(v.transpose() @ v, np.eye(10), atol=1e-10)
+    np.testing.assert_allclose(
+        a.transpose() @ a,
+        (v @ np.diag(np.square(s))) @ v.transpose(),
+    )
