@@ -43,6 +43,7 @@ repos:
         additional_dependencies:
           - numpy
           - pandas-stubs
+          - pyarrow-stubs
           - types-psutil
           - types-PyYAML
           - types-requests
