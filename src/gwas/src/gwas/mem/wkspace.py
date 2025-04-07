@@ -2,6 +2,7 @@ import os
 import pickle
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from functools import cache
 from itertools import pairwise
 from mmap import MAP_SHARED, mmap
@@ -25,6 +26,11 @@ if TYPE_CHECKING:
     from .arr import ScalarType, SharedArray
 
 DType = TypeVar("DType", bound=np.dtype[Any])
+
+
+class Position(Enum):
+    Anywhere = auto()
+    End = auto()
 
 
 class Candidate(NamedTuple):
@@ -99,7 +105,9 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         else:
             return SharedArray(name, self)
 
-    def get_allocation_start(self, allocation_size: int, alignment_size: int) -> int:
+    def get_allocation_start(
+        self, allocation_size: int, alignment_size: int, position: Position
+    ) -> int:
         with get_global_lock():
             allocations = self.allocations
             allocations_list = sorted(allocations.values(), key=attrgetter("start"))
@@ -118,11 +126,12 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
             free_end = self.size
             add_candidate(free_start, free_end)
 
-            # Check if there is space between allocations
-            for a, b in pairwise(allocations_list):
-                free_start = a.end
-                free_end = b.start
-                add_candidate(free_start, free_end)
+            if position == Position.Anywhere:
+                # Check if there is space between allocations
+                for a, b in pairwise(allocations_list):
+                    free_start = a.end
+                    free_end = b.start
+                    add_candidate(free_start, free_end)
 
             if len(candidates) == 0:
                 raise MemoryError(
@@ -144,6 +153,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         *shape: int,
         dtype: type[np.float64] | None = None,
         alignment_size: int | None = None,
+        position: Position = Position.Anywhere,
     ) -> "SharedArray": ...
 
     @overload
@@ -153,6 +163,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         *shape: int,
         dtype: "type[ScalarType] | np.dtype[ScalarType]",
         alignment_size: int | None = None,
+        position: Position = Position.Anywhere,
     ) -> "SharedArray[ScalarType]": ...
 
     def alloc(
@@ -161,6 +172,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
         *shape: int,
         dtype: "type[ScalarType] | np.dtype[ScalarType] | None" = None,
         alignment_size: int | None = None,
+        position: Position = Position.Anywhere,
     ) -> "SharedArray[ScalarType]":
         """alloc.
 
@@ -199,7 +211,7 @@ class SharedWorkspace(AbstractContextManager["SharedWorkspace"]):
                 alignment_size = itemsize
 
             # Calculate start
-            start = self.get_allocation_start(size, alignment_size)
+            start = self.get_allocation_start(size, alignment_size, position)
             allocations[name] = Allocation(start, size, shape, numpy_dtype)
 
             end = max(a.end for a in allocations.values())

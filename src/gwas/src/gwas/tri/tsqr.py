@@ -7,7 +7,7 @@ from numpy import typing as npt
 
 from ..log import logger
 from ..mem.arr import SharedArray
-from ..mem.wkspace import SharedWorkspace
+from ..mem.wkspace import Position, SharedWorkspace
 from ..utils.multiprocessing import get_global_lock
 from ..vcf.base import VCFFile
 from .base import TaskSyncCollection, Triangular
@@ -86,13 +86,14 @@ class TallSkinnyQR:
 
         with get_global_lock():
             name = Triangular.get_name(self.sw, chromosome=self.vcf_file.chromosome)
-            shared_array = self.sw.alloc(name, variant_count, sample_count)
+            shared_array = self.sw.alloc(
+                name, variant_count, sample_count, position=Position.End
+            )
 
-        if self.variant_indices is not None:
-            if self.variant_indices.size == 0:
-                if self.t is not None:
-                    # We have enough space to start another task in parallel
-                    self.t.can_run.set()
+        if self.variant_indices is not None and self.variant_indices.size == 0:
+            if self.t is not None:
+                # We have enough space to start another task in parallel
+                self.t.can_run.set()
 
         # Read dosages from the VCF file
         array = shared_array.to_numpy()
@@ -188,7 +189,7 @@ class TallSkinnyQR:
                 f"we need at least {sample_count:d} columns."
             )
         if variant_count >= self.vcf_file.variant_count:
-            # We can fit the entire VCF file into memory.
+            # We can fit the entire VCF file into memory
             logger.debug(
                 f"There is space for {variant_count:d} columns of the matrix, but "
                 f"we only need {self.vcf_file.variant_count:d}."
