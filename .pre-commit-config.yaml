@@ -41,7 +41,13 @@ repos:
       - id: mypy
         args: [--config, ./mypy.ini]
         additional_dependencies:
+          - ipython
+          - more_itertools
           - numpy
+          - polars
+          - pytest
+          - typeguard
+          - universal_pathlib
           - pandas-stubs
           - pyarrow-stubs
           - types-psutil
@@ -50,4 +56,3 @@ repos:
           - types-seaborn
           - types-setuptools
           - types-tqdm
-          - universal_pathlib
