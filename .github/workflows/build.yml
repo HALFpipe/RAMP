@@ -146,7 +146,7 @@ jobs:
       - name: Set up Apptainer
         run: |
           sudo add-apt-repository --yes "ppa:apptainer/ppa"
-          sudo apt install --yes "apptainer-suid"
+          sudo apt install --yes "apptainer"
 
       - name: Build Apptainer container
         if: ${{ steps.metadata.outputs.push == 'true' }}
