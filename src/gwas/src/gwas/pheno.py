@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from functools import reduce
 from pprint import pformat
-from typing import Self, override
+from typing import Any, Self, override
 
 import numpy as np
 import pandas as pd
@@ -113,6 +113,12 @@ class VariableCollection(SharedArray[np.float64]):
             )
         self.remove_zero_variance_covariates()
 
+    @override
+    def to_metadata(self) -> dict[str, Any]:
+        metadata = super().to_metadata()
+        metadata["name"] = self.name
+        return metadata
+
     def copy(
         self,
         phenotype_names: list[str] | None = None,
@@ -151,19 +157,19 @@ class VariableCollection(SharedArray[np.float64]):
             return
 
         (covariate_indices,) = np.where(np.logical_not(mask))
+        phenotype_indices = np.arange(self.covariate_count, self.shape[1])
 
         removed_covariates = [
             name
             for i, name in enumerate(self.covariate_names)
             if i not in covariate_indices
         ]
-        logger.debug(
+        logger.warning(
             f"Removing covariates {removed_covariates} because they have zero variance"
         )
 
         self.covariate_names = [self.covariate_names[i] for i in covariate_indices]
 
-        phenotype_indices = np.arange(self.covariate_count, self.shape[1])
         keep = np.concatenate([covariate_indices, phenotype_indices], axis=0)
         self.compress(keep, axis=1)
 
