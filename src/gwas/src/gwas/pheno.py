@@ -344,6 +344,11 @@ class VariableSummary:
             np.array([0, 0.25, 0.5, 0.75, 1]),
         )
         (minimum, lower_quartile, median, upper_quartile, maximum) = quantiles.ravel()
+
+        variance = 0.0
+        if value.size > 1:
+            variance = value.var(ddof=1)
+
         return cls(
             minimum=float(minimum),
             lower_quartile=float(lower_quartile),
@@ -351,5 +356,5 @@ class VariableSummary:
             upper_quartile=float(upper_quartile),
             maximum=float(maximum),
             mean=float(value.mean()),
-            variance=float(value.var(ddof=1)),
+            variance=float(variance),
         )

@@ -73,6 +73,7 @@ class FaSTLMM(ProfileMaximumLikelihood):
         _, _, rotated_phenotype = o
         variance = rotated_phenotype.var().item()
         if not np.isfinite(variance):
+            logger.warning(f"Variance is not finite: {variance}")
             return empty_result
         upper_bound = float(np.log10(variance))
         lower_bound = float(np.log10(self.minimum_variance) - upper_bound)
@@ -100,6 +101,7 @@ class FaSTLMM(ProfileMaximumLikelihood):
                     pass
 
         if best_optimize_result is None:
+            logger.warning(f"Failed to find FaSTLMM minimum in {len(xa)} steps")
             return empty_result
 
         log_variance_ratio = best_optimize_result.x
