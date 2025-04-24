@@ -42,6 +42,8 @@ def call_upload_client(arguments: Namespace, path_strs: list[str]) -> None:
     command: list[str] = [
         upload_executable,
         "upload-client",
+        "--num-threads",
+        f"{arguments.num_threads}",
         "--token",
         arguments.token,
         "--endpoint",
