@@ -11,24 +11,20 @@ from ..utils.threads import cpu_count
 
 def parse_arguments(argv: list[str]) -> Namespace:
     """Parses command-line arguments"""
-    argument_parser = ArgumentParser(description="Generate Manhattan & QQ Plots")
+    argument_parser = ArgumentParser(description="Prepare meta-analysis")
 
     paths_group = argument_parser.add_argument_group(
         "paths", description="Input and output paths"
     )
     paths_group.add_argument(
-        "--study",
-        type=str,
-        nargs=2,
-        metavar=("NAME", "PATH"),
-        action="append",
+        "--input-directory",
+        type=UPath,
+        help="Where to search for input files",
         required=True,
-        help="Add a study",
     )
-    paths_group.add_argument("--data-directory", type=str)
     paths_group.add_argument(
         "--output-directory",
-        type=str,
+        type=UPath,
         help="Where to save the output files",
         required=True,
     )
@@ -83,12 +79,6 @@ def parse_arguments(argv: list[str]) -> Namespace:
         help="Allow phenotypes with an alternative value for key when selecting "
         "which phenotypes to combine in a meta-analysis",
     )
-    modify_group.add_argument(
-        "--id-matching",
-        choices=("simple", "dbsnp"),
-        default="simple",
-        help="Which variant IDs to use for meta-analysis",
-    )
 
     meta_group = argument_parser.add_argument_group(
         title="meta", description="Arguments for configuring the meta-analysis"
@@ -100,26 +90,6 @@ def parse_arguments(argv: list[str]) -> Namespace:
         metavar="KEY",
         help="Group phenotypes by key",
         required=True,
-    )
-    meta_group.set_defaults(genomic_control=False)
-    meta_group.add_argument(
-        "--with-genomic-control",
-        dest="genomic_control",
-        action="store_true",
-    )
-    meta_group.add_argument(
-        "--minor-allele-frequency-cutoff",
-        "--maf",
-        required=False,
-        type=float,
-        default=0.01,
-    )
-    meta_group.add_argument(
-        "--r-squared-cutoff",
-        "--r2",
-        required=False,
-        type=float,
-        default=0.6,
     )
 
     argument_parser.add_argument("--debug", action="store_true", default=False)
@@ -158,7 +128,7 @@ def run_prepare(
         prepare(arguments, output_directory)
     except Exception as e:
         logger.exception("Exception: %s", e, exc_info=True)
-        if arguments.debug:
+        if arguments.debug and sys.stdin.isatty():
             import pdb
 
             pdb.post_mortem()

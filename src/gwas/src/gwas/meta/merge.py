@@ -46,10 +46,9 @@ def merge(arguments: Namespace) -> None:
         )
         logger.debug(f"Processing group {group} with {len(group_paths)} phenotypes")
 
-        stem = index.format(
-            **{key: value for key, value in group.items() if value is not None},
-            suffix="metal",
-        )
+        tags = [(key, value) for key, value in group.items() if value is not None]
+        tags.append(("suffix", "metal"))
+        stem = index.format(tags)
         merge_group(group_paths, output_directory / f"{stem}.parquet", arguments)
 
 

@@ -35,8 +35,11 @@ def check_alternative(
     task_context_sm_name: str, phenotypes: set[str]
 ) -> tuple[int, set[str]]:
     count = len(phenotypes)
+
     task_context_sm = SharedMemory(name=task_context_sm_name)
     c: TaskContext = pickle.loads(task_context_sm.buf)
+    task_context_sm.close()
+
     phenotypes = set(filter(None, map(c.check, phenotypes)))
     return count, phenotypes
 
@@ -63,7 +66,7 @@ def alternative(
         callable = partial(check_alternative, sm.name)
 
         # create explicit batches to hide the overhead of unpickling the task context
-        batches = list(map(set, distribute(num_threads, phenotypes)))
+        batches = list(map(set, distribute(num_threads * 4, phenotypes)))
 
         pool, iterator = make_pool_or_null_context(batches, callable, num_threads)
         progress_bar = tqdm(
@@ -82,3 +85,4 @@ def alternative(
     finally:
         if sm is not None:
             sm.close()
+            sm.unlink()

@@ -18,14 +18,14 @@ from ..summary import SummaryCollection
 from ..utils.hash import hex_digest
 from ..utils.multiprocessing import make_pool_or_null_context
 from .alternatives import alternative
-from .index import Index
+from .index import Index, parse
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class IndexArguments:
-    data_directory: UPath | None
+    input_directory: UPath | None
 
-    studies: list[list[str]]
+    study_paths: list[UPath]
     replace_phenotype: list[list[str]]
     remove: list[list[str]]
     replace_key: list[list[str]]
@@ -35,12 +35,9 @@ class IndexArguments:
 
     @classmethod
     def from_arguments(cls, arguments: Namespace) -> Self:
-        data_directory: UPath | None = None
-        if arguments.data_directory is not None:
-            data_directory = UPath(arguments.data_directory)
         return cls(
-            data_directory=data_directory,
-            studies=arguments.study or list(),
+            input_directory=arguments.input_directory,
+            study_paths=list(arguments.input_directory.glob("*_summary_statistics/")),
             replace_phenotype=arguments.replace_phenotype or list(),
             remove=arguments.remove or list(),
             replace_key=arguments.replace_key or list(),
@@ -52,7 +49,7 @@ class IndexArguments:
 
 @dataclass(frozen=True, eq=True)
 class IndexJob:
-    study_name: str
+    tags: tuple[tuple[str, str], ...]
     metadata_path: UPath
     last_modified: datetime
 
@@ -66,7 +63,9 @@ def load_index_phenotypes(
     metadata_path = ij.metadata_path
     summary_collection = SummaryCollection.from_file(metadata_path)
 
-    cache_key = f"index-{ij.study_name}-{hex_digest(ia_tuple)}-{hex_digest(ij)}"
+    tags = dict(ij.tags)
+    name = tags["ds"]
+    cache_key = f"index-{name}-{hex_digest(ia_tuple)}-{hex_digest(ij)}"
 
     phenotypes: list[tuple[str, str, dict[str, str]]] | None = load_from_cache(
         cache_path, cache_key
@@ -74,11 +73,13 @@ def load_index_phenotypes(
     if phenotypes is not None:
         return phenotypes
 
+    prefix = "_".join(f"{key}-{value}" for key, value in ij.tags)
+
     phenotypes = list()
     for chunk in summary_collection.chunks.values():
         for variable_collection_name, variable_collection in chunk.items():
             for phenotype, summary in variable_collection.phenotypes.items():
-                phenotype = f"study-{ij.study_name}_{phenotype}"
+                phenotype = f"{prefix}_{phenotype}"
                 phenotype_name = phenotype
                 for substring, replacement in replace_phenotype:
                     phenotype = phenotype.replace(substring, replacement)
@@ -87,6 +88,7 @@ def load_index_phenotypes(
                 extra_tags = dict(
                     vc=variable_collection_name,
                     path=str(path),
+                    prefix=prefix,
                     # descriptive statistics
                     **{
                         key: f"{getattr(summary, key)}"
@@ -106,16 +108,26 @@ def create_index(
 ) -> tuple[IndexArguments, Index]:
     ia = IndexArguments.from_arguments(arguments)
     index_jobs: list[IndexJob] = list()
-    for study_name, study_path_str in tqdm(ia.studies, unit="studies"):
-        study_path = UPath(study_path_str)
-        metadata_paths = sorted(study_path.rglob("*/chr1.metadata.yaml.gz"))
+    for study_path in tqdm(ia.study_paths, unit="studies"):
+        tags = tuple(
+            (key, value)
+            for key, value in parse(study_path.name)
+            if key not in {"suffix"}
+        )
+        name = dict(tags)["ds"]
+
+        metadata_paths = sorted(study_path.rglob("chr1.metadata.yaml.gz"))
         if len(metadata_paths) == 0:
             logger.warning(
-                f'No metadata files found in "{study_path}". Skipping "{study_name}"'
+                f'No metadata files found in "{study_path}". Skipping "{name}"'
             )
+            continue
+
+        logger.info(f"Adding {study_path=} with {tags=}")
+
         for metadata_path in metadata_paths:
             last_modified = get_last_modified(metadata_path)
-            index_jobs.append(IndexJob(study_name, metadata_path, last_modified))
+            index_jobs.append(IndexJob(tags, metadata_path, last_modified))
 
     cache_key = f"index-{hex_digest(ia)}-{hex_digest(index_jobs)}"
 

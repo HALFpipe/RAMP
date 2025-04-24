@@ -19,6 +19,11 @@ from .mlb import (
 )
 from .pml import ProfileMaximumLikelihood
 
+empty_result = OptimizeResult(
+    x=np.full((2,), np.nan),
+    fun=np.nan,
+)
+
 
 @dataclass(frozen=True, eq=True)
 class FaSTLMM(ProfileMaximumLikelihood):
@@ -66,7 +71,10 @@ class FaSTLMM(ProfileMaximumLikelihood):
         disp: bool = False,
     ) -> OptimizeResult:
         _, _, rotated_phenotype = o
-        upper_bound = float(np.log10(rotated_phenotype.var()))
+        variance = rotated_phenotype.var().item()
+        if not np.isfinite(variance):
+            return empty_result
+        upper_bound = float(np.log10(variance))
         lower_bound = float(np.log10(self.minimum_variance) - upper_bound)
         xa = np.arange(lower_bound, upper_bound, step=self.step, dtype=np.float64)
         logger.debug(
@@ -92,10 +100,7 @@ class FaSTLMM(ProfileMaximumLikelihood):
                     pass
 
         if best_optimize_result is None:
-            return OptimizeResult(
-                x=np.full((2,), np.nan),
-                fun=np.nan,
-            )
+            return empty_result
 
         log_variance_ratio = best_optimize_result.x
         variance_ratio = np.power(10, log_variance_ratio)

@@ -4,6 +4,7 @@ from abc import abstractmethod
 from contextlib import nullcontext
 from dataclasses import dataclass, field, fields
 from enum import Enum, auto
+from functools import partialmethod
 from logging import LogRecord
 from multiprocessing import parent_process
 from multiprocessing import pool as mp_pool
@@ -26,6 +27,8 @@ from typing import (
 )
 
 import numpy as np
+from tqdm import tqdm
+from tqdm.auto import tqdm as tqdm_auto
 
 from ..log import logger, worker_configurer
 
@@ -101,10 +104,15 @@ def initializer(
 
     logger.debug(f'Finished initializer for process "{mp.current_process().name}"')
 
+    # Setup jax
     if is_jax:
         from .jax import setup_jax
 
         setup_jax()
+
+    # Disable tqdm in child processes
+    tqdm.__init__ = partialmethod(tqdm.__init__, disable=True)  # type: ignore
+    tqdm_auto.__init__ = partialmethod(tqdm_auto.__init__, disable=True)  # type: ignore
 
 
 def soft_kill(proc: mp.Process) -> None:

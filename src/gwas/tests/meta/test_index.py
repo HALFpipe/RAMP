@@ -99,3 +99,8 @@ def test_index_alternative() -> None:
         stat="z",
     )
     assert phenotypes == {a, b, c, d}
+
+
+def test_format() -> None:
+    index = Index()
+    assert index.format([("ds", "a"), ("suffix", "b")]) == "ds-a_b"

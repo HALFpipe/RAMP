@@ -9,7 +9,7 @@ from ..utils.genetics import chromosome_from_int
 @dataclass(frozen=True, kw_only=True)
 class JobInputBase:
     phenotype: str
-    variable_collection_name: str
+    alternate_allele_frequency_column_name: str
 
     score_paths: list[str]
     covariance_path: str | None

@@ -207,7 +207,7 @@ def map_write(
 
             summary_input, plot_input = load_and_write(
                 ji.phenotype,
-                ji.variable_collection_name,
+                ji.alternate_allele_frequency_column_name,
                 ji.sample_count,
                 score_path,
                 phenotype_handle,
@@ -235,24 +235,20 @@ def map_write(
     )
 
     score_path_str = ji.score_paths[0]
-    plot_directory = UPath(UPath(score_path_str).parts[0]) / "quality-control"
+    plot_directory = UPath(score_path_str).parent / "quality-control"
     if data_directory is not None:
         plot_directory = data_directory / plot_directory
-    if not plot_directory.is_dir():
-        logger.warning(
-            f'Did not find plot directory for study "{study}" at "{plot_directory}"'
+    plot_directory.mkdir(parents=True, exist_ok=True)
+    if not get_file_path(plot_directory, ji.phenotype).is_file() and u_stat.size > 0:
+        position = offset[chromosome_int - 1] + position
+        plot(
+            plot_directory,
+            ji.phenotype,
+            chromosome_int,
+            position,
+            p_value,
+            log_p_value,
         )
-    else:
-        if not get_file_path(plot_directory, ji.phenotype).is_file() and u_stat.size > 0:
-            position = offset[chromosome_int - 1] + position
-            plot(
-                plot_directory,
-                ji.phenotype,
-                chromosome_int,
-                position,
-                p_value,
-                log_p_value,
-            )
 
     return study, summaries
 
@@ -286,7 +282,7 @@ class SummaryInput(NamedTuple):
 
 def load_and_write(
     phenotype: str,
-    variable_collection_name: str,
+    alternate_allele_frequency_column_name: str,
     sample_count: int,
     score_path: UPath,
     phenotype_handle: IO[str],
@@ -298,7 +294,7 @@ def load_and_write(
         "reference_allele",
         "alternate_allele",
         "r_squared",
-        f"{variable_collection_name}_alternate_allele_frequency",
+        alternate_allele_frequency_column_name,
         f"{phenotype}_stat-u",
         f"{phenotype}_stat-v",
     ]

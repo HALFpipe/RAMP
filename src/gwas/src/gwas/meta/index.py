@@ -114,7 +114,7 @@ class Index:
         if phenotype_name is None:
             phenotype_name = phenotype
         if phenotype_name in self.tags_by_phenotypes:
-            logger.warning(f"Phenotype {phenotype_name} already exists in the index")
+            logger.debug(f"Phenotype {phenotype_name} already exists in the index")
             return
         tags_iterator = parse(phenotype)
         for key, value in chain(tags_iterator, extra_tags.items()):
@@ -126,16 +126,16 @@ class Index:
         if self.alternatives != other.alternatives:
             raise ValueError("Cannot update indexes with different alternatives")
 
-        for phenotype, tags in other.tags_by_phenotypes.items():
-            if phenotype in self.tags_by_phenotypes:
-                continue
-            self.tags_by_phenotypes[phenotype] = tags
-
         seen = set(self.tags_by_phenotypes.keys())
         for key, values in other.phenotypes_by_tags.items():
             for value, phenotypes in values.items():
                 phenotypes -= seen
                 self.phenotypes_by_tags[key][value].update(phenotypes)
+
+        for phenotype, tags in other.tags_by_phenotypes.items():
+            if phenotype in self.tags_by_phenotypes:
+                continue
+            self.tags_by_phenotypes[phenotype] = tags
 
         self.ignore_keys.update(other.ignore_keys)
 
@@ -265,11 +265,20 @@ class Index:
             for phenotype in phenotypes:
                 self.tags_by_phenotypes[phenotype][key] = replacement
 
-    def format(self, **tags: str) -> str:
-        suffix = tags.pop("suffix", None)
-        name = "_".join(
-            f"{key}-{tags[key]}" for key in self.phenotypes_by_tags.keys() if key in tags
-        )
+    def format(self, tags: Iterable[tuple[str, str | None]]) -> str:
+        name = ""
+        suffix: str | None = None
+        for key, value in tags:
+            if key == "suffix":
+                suffix = value
+                continue
+            if value is None:
+                continue
+            if name:
+                name += "_"
+            name += f"{key}-{value}"
         if suffix is not None:
-            name += f"_{suffix}"
+            if name:
+                name += "_"
+            name += suffix
         return name
