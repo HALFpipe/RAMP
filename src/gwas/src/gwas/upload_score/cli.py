@@ -60,10 +60,16 @@ def call_upload_client(arguments: Namespace, path_strs: list[str]) -> None:
 
 def upload(arguments: Namespace) -> None:
     paths: set[UPath] = set()
-    for input_directory_str in arguments.input_directory:
-        input_directory = UPath(input_directory_str).absolute()
-        for path_pattern in path_patterns:
-            paths.update(input_directory.glob(f"**/{path_pattern}"))
+    for path in arguments.path:
+        path = path.absolute()
+        if path.is_file():
+            paths.add(path)
+        elif path.is_dir():
+            for path_pattern in path_patterns:
+                paths.update(path.glob(f"**/{path_pattern}"))
+        else:
+            logger.warning(f'Path "{path}" is not a file or directory')
+            continue
 
         logger.info(f"Uploading {len(paths)} files")
     path_strs = sorted(f"{path.relative_to(base_path)}" for path in paths)
@@ -72,7 +78,9 @@ def upload(arguments: Namespace) -> None:
 
 def parse_arguments(argv: list[str]) -> Namespace:
     argument_parser = ArgumentParser()
-    argument_parser.add_argument("--input-directory", nargs="+", required=True)
+    argument_parser.add_argument(
+        "--input", "--input-directory", "--path", type=UPath, nargs="+", required=True
+    )
 
     argument_parser.add_argument("--token", required=True)
     argument_parser.add_argument("--endpoint", default="https://upload.gwas.science")
