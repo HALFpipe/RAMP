@@ -79,7 +79,7 @@ def upload(arguments: Namespace) -> None:
 def parse_arguments(argv: list[str]) -> Namespace:
     argument_parser = ArgumentParser()
     argument_parser.add_argument(
-        "--input", "--input-directory", "--path", type=UPath, nargs="+", required=True
+        "--path", "--input-directory", type=UPath, nargs="+", required=True
     )
 
     argument_parser.add_argument("--token", required=True)
